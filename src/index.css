@@ -1,0 +1,179 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap");
+
+:root {
+  --bg: #f7f8f4;
+  --surface: #ffffff;
+
+  --dark: #17231d;
+  --dark-soft: #34443a;
+
+  --green: #2f6b4f;
+  --green-light: #dfeee5;
+  --green-bright: #77b58e;
+
+  --muted: #78847d;
+  --border: #e4e9e4;
+
+  --danger: #a54e47;
+
+  --radius-sm: 10px;
+  --radius-md: 15px;
+  --radius-lg: 20px;
+
+  font-family: "DM Sans", sans-serif;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--dark);
+}
+
+body,
+button,
+input,
+textarea,
+select {
+  font-family: "DM Sans", sans-serif;
+}
+
+button,
+input,
+textarea,
+select {
+  font-size: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+/* =========================
+   GLOBAL BUTTONS
+========================= */
+
+.primary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+
+  padding: 15px 20px;
+
+  border: none;
+  border-radius: 11px;
+
+  background: var(--dark);
+  color: white;
+
+  font-size: 14px;
+  font-weight: 700;
+
+  transition:
+    transform 0.25s ease,
+    background 0.25s ease;
+}
+
+.primary-button:hover {
+  transform: translateY(-3px);
+  background: var(--green);
+}
+
+.primary-button span {
+  font-size: 18px;
+}
+
+.secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 15px 20px;
+
+  border: 1px solid var(--border);
+  border-radius: 11px;
+
+  background: white;
+  color: var(--dark);
+
+  font-size: 14px;
+  font-weight: 600;
+
+  transition:
+    border-color 0.25s ease,
+    transform 0.25s ease;
+}
+
+.secondary-button:hover {
+  border-color: var(--green-bright);
+  transform: translateY(-2px);
+}
+
+/* =========================
+   SECTION TAG
+========================= */
+
+.section-tag {
+  color: var(--green);
+
+  font-size: 10px;
+  font-weight: 800;
+
+  letter-spacing: 1.5px;
+}
+
+/* =========================
+   BRAND
+========================= */
+
+.brand-icon {
+  width: 34px;
+  height: 34px;
+
+  display: grid;
+  place-items: center;
+
+  border-radius: 10px;
+
+  background: var(--dark);
+  color: white;
+
+  font-family: "Manrope", sans-serif;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+/* =========================
+   RESPONSIVE
+========================= */
+
+@media (max-width: 600px) {
+  .primary-button,
+  .secondary-button {
+    width: 100%;
+  }
+}
