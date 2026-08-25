@@ -4,16 +4,8 @@ import LandingPage from "./pages/LandingPage";
 import SignupPage from "./pages/SignupPage";
 import LoginPage from "./pages/LoginPage";
 
-
-function Dashboard() {
-  return (
-    <div style={{ padding: "50px" }}>
-      <h1>MoveWell Dashboard</h1>
-      <p>Authentication successful.</p>
-    </div>
-  );
-}
-
+import OnboardingPage from "./pages/OnboardingPage";
+import Dashboard from "./pages/Dashboard";
 
 function App() {
 
@@ -41,6 +33,12 @@ function App() {
           path="/dashboard"
           element={<Dashboard />}
         />
+
+        <Route
+          path="/onboarding"
+          element={<OnboardingPage />}
+        />
+
 
       </Routes>
 

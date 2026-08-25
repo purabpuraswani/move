@@ -41,7 +41,7 @@ function SignupPage() {
         JSON.stringify(data.user)
       );
 
-      navigate("/dashboard");
+      navigate("/onboarding");
 
     } catch (err) {
       setError(err.message);
