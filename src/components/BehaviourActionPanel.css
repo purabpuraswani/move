@@ -1,0 +1,160 @@
+/* Today's habit action. Sits inside the Behaviour Specialist panel, under
+   the goals it records against, so the thing you do and the thing you press
+   are in the same place. */
+
+.behaviour-actions {
+  margin-top: 1rem;
+  border: 1px solid #e6eaf1;
+  border-radius: 10px;
+  background: #fafbfd;
+  padding: 0.875rem;
+}
+
+.behaviour-actions-title {
+  margin: 0 0 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #6b7484;
+}
+
+.behaviour-actions-status,
+.behaviour-actions-error {
+  margin: 0 0 0.5rem;
+  font-size: 0.875rem;
+}
+
+.behaviour-actions-status {
+  color: #7a828f;
+}
+
+.behaviour-actions-error {
+  color: #a4373a;
+}
+
+.behaviour-actions-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.behaviour-action {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.625rem 0.75rem;
+  background: #fff;
+  border: 1px solid #e9edf3;
+  border-radius: 8px;
+}
+
+.behaviour-action-name {
+  font-weight: 600;
+  color: #1f2733;
+}
+
+.behaviour-action-text {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: #4a5568;
+}
+
+.behaviour-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.375rem;
+}
+
+.behaviour-action-complete {
+  border: 0;
+  border-radius: 8px;
+  padding: 0.4375rem 0.875rem;
+  font: inherit;
+  font-weight: 600;
+  color: #fff;
+  background: #2f6d4a;
+  cursor: pointer;
+}
+
+.behaviour-action-complete:hover:not(:disabled) {
+  background: #275c3e;
+}
+
+/* Skipping is a real answer, so it is a real button — not hidden away and
+   not styled as a failure. */
+.behaviour-action-skip {
+  border: 1px solid #d6dbe4;
+  border-radius: 8px;
+  padding: 0.4375rem 0.875rem;
+  font: inherit;
+  font-weight: 600;
+  color: #46536b;
+  background: #fff;
+  cursor: pointer;
+}
+
+.behaviour-action-skip:hover:not(:disabled) {
+  background: #f2f4f8;
+}
+
+.behaviour-action-complete:disabled,
+.behaviour-action-skip:disabled,
+.behaviour-action-chip:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.behaviour-action-done {
+  justify-self: start;
+  margin-top: 0.25rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #2f6d4a;
+  background: #e8f3ec;
+  border-radius: 999px;
+  padding: 0.1875rem 0.625rem;
+}
+
+.behaviour-action-done--skipped {
+  color: #6b5520;
+  background: #f6f0e2;
+}
+
+.behaviour-action-feedback {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+  margin-top: 0.375rem;
+}
+
+.behaviour-action-question {
+  font-size: 0.8125rem;
+  color: #5b6472;
+  margin-right: 0.125rem;
+}
+
+.behaviour-action-chip {
+  border: 1px solid #d6dbe4;
+  border-radius: 999px;
+  padding: 0.1875rem 0.625rem;
+  font: inherit;
+  font-size: 0.8125rem;
+  color: #33405a;
+  background: #fff;
+  cursor: pointer;
+}
+
+.behaviour-action-chip:hover:not(:disabled) {
+  background: #eef2f8;
+}
+
+.behaviour-actions-note {
+  margin: 0.75rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: #7a828f;
+}

@@ -1,0 +1,94 @@
+/*
+ * Styling for MovementDemo. Kept intentionally plain: a healthcare/wellness
+ * look (soft neutral background, single accent, generous spacing) rather
+ * than anything realistic or busy, per the Phase 0 visual-style brief.
+ * Final colours should follow whatever design tokens the rest of the app
+ * settles on; the values below are a neutral placeholder.
+ */
+
+.movement-demo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1.5rem;
+  border-radius: 16px;
+  background: #f6f7f5;
+}
+
+.movement-demo__stage {
+  width: 140px;
+  height: 168px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.movement-demo__figure {
+  width: 100%;
+  height: 100%;
+}
+
+.movement-demo__figure-head,
+.movement-demo__figure-torso,
+.movement-demo__figure-limb {
+  fill: none;
+  stroke: #2f6f5e;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.movement-demo__figure-head {
+  fill: #2f6f5e;
+  stroke: none;
+}
+
+.movement-demo__figure-chair {
+  fill: none;
+  stroke: #9aa79f;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.movement-demo__phase-label {
+  font-weight: 600;
+  color: #1f2a24;
+}
+
+.movement-demo__dots {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.movement-demo__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  border: none;
+  background: #d5dad4;
+  cursor: pointer;
+  padding: 0;
+}
+
+.movement-demo__dot--active {
+  background: #2f6f5e;
+}
+
+.movement-demo__dot-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+.movement-demo__list {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: #445048;
+  font-size: 0.95rem;
+}
+
+.movement-demo__list--key-points {
+  list-style: disc;
+}

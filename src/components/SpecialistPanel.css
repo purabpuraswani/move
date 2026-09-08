@@ -1,0 +1,394 @@
+/* One specialist's panel. Reads as a person's assessment and plan rather
+   than a list of cards: findings first, then what is being worked on, then
+   the programme, then what happens next. */
+
+.specialist {
+  border: 1px solid #e3e7ee;
+  border-radius: 12px;
+  background: #fff;
+  padding: 1.25rem 1.25rem 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.specialist-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #eef1f5;
+}
+
+.specialist-eyebrow {
+  display: block;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #8a93a1;
+}
+
+.specialist-title {
+  margin: 0.125rem 0 0;
+  font-size: 1.3125rem;
+  line-height: 1.2;
+  color: #16202e;
+}
+
+.specialist-version {
+  flex: none;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #46536b;
+  background: #eef1f6;
+  border-radius: 999px;
+  padding: 0.1875rem 0.5rem;
+}
+
+.specialist-goal {
+  margin: 0.875rem 0 0;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: #2c3644;
+}
+
+.specialist-block {
+  margin-top: 1.25rem;
+}
+
+.specialist-block-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #6b7484;
+}
+
+.specialist-text {
+  margin: 0;
+  line-height: 1.55;
+  color: #2c3644;
+}
+
+/* Findings ---------------------------------------------------------- */
+
+.specialist-findings {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.625rem;
+}
+
+.specialist-finding {
+  border-left: 3px solid #b9c6d8;
+  background: #f7f9fc;
+  border-radius: 0 8px 8px 0;
+  padding: 0.625rem 0.75rem;
+}
+
+/* An unmeasured capability is visually distinct from a measured one, so
+   "we could not see this" never reads as "this is fine". */
+.specialist-finding--unmeasured {
+  border-left-color: #d9c48a;
+  background: #fcfaf3;
+}
+
+.specialist-finding-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.specialist-finding-name {
+  font-weight: 600;
+  color: #1f2733;
+}
+
+.specialist-finding-verdict {
+  flex: none;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #4c586b;
+}
+
+.specialist-evidence {
+  margin: 0.375rem 0 0;
+  padding-left: 1rem;
+  display: grid;
+  gap: 0.1875rem;
+}
+
+.specialist-evidence li {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: #626c7c;
+}
+
+/* Chips ------------------------------------------------------------- */
+
+.specialist-chips {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.specialist-chip {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #33405a;
+  background: #eef2f8;
+  border-radius: 999px;
+  padding: 0.25rem 0.625rem;
+}
+
+/* Programme --------------------------------------------------------- */
+
+.specialist-exercises {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.specialist-exercise {
+  border: 1px solid #e6eaf1;
+  border-radius: 10px;
+  padding: 0.875rem;
+}
+
+.specialist-exercise-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.specialist-exercise-name {
+  display: block;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #16202e;
+}
+
+.specialist-exercise-target {
+  display: block;
+  font-size: 0.8125rem;
+  color: #6b7484;
+}
+
+.specialist-tag {
+  flex: none;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #2f5d3f;
+  background: #e6f3ea;
+  border-radius: 999px;
+  padding: 0.1875rem 0.5rem;
+}
+
+.specialist-exercise-why {
+  margin: 0.5rem 0 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: #4a5568;
+}
+
+.specialist-exercise-facts {
+  margin: 0.625rem 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem 1.25rem;
+}
+
+.specialist-exercise-facts div {
+  min-width: 0;
+}
+
+.specialist-exercise-facts dt {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #8a93a1;
+}
+
+.specialist-exercise-facts dd {
+  margin: 0.0625rem 0 0;
+  font-size: 0.875rem;
+  color: #2c3644;
+}
+
+.specialist-safety {
+  margin: 0.625rem 0 0;
+  padding-left: 1rem;
+}
+
+.specialist-safety li {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: #7a5c22;
+}
+
+.specialist-steps {
+  margin-top: 0.625rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.specialist-steps p {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: #4a5568;
+}
+
+.specialist-step-label {
+  display: block;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #8a93a1;
+}
+
+.specialist-start {
+  margin-top: 0.875rem;
+  border: 0;
+  border-radius: 8px;
+  padding: 0.5rem 0.875rem;
+  font: inherit;
+  font-weight: 600;
+  color: #fff;
+  background: #2f5db5;
+  cursor: pointer;
+}
+
+.specialist-start:hover {
+  background: #27509d;
+}
+
+/* Watching and changes ---------------------------------------------- */
+
+.specialist-watching {
+  margin: 0;
+  padding-left: 1rem;
+  display: grid;
+  gap: 0.1875rem;
+}
+
+.specialist-watching li {
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: #2c3644;
+}
+
+.specialist-changes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.specialist-changes li {
+  border-left: 3px solid #9ab7dd;
+  background: #f5f9ff;
+  border-radius: 0 8px 8px 0;
+  padding: 0.5rem 0.75rem;
+  display: grid;
+  gap: 0.1875rem;
+}
+
+.specialist-change-what {
+  font-weight: 600;
+  color: #1f2733;
+}
+
+.specialist-change-why {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: #5b6472;
+}
+
+/* Nutrition and habit goals: the action, the reason, and what is known
+   about following it. The status line is deliberately plain -- it often
+   says nothing is recorded, and that should read as information rather
+   than as a warning. */
+
+.specialist-goals {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.625rem;
+}
+
+.specialist-goal {
+  border: 1px solid #e6eaf1;
+  border-radius: 10px;
+  padding: 0.75rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.specialist-goal-name {
+  font-weight: 600;
+  color: #16202e;
+}
+
+.specialist-goal-action {
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: #2c3644;
+}
+
+.specialist-goal-why {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: #626c7c;
+}
+
+.specialist-goal-status {
+  justify-self: start;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #46536b;
+  background: #eef1f6;
+  border-radius: 999px;
+  padding: 0.125rem 0.5rem;
+}
+
+.specialist-today,
+.specialist-asks,
+.specialist-learning {
+  margin: 0;
+  padding-left: 1rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.specialist-today li,
+.specialist-asks li,
+.specialist-learning li {
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: #2c3644;
+}
+
+.specialist-asks li {
+  color: #6b5520;
+}
+
+.specialist-text--quiet {
+  font-size: 0.875rem;
+  color: #7a828f;
+}

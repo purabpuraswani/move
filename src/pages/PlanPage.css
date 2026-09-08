@@ -1,0 +1,338 @@
+/**
+ * The plan screen.
+ *
+ * Uses the same tokens as the rest of the application (src/index.css) so this
+ * reads as the same product as the assessment and history screens, not a
+ * bolted-on section.
+ */
+
+.plan-page {
+  min-height: 100vh;
+
+  background: var(--bg);
+
+  color: var(--dark);
+
+  font-family: "DM Sans", system-ui, sans-serif;
+}
+
+.plan-main {
+  max-width: 780px;
+
+  margin: 0 auto;
+
+  padding: 38px 24px 90px;
+}
+
+.plan-intro {
+  margin-bottom: 26px;
+}
+
+.plan-eyebrow {
+  display: block;
+
+  color: var(--green);
+
+  font-size: 11px;
+
+  font-weight: 700;
+
+  letter-spacing: 1.4px;
+
+  text-transform: uppercase;
+
+  margin-bottom: 8px;
+}
+
+.plan-title {
+  margin: 0 0 10px;
+
+  font-size: 30px;
+
+  font-weight: 700;
+}
+
+.plan-lead {
+  margin: 0;
+
+  max-width: 58ch;
+
+  color: var(--dark-soft);
+
+  line-height: 1.6;
+}
+
+.plan-safety {
+  margin: 0 0 24px;
+
+  padding: 12px 16px;
+
+  border-left: 3px solid var(--green);
+
+  background: var(--green-light);
+
+  border-radius: var(--radius-sm);
+
+  color: var(--dark);
+
+  font-size: 14px;
+}
+
+.plan-section {
+  margin-bottom: 22px;
+
+  padding: 22px;
+
+  background: var(--surface);
+
+  border: 1px solid var(--border);
+
+  border-radius: var(--radius-md);
+}
+
+.plan-section--empty {
+  background: transparent;
+
+  border-style: dashed;
+}
+
+.plan-section-title {
+  margin: 0 0 6px;
+
+  font-size: 18px;
+
+  font-weight: 700;
+}
+
+.plan-section-blurb {
+  margin: 0 0 14px;
+
+  color: var(--muted);
+
+  font-size: 13px;
+}
+
+.plan-goal {
+  margin: 0 0 14px;
+
+  color: var(--dark-soft);
+
+  line-height: 1.6;
+}
+
+.plan-items {
+  margin: 0;
+
+  padding: 0;
+
+  list-style: none;
+}
+
+.plan-item {
+  padding: 10px 0;
+
+  border-bottom: 1px solid var(--border);
+
+  font-size: 15px;
+}
+
+.plan-item:last-child {
+  border-bottom: none;
+}
+
+.plan-adaptation {
+  margin: 16px 0 0;
+
+  padding: 12px 14px;
+
+  background: var(--bg);
+
+  border-radius: var(--radius-sm);
+
+  color: var(--dark-soft);
+
+  font-size: 13px;
+
+  line-height: 1.6;
+}
+
+.plan-adaptation-label {
+  display: block;
+
+  margin-bottom: 4px;
+
+  color: var(--green);
+
+  font-size: 11px;
+
+  font-weight: 700;
+
+  letter-spacing: 1px;
+
+  text-transform: uppercase;
+}
+
+.plan-meta {
+  margin: 14px 0 0;
+
+  color: var(--muted);
+
+  font-size: 12px;
+}
+
+.plan-empty {
+  margin: 0 0 14px;
+
+  color: var(--muted);
+
+  line-height: 1.6;
+}
+
+.plan-status {
+  color: var(--muted);
+}
+
+.plan-error {
+  padding: 12px 16px;
+
+  border-radius: var(--radius-sm);
+
+  background: #fbeceb;
+
+  color: var(--danger);
+
+  font-size: 14px;
+}
+
+.plan-actions {
+  display: flex;
+
+  flex-wrap: wrap;
+
+  gap: 10px;
+
+  margin-top: 26px;
+}
+
+.plan-button {
+  padding: 11px 20px;
+
+  border: none;
+
+  border-radius: 999px;
+
+  background: var(--green);
+
+  color: #fff;
+
+  font-family: inherit;
+
+  font-size: 14px;
+
+  font-weight: 600;
+
+  cursor: pointer;
+}
+
+.plan-button:disabled {
+  opacity: 0.6;
+
+  cursor: default;
+}
+
+.plan-button--quiet {
+  background: var(--surface);
+
+  border: 1px solid var(--border);
+
+  color: var(--dark);
+}
+
+.plan-item--action {
+  display: flex;
+
+  align-items: center;
+
+  justify-content: space-between;
+
+  gap: 12px;
+}
+
+.plan-item-start {
+  flex: none;
+
+  padding: 6px 16px;
+
+  border: 1px solid var(--green);
+
+  border-radius: 999px;
+
+  background: var(--surface);
+
+  color: var(--green);
+
+  font-family: inherit;
+
+  font-size: 13px;
+
+  font-weight: 600;
+
+  cursor: pointer;
+}
+
+.plan-item-start:hover {
+  background: var(--green-light);
+}
+
+/* --------------------------------------------------------------------
+   "No plan was created this time" -- the state where the workflow ran
+   against real evidence and honestly produced nothing. The list below is
+   what could not be measured, in Need Assessment's own words, so it is
+   styled as information the user can act on rather than as an error.
+   -------------------------------------------------------------------- */
+
+.plan-missing-title {
+  margin: 1.25rem 0 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #5b6472;
+}
+
+.plan-missing {
+  margin: 0 0 0.5rem;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.625rem;
+}
+
+.plan-missing-item {
+  display: grid;
+  gap: 0.1875rem;
+  padding: 0.625rem 0.75rem;
+  border-left: 3px solid #d6dbe4;
+  background: #f7f8fa;
+  border-radius: 0 6px 6px 0;
+}
+
+.plan-missing-name {
+  font-weight: 600;
+  color: #1f2733;
+}
+
+.plan-missing-reason {
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: #5b6472;
+}
+
+/* The plan's version, stated plainly so the plan reads as something that
+   evolves rather than a one-off document. */
+.plan-version {
+  margin: 0.5rem 0 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #46536b;
+}

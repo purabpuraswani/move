@@ -1,0 +1,296 @@
+/**
+ * Performing one exercise. Same tokens as the rest of the application.
+ */
+
+.exercise-page {
+  min-height: 100vh;
+
+  background: var(--bg);
+
+  color: var(--dark);
+
+  font-family: "DM Sans", system-ui, sans-serif;
+}
+
+.exercise-main {
+  max-width: 720px;
+
+  margin: 0 auto;
+
+  padding: 28px 24px 90px;
+}
+
+.exercise-back {
+  margin-bottom: 18px;
+
+  padding: 0;
+
+  border: none;
+
+  background: none;
+
+  color: var(--green);
+
+  font-family: inherit;
+
+  font-size: 14px;
+
+  cursor: pointer;
+}
+
+.exercise-title {
+  margin: 0 0 20px;
+
+  font-size: 26px;
+
+  font-weight: 700;
+}
+
+.exercise-setup,
+.exercise-note,
+.exercise-result {
+  margin: 20px 0;
+
+  padding: 20px;
+
+  background: var(--surface);
+
+  border: 1px solid var(--border);
+
+  border-radius: var(--radius-md);
+
+  line-height: 1.6;
+}
+
+.exercise-note {
+  border-style: dashed;
+
+  background: transparent;
+}
+
+.exercise-setup-title,
+.exercise-note-title,
+.exercise-result-title {
+  margin: 0 0 10px;
+
+  font-size: 16px;
+
+  font-weight: 700;
+}
+
+.exercise-setup-quiet,
+.exercise-note-quiet,
+.exercise-result-quiet {
+  margin: 10px 0 0;
+
+  color: var(--muted);
+
+  font-size: 13px;
+}
+
+.exercise-start {
+  margin-top: 8px;
+
+  padding: 12px 22px;
+
+  border: none;
+
+  border-radius: 999px;
+
+  background: var(--green);
+
+  color: #fff;
+
+  font-family: inherit;
+
+  font-size: 15px;
+
+  font-weight: 600;
+
+  cursor: pointer;
+}
+
+.exercise-start--quiet {
+  background: var(--surface);
+
+  border: 1px solid var(--border);
+
+  color: var(--dark);
+}
+
+.exercise-live {
+  margin: 20px 0;
+
+  padding: 24px;
+
+  background: var(--green-light);
+
+  border-radius: var(--radius-md);
+
+  text-align: center;
+}
+
+.exercise-metric-value {
+  display: block;
+
+  font-size: 44px;
+
+  font-weight: 700;
+
+  color: var(--green);
+
+  line-height: 1.1;
+}
+
+.exercise-metric-label {
+  display: block;
+
+  margin-top: 6px;
+
+  color: var(--dark-soft);
+
+  font-size: 14px;
+}
+
+.exercise-result-list {
+  margin: 0;
+
+  padding-left: 20px;
+}
+
+.exercise-result-list li {
+  padding: 4px 0;
+}
+
+.exercise-saved {
+  color: var(--green);
+
+  font-size: 14px;
+}
+
+.exercise-error {
+  color: var(--danger);
+
+  font-size: 14px;
+}
+
+.exercise-actions {
+  display: flex;
+
+  flex-wrap: wrap;
+
+  gap: 10px;
+
+  margin-top: 18px;
+}
+
+.exercise-guidance-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--surface-alt, #f4f5f7);
+  border-left: 4px solid var(--accent, #f59e0b);
+  border-radius: var(--radius-sm, 6px);
+  margin-bottom: 16px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.exercise-guidance-banner--ready {
+  background: var(--green-light, #ecfdf5);
+  border-left-color: var(--green, #10b981);
+  color: var(--green-dark, #065f46);
+}
+
+.exercise-guidance-icon {
+  font-weight: 700;
+}
+
+.exercise-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.exercise-check-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+  color: var(--muted, #6b7280);
+}
+
+.exercise-check-item.is-passed {
+  color: var(--dark, #1f2937);
+  font-weight: 500;
+}
+
+.exercise-check-status {
+  width: 18px;
+  text-align: center;
+  font-weight: bold;
+}
+
+.exercise-check-item.is-passed .exercise-check-status {
+  color: var(--green, #10b981);
+}
+
+.exercise-stability-track {
+  width: 100%;
+  height: 6px;
+  background: var(--border, #e5e7eb);
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 12px 0 16px;
+}
+
+.exercise-stability-fill {
+  height: 100%;
+  background: var(--green, #10b981);
+  transition: width 0.15s ease;
+}
+
+.exercise-phase-badge {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--green, #10b981);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.exercise-cue-banner {
+  margin-top: 16px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: var(--radius-sm, 6px);
+  font-size: 14px;
+  color: var(--dark, #1f2937);
+}
+
+.exercise-cue-label {
+  font-weight: 700;
+  color: var(--green, #10b981);
+}
+
+.exercise-adaptation-note {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  background: var(--blue-light, #eff6ff);
+  border-left: 3px solid var(--blue, #3b82f6);
+  border-radius: var(--radius-sm, 6px);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--dark-soft, #374151);
+}
+
+.exercise-adaptation-icon {
+  font-weight: bold;
+  color: var(--blue, #3b82f6);
+}

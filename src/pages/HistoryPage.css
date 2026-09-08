@@ -1,0 +1,215 @@
+/**
+ * Saved sessions list.
+ *
+ * Uses the same tokens as the rest of the application (src/index.css) and the
+ * same header as the assessment flow, so moving between the two does not feel
+ * like moving between two products.
+ */
+
+.history-page {
+  min-height: 100vh;
+
+  background: var(--bg);
+
+  color: var(--dark);
+
+  font-family: "DM Sans", system-ui, sans-serif;
+}
+
+.history-main {
+  max-width: 900px;
+
+  margin: 0 auto;
+
+  padding: 38px 24px 90px;
+}
+
+.history-intro {
+  margin-bottom: 30px;
+}
+
+.history-eyebrow {
+  display: block;
+
+  color: var(--green);
+
+  font-size: 11px;
+
+  font-weight: 700;
+
+  letter-spacing: 1.4px;
+}
+
+.history-intro h1 {
+  margin: 10px 0 12px;
+
+  font-family: "Manrope", "DM Sans", sans-serif;
+
+  font-size: 30px;
+
+  font-weight: 700;
+
+  letter-spacing: -0.8px;
+}
+
+.history-intro p {
+  max-width: 620px;
+
+  margin: 0;
+
+  color: var(--muted);
+
+  font-size: 14px;
+
+  line-height: 1.75;
+}
+
+.history-count {
+  margin: 0 0 12px;
+
+  color: var(--muted);
+
+  font-size: 12px;
+
+  font-weight: 600;
+
+  letter-spacing: 0.3px;
+}
+
+/* An empty list is a normal state, not an error, so it is styled as a calm
+   panel rather than a warning. */
+.history-empty {
+  padding: 26px;
+
+  border: 1px dashed var(--border);
+
+  border-radius: var(--radius-md);
+
+  background: var(--surface);
+
+  color: var(--muted);
+
+  font-size: 14px;
+
+  line-height: 1.7;
+}
+
+.history-empty p {
+  margin: 0 0 14px;
+}
+
+.history-empty p:last-child {
+  margin-bottom: 0;
+}
+
+.history-list {
+  display: grid;
+
+  gap: 12px;
+
+  margin: 0 0 22px;
+
+  padding: 0;
+
+  list-style: none;
+}
+
+.history-item {
+  overflow: hidden;
+
+  border: 1px solid var(--border);
+
+  border-radius: var(--radius-md);
+
+  background: var(--surface);
+}
+
+.history-item__head {
+  width: 100%;
+
+  display: grid;
+
+  grid-template-columns: 1fr auto auto;
+
+  align-items: center;
+
+  gap: 20px;
+
+  padding: 18px 20px;
+
+  border: none;
+
+  background: transparent;
+
+  color: inherit;
+
+  font: inherit;
+
+  text-align: left;
+
+  cursor: pointer;
+}
+
+.history-item__head:hover {
+  background: var(--green-light);
+}
+
+.history-item__date {
+  font-size: 14px;
+
+  font-weight: 600;
+}
+
+.history-item__statuses {
+  display: flex;
+
+  flex-wrap: wrap;
+
+  gap: 14px;
+}
+
+.history-item__status {
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 5px;
+}
+
+.history-item__test {
+  color: var(--muted);
+
+  font-size: 10px;
+
+  font-weight: 600;
+
+  letter-spacing: 0.3px;
+}
+
+.history-item__toggle {
+  color: var(--green);
+
+  font-size: 12px;
+
+  font-weight: 700;
+}
+
+.history-item__body {
+  padding: 4px 20px 22px;
+
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 760px) {
+  .history-item__head {
+    grid-template-columns: 1fr auto;
+  }
+
+  .history-item__statuses {
+    grid-column: 1 / -1;
+  }
+
+  .history-intro h1 {
+    font-size: 25px;
+  }
+}

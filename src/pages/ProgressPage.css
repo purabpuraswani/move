@@ -1,0 +1,239 @@
+/**
+ * Progress screen. Same tokens as the rest of the application.
+ */
+
+.progress-page {
+  min-height: 100vh;
+
+  background: var(--bg);
+
+  color: var(--dark);
+
+  font-family: "DM Sans", system-ui, sans-serif;
+}
+
+.progress-main {
+  max-width: 780px;
+
+  margin: 0 auto;
+
+  padding: 38px 24px 90px;
+}
+
+.progress-intro {
+  margin-bottom: 26px;
+}
+
+.progress-eyebrow {
+  display: block;
+
+  color: var(--green);
+
+  font-size: 11px;
+
+  font-weight: 700;
+
+  letter-spacing: 1.4px;
+
+  text-transform: uppercase;
+
+  margin-bottom: 8px;
+}
+
+.progress-title {
+  margin: 0 0 10px;
+
+  font-size: 30px;
+
+  font-weight: 700;
+}
+
+.progress-lead {
+  margin: 0;
+
+  max-width: 58ch;
+
+  color: var(--dark-soft);
+
+  line-height: 1.6;
+}
+
+.progress-card {
+  margin-bottom: 20px;
+
+  padding: 22px;
+
+  background: var(--surface);
+
+  border: 1px solid var(--border);
+
+  border-radius: var(--radius-md);
+}
+
+.progress-card-title {
+  margin: 0 0 12px;
+
+  font-size: 17px;
+
+  font-weight: 700;
+}
+
+.progress-count {
+  margin: 0;
+
+  font-size: 15px;
+}
+
+.progress-empty {
+  margin: 0;
+
+  color: var(--muted);
+
+  line-height: 1.65;
+
+  font-size: 14px;
+}
+
+.progress-changes {
+  margin: 0;
+
+  padding: 0;
+
+  list-style: none;
+}
+
+.progress-change {
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 4px;
+
+  padding: 12px 0;
+
+  border-bottom: 1px solid var(--border);
+}
+
+.progress-change:last-child {
+  border-bottom: none;
+}
+
+.progress-change-label {
+  color: var(--green);
+
+  font-size: 12px;
+
+  font-weight: 700;
+
+  letter-spacing: 0.6px;
+
+  text-transform: uppercase;
+}
+
+.progress-change-reason {
+  color: var(--dark-soft);
+
+  font-size: 14px;
+
+  line-height: 1.6;
+}
+
+.progress-change-none {
+  color: var(--muted);
+
+  font-size: 14px;
+
+  line-height: 1.6;
+}
+
+.progress-change-date {
+  color: var(--muted);
+
+  font-size: 12px;
+}
+
+.progress-status {
+  color: var(--muted);
+}
+
+.progress-note {
+  margin: 0 0 18px;
+
+  padding: 12px 16px;
+
+  border-left: 3px solid var(--green);
+
+  background: var(--green-light);
+
+  border-radius: var(--radius-sm);
+
+  font-size: 14px;
+}
+
+.progress-error {
+  padding: 12px 16px;
+
+  border-radius: var(--radius-sm);
+
+  background: #fbeceb;
+
+  color: var(--danger);
+
+  font-size: 14px;
+}
+
+.progress-actions {
+  display: flex;
+
+  flex-wrap: wrap;
+
+  gap: 10px;
+
+  margin-top: 8px;
+}
+
+.progress-button {
+  padding: 11px 20px;
+
+  border: none;
+
+  border-radius: 999px;
+
+  background: var(--green);
+
+  color: #fff;
+
+  font-family: inherit;
+
+  font-size: 14px;
+
+  font-weight: 600;
+
+  cursor: pointer;
+}
+
+.progress-button:disabled {
+  opacity: 0.6;
+
+  cursor: default;
+}
+
+.progress-button--quiet {
+  background: var(--surface);
+
+  border: 1px solid var(--border);
+
+  color: var(--dark);
+}
+
+.progress-counts {
+  margin: 0;
+
+  padding-left: 20px;
+}
+
+.progress-counts li {
+  padding: 3px 0;
+
+  font-size: 15px;
+}

@@ -1,0 +1,763 @@
+/**
+ * Medical reports: the list, the upload form, and the review screen.
+ *
+ * Uses the tokens from src/index.css and the same header as the assessment flow.
+ * The one deliberate visual decision here: a value that has been read from a
+ * document but not yet checked never gets the confident green used elsewhere in
+ * the application. Unconfirmed data should not look settled.
+ */
+
+.reports-page {
+  min-height: 100vh;
+
+  background: var(--bg);
+
+  color: var(--dark);
+
+  font-family: "DM Sans", system-ui, sans-serif;
+}
+
+.reports-main {
+  max-width: 900px;
+
+  margin: 0 auto;
+
+  padding: 38px 24px 90px;
+}
+
+/* ---------------------------------------------------------------- intro */
+
+.reports-intro {
+  margin-bottom: 30px;
+}
+
+.reports-eyebrow {
+  display: block;
+
+  color: var(--green);
+
+  font-size: 11px;
+
+  font-weight: 700;
+
+  letter-spacing: 1.4px;
+}
+
+.reports-intro h1 {
+  margin: 10px 0 12px;
+
+  font-family: "Manrope", "DM Sans", sans-serif;
+
+  font-size: 30px;
+
+  font-weight: 700;
+
+  letter-spacing: -0.8px;
+}
+
+.reports-intro p {
+  max-width: 640px;
+
+  margin: 0 0 20px;
+
+  color: var(--muted);
+
+  font-size: 14px;
+
+  line-height: 1.75;
+}
+
+.reports-steps {
+  max-width: 640px;
+
+  margin: 0;
+
+  padding-left: 22px;
+
+  color: var(--muted);
+
+  font-size: 13px;
+
+  line-height: 1.7;
+}
+
+.reports-steps li {
+  margin-bottom: 8px;
+}
+
+.reports-steps strong {
+  color: var(--dark);
+}
+
+/* ---------------------------------------------------------------- panels */
+
+.reports-panel,
+.reports-list-section {
+  margin-bottom: 26px;
+
+  padding: 24px;
+
+  border: 1px solid var(--border);
+
+  border-radius: var(--radius-lg);
+
+  background: var(--surface);
+}
+
+.reports-panel h2,
+.reports-list-section h2 {
+  display: flex;
+
+  align-items: center;
+
+  gap: 10px;
+
+  margin: 0 0 16px;
+
+  font-family: "Manrope", "DM Sans", sans-serif;
+
+  font-size: 17px;
+
+  font-weight: 700;
+}
+
+.reports-panel p {
+  margin: 0 0 16px;
+
+  color: var(--muted);
+
+  font-size: 14px;
+
+  line-height: 1.7;
+}
+
+.reports-count {
+  padding: 2px 9px;
+
+  border-radius: 999px;
+
+  background: var(--green-light);
+
+  color: var(--green);
+
+  font-size: 12px;
+
+  font-weight: 700;
+}
+
+.reports-empty {
+  padding: 24px;
+
+  border: 1px dashed var(--border);
+
+  border-radius: var(--radius-md);
+
+  background: var(--surface);
+
+  color: var(--muted);
+
+  font-size: 14px;
+
+  line-height: 1.7;
+}
+
+.reports-empty p {
+  margin: 0 0 14px;
+}
+
+.reports-empty p:last-child {
+  margin-bottom: 0;
+}
+
+/* A neutral note, not a warning: "automatic reading is unavailable" is a
+   configuration fact, and styling it as an error would suggest the user did
+   something wrong. */
+.reports-notice {
+  margin: 0 0 16px;
+
+  padding: 13px 15px;
+
+  border: 1px solid var(--border);
+
+  border-left: 3px solid var(--muted);
+
+  border-radius: var(--radius-sm);
+
+  background: var(--bg);
+
+  color: var(--muted);
+
+  font-size: 13px;
+
+  line-height: 1.65;
+}
+
+.reports-error {
+  margin: 0 0 14px;
+
+  padding: 12px 15px;
+
+  border-radius: var(--radius-sm);
+
+  background: #f7ecea;
+
+  color: var(--danger);
+
+  font-size: 13px;
+
+  line-height: 1.6;
+}
+
+.reports-saved {
+  margin: 0 0 14px;
+
+  padding: 12px 15px;
+
+  border-radius: var(--radius-sm);
+
+  background: var(--green-light);
+
+  color: var(--green);
+
+  font-size: 13px;
+
+  font-weight: 600;
+}
+
+/* ---------------------------------------------------------------- form */
+
+.reports-form {
+  display: grid;
+
+  gap: 16px;
+}
+
+.reports-field-row {
+  display: grid;
+
+  grid-template-columns: 1fr 1fr;
+
+  gap: 16px;
+}
+
+.reports-field {
+  display: grid;
+
+  gap: 6px;
+}
+
+.reports-field > span {
+  font-size: 12px;
+
+  font-weight: 600;
+
+  letter-spacing: 0.2px;
+}
+
+.reports-field input,
+.reports-field select {
+  padding: 11px 13px;
+
+  border: 1px solid var(--border);
+
+  border-radius: var(--radius-sm);
+
+  background: var(--bg);
+
+  color: var(--dark);
+
+  font-family: inherit;
+
+  font-size: 14px;
+}
+
+.reports-field input:focus,
+.reports-field select:focus {
+  border-color: var(--green);
+
+  outline: none;
+}
+
+.reports-field small {
+  color: var(--muted);
+
+  font-size: 12px;
+
+  line-height: 1.55;
+}
+
+.reports-actions,
+.review-footer,
+.review-actions {
+  display: flex;
+
+  flex-wrap: wrap;
+
+  gap: 12px;
+}
+
+.review-actions {
+  margin-top: 20px;
+}
+
+.review-footer {
+  margin: 18px 0;
+}
+
+/* ---------------------------------------------------------------- list */
+
+.reports-list {
+  display: grid;
+
+  gap: 12px;
+
+  margin: 0;
+
+  padding: 0;
+
+  list-style: none;
+}
+
+.report-card {
+  display: grid;
+
+  grid-template-columns: 1fr auto auto;
+
+  align-items: center;
+
+  gap: 20px;
+
+  padding: 18px;
+
+  border: 1px solid var(--border);
+
+  border-radius: var(--radius-md);
+
+  background: var(--bg);
+}
+
+.report-card__main h3 {
+  margin: 0 0 5px;
+
+  font-size: 15px;
+
+  font-weight: 600;
+}
+
+.report-card__meta {
+  margin: 0;
+
+  color: var(--muted);
+
+  font-size: 12px;
+}
+
+.report-card__note {
+  margin: 7px 0 0;
+
+  color: var(--danger);
+
+  font-size: 12px;
+
+  line-height: 1.5;
+}
+
+.report-card__state {
+  display: grid;
+
+  justify-items: end;
+
+  gap: 6px;
+}
+
+.report-card__actions {
+  display: flex;
+
+  align-items: center;
+
+  gap: 12px;
+}
+
+.report-card__delete {
+  border: none;
+
+  background: none;
+
+  color: var(--muted);
+
+  font-family: inherit;
+
+  font-size: 12px;
+
+  cursor: pointer;
+}
+
+.report-card__delete:hover:not(:disabled) {
+  color: var(--danger);
+}
+
+/* ---------------------------------------------------------------- status */
+
+.report-status {
+  padding: 4px 11px;
+
+  border-radius: 999px;
+
+  font-size: 11px;
+
+  font-weight: 700;
+
+  letter-spacing: 0.2px;
+
+  white-space: nowrap;
+}
+
+.report-status--neutral {
+  background: var(--border);
+
+  color: var(--dark);
+}
+
+/* Amber, not green: read but unchecked is the one state where the interface
+   must not look reassuring. */
+.report-status--review {
+  background: #fbf0dc;
+
+  color: #8a6412;
+}
+
+.report-status--confirmed {
+  background: var(--green-light);
+
+  color: var(--green);
+}
+
+.report-status--failed {
+  background: #f7ecea;
+
+  color: var(--danger);
+}
+
+.report-progress {
+  color: var(--muted);
+
+  font-size: 11px;
+}
+
+/* ---------------------------------------------------------------- review */
+
+.review-banner {
+  margin-bottom: 22px;
+
+  padding: 16px 18px;
+
+  border: 1px solid #efdfbe;
+
+  border-left: 3px solid #c99a2e;
+
+  border-radius: var(--radius-md);
+
+  background: #fdf7ec;
+
+  color: #6b5217;
+
+  font-size: 13px;
+
+  line-height: 1.7;
+}
+
+.review-banner--confirmed {
+  border-color: var(--green-light);
+
+  border-left-color: var(--green);
+
+  background: var(--green-light);
+
+  color: var(--green);
+}
+
+.review-progress-line {
+  margin-bottom: 14px;
+
+  color: var(--muted);
+
+  font-size: 12px;
+
+  font-weight: 600;
+}
+
+.field-list {
+  display: grid;
+
+  gap: 14px;
+
+  margin: 0;
+
+  padding: 0;
+
+  list-style: none;
+}
+
+.field-row {
+  padding: 18px;
+
+  border: 1px solid var(--border);
+
+  border-radius: var(--radius-md);
+
+  background: var(--surface);
+}
+
+/* Dimmed rather than hidden: a value the user chose to drop should still be
+   visible so the choice can be undone. */
+.field-row--excluded {
+  background: var(--bg);
+
+  opacity: 0.7;
+}
+
+.field-row__head {
+  display: flex;
+
+  align-items: center;
+
+  justify-content: space-between;
+
+  gap: 16px;
+
+  margin-bottom: 12px;
+}
+
+.field-row__head h3 {
+  margin: 0;
+
+  font-size: 15px;
+
+  font-weight: 600;
+}
+
+.field-row__label-input {
+  flex: 1;
+
+  padding: 9px 12px;
+
+  border: 1px solid var(--border);
+
+  border-radius: var(--radius-sm);
+
+  background: var(--bg);
+
+  font-family: inherit;
+
+  font-size: 14px;
+}
+
+.field-row__include {
+  display: flex;
+
+  align-items: center;
+
+  gap: 7px;
+
+  color: var(--muted);
+
+  font-size: 12px;
+
+  white-space: nowrap;
+
+  cursor: pointer;
+}
+
+/* The evidence block: what was read, and the text it was read from. Set apart
+   from the editable inputs so it is clear which is the machine's claim and
+   which is the user's answer. */
+.field-evidence {
+  margin-bottom: 14px;
+
+  padding: 12px 14px;
+
+  border-radius: var(--radius-sm);
+
+  background: var(--bg);
+}
+
+.field-evidence--none {
+  margin: 0 0 14px;
+
+  color: var(--muted);
+
+  font-size: 12px;
+}
+
+.field-evidence__read {
+  margin: 0;
+
+  color: var(--muted);
+
+  font-size: 12px;
+}
+
+.field-evidence__read strong {
+  color: var(--dark);
+
+  font-size: 13px;
+}
+
+.field-evidence__quote {
+  margin: 7px 0 0;
+
+  color: var(--muted);
+
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+
+  font-size: 11.5px;
+
+  line-height: 1.5;
+}
+
+.field-evidence__range {
+  margin: 9px 0 0;
+
+  color: var(--muted);
+
+  font-size: 12px;
+}
+
+.field-evidence__range-note {
+  display: block;
+
+  margin-top: 4px;
+
+  font-size: 11px;
+
+  font-style: italic;
+
+  line-height: 1.5;
+}
+
+.field-row__inputs {
+  display: grid;
+
+  grid-template-columns: 1fr 130px 1fr;
+
+  gap: 12px;
+}
+
+.field-row__inputs label {
+  display: grid;
+
+  gap: 5px;
+}
+
+.field-row__inputs span {
+  color: var(--muted);
+
+  font-size: 11px;
+
+  font-weight: 600;
+}
+
+.field-row__inputs input,
+.field-row__inputs select {
+  padding: 10px 12px;
+
+  border: 1px solid var(--border);
+
+  border-radius: var(--radius-sm);
+
+  background: var(--bg);
+
+  color: var(--dark);
+
+  font-family: inherit;
+
+  font-size: 14px;
+}
+
+.field-row__inputs input:focus,
+.field-row__inputs select:focus {
+  border-color: var(--green);
+
+  outline: none;
+}
+
+.field-row__inputs input:disabled {
+  color: var(--muted);
+}
+
+.field-row__foot {
+  display: flex;
+
+  flex-wrap: wrap;
+
+  align-items: center;
+
+  gap: 14px;
+
+  margin-top: 12px;
+
+  min-height: 1px;
+}
+
+.field-row__changed {
+  color: var(--green);
+
+  font-size: 11px;
+
+  font-weight: 700;
+
+  letter-spacing: 0.2px;
+}
+
+.field-row__excluded-note {
+  color: var(--muted);
+
+  font-size: 11px;
+}
+
+.field-row__remove {
+  border: none;
+
+  background: none;
+
+  color: var(--muted);
+
+  font-family: inherit;
+
+  font-size: 11px;
+
+  text-decoration: underline;
+
+  cursor: pointer;
+}
+
+.review-caveat {
+  margin: 16px 0 0;
+
+  color: var(--muted);
+
+  font-size: 12px;
+
+  line-height: 1.65;
+}
+
+/* ---------------------------------------------------------------- narrow */
+
+@media (max-width: 760px) {
+  .reports-intro h1 {
+    font-size: 25px;
+  }
+
+  .reports-field-row,
+  .field-row__inputs {
+    grid-template-columns: 1fr;
+  }
+
+  .report-card {
+    grid-template-columns: 1fr;
+  }
+
+  .report-card__state {
+    justify-items: start;
+  }
+}

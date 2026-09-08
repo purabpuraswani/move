@@ -1,0 +1,32 @@
+# Line endings.
+#
+# The working tree is developed on Windows, so files arrive with CRLF. Storing
+# them that way makes every checkout on another platform show the whole file as
+# changed, which is how a real diff gets buried in thousands of lines of noise.
+#
+# text=auto tells git to detect text files and store them with LF, converting
+# back to the platform's native ending on checkout. Binary files are detected
+# and left alone.
+* text=auto
+
+# Files that must keep CRLF wherever they are checked out.
+#
+# Windows Script Host and older PowerShell hosts are less forgiving about a
+# lone LF than modern ones, and there is no benefit to normalising a script
+# that only ever runs on Windows.
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Files that must keep LF wherever they are checked out.
+*.sh text eol=lf
+
+# Binary. Listed explicitly so detection is not relied on.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary

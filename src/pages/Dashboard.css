@@ -1408,6 +1408,7 @@
 
 
 .score-card,
+.reports-summary,
 .specialist-card {
   padding: 30px;
 
@@ -1421,6 +1422,28 @@
 
   box-shadow:
     0 15px 40px rgba(35, 73, 48, 0.05);
+}
+
+
+/* Reports waiting to be checked. Amber, matching the review screen, because
+   values that have been read but not confirmed are the one thing on this page
+   that must not look settled. */
+.reports-summary__pending {
+  margin: 14px 0 0;
+
+  padding: 12px 14px;
+
+  border-left: 3px solid #c99a2e;
+
+  border-radius: 10px;
+
+  background: #fdf7ec;
+
+  color: #6b5217;
+
+  font-size: 13px;
+
+  line-height: 1.6;
 }
 
 
@@ -1600,6 +1623,141 @@
 
   transition:
     width 1s ease;
+}
+
+
+/* =========================================================
+   REAL DATA STATES
+
+   Loading, empty, and error states for the sections that now read from the
+   API. An empty state is styled to look deliberate rather than broken,
+   because "nothing recorded yet" is a normal condition, not a fault.
+   ========================================================= */
+
+.section-note {
+  max-width: 640px;
+
+  margin: 14px 0 0;
+
+  color: #7d8982;
+
+  font-size: 12px;
+
+  line-height: 1.7;
+}
+
+
+.card-empty {
+  margin: 20px 0 0;
+
+  color: #7d8982;
+
+  font-size: 12px;
+
+  line-height: 1.7;
+}
+
+
+.empty-panel {
+  margin-top: 22px;
+
+  padding: 26px;
+
+  border:
+    1px dashed rgba(36, 76, 54, 0.18);
+
+  border-radius: 18px;
+
+  background:
+    rgba(255, 255, 255, 0.6);
+}
+
+
+.empty-panel h3 {
+  margin: 0 0 8px;
+
+  color: #294936;
+
+  font-size: 16px;
+}
+
+
+.empty-panel p {
+  max-width: 520px;
+
+  margin: 0;
+
+  color: #7d8982;
+
+  font-size: 12px;
+
+  line-height: 1.7;
+}
+
+
+/* Per-test results, replacing the three placeholder score bars. Each row is a
+   measurement or a plain statement that there is none. */
+
+.latest-checks {
+  display: grid;
+
+  gap: 2px;
+
+  margin-top: 26px;
+}
+
+
+.latest-check {
+  display: flex;
+
+  align-items: baseline;
+
+  justify-content: space-between;
+
+  gap: 16px;
+
+  padding: 13px 0;
+
+  border-bottom:
+    1px solid #edf1ed;
+}
+
+
+.latest-check__name {
+  color: #46574d;
+
+  font-size: 12px;
+
+  font-weight: 600;
+}
+
+
+.latest-check__value {
+  color: #244535;
+
+  font-size: 13px;
+
+  font-weight: 700;
+
+  text-align: right;
+}
+
+
+/* A skipped or unusable check is stated plainly and never styled as a
+   failure, because choosing not to do one is a legitimate choice. */
+.latest-check__value--none {
+  color: #8b9890;
+
+  font-weight: 500;
+}
+
+
+.latest-checks .text-button {
+  justify-self: start;
+
+  margin-top: 14px;
+
+  padding: 0;
 }
 
 

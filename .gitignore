@@ -11,7 +11,22 @@ node_modules
 dist
 dist-ssr
 *.local
+
+# Environment files - never commit real secrets.
+# .env.example is the committed template and is deliberately not ignored.
 .env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Uploaded user documents (local development storage)
+backend/uploads/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

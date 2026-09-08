@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { signin } from "../services/auth";
 
@@ -9,6 +9,18 @@ import "./LoginPage.css";
 function LoginPage() {
 
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Where RequireAuth turned this visitor away from, if it did. Signing
+  // in should continue to the page they asked for rather than dropping
+  // them on the dashboard. Only in-app paths are accepted, so a crafted
+  // link cannot use this to bounce anyone to another site.
+  const from = location.state?.from;
+
+  const destination =
+    typeof from === "string" && from.startsWith("/") && !from.startsWith("//")
+      ? from
+      : "/dashboard";
 
   const [form, setForm] = useState({
     email: "",
@@ -43,7 +55,7 @@ function LoginPage() {
         JSON.stringify(data.user)
       );
 
-      navigate("/dashboard");
+      navigate(destination, { replace: true });
 
     } catch (err) {
 

@@ -1,0 +1,238 @@
+/**
+ * Food log panel, shown inside the plan screen.
+ */
+
+.foodlog {
+  margin-top: 26px;
+
+  padding: 22px;
+
+  background: var(--surface);
+
+  border: 1px solid var(--border);
+
+  border-radius: var(--radius-md);
+}
+
+.foodlog-title {
+  margin: 0 0 6px;
+
+  font-size: 18px;
+
+  font-weight: 700;
+}
+
+.foodlog-blurb {
+  margin: 0 0 18px;
+
+  color: var(--muted);
+
+  font-size: 13px;
+
+  line-height: 1.6;
+}
+
+.foodlog-meals {
+  display: flex;
+
+  flex-wrap: wrap;
+
+  gap: 8px;
+
+  margin-bottom: 18px;
+}
+
+.foodlog-meal {
+  padding: 8px 16px;
+
+  border: 1px solid var(--border);
+
+  border-radius: 999px;
+
+  background: var(--surface);
+
+  color: var(--dark-soft);
+
+  font-family: inherit;
+
+  font-size: 13px;
+
+  cursor: pointer;
+}
+
+.foodlog-meal--on {
+  border-color: var(--green);
+
+  background: var(--green-light);
+
+  color: var(--green);
+
+  font-weight: 600;
+}
+
+.foodlog-label {
+  display: block;
+
+  margin-bottom: 6px;
+
+  font-size: 13px;
+
+  font-weight: 600;
+}
+
+.foodlog-optional {
+  color: var(--muted);
+
+  font-weight: 400;
+}
+
+.foodlog-input {
+  width: 100%;
+
+  box-sizing: border-box;
+
+  margin-bottom: 16px;
+
+  padding: 11px 14px;
+
+  border: 1px solid var(--border);
+
+  border-radius: var(--radius-sm);
+
+  background: var(--bg);
+
+  color: var(--dark);
+
+  font-family: inherit;
+
+  font-size: 14px;
+}
+
+.foodlog-input:focus {
+  outline: none;
+
+  border-color: var(--green-bright);
+}
+
+.foodlog-submit {
+  padding: 11px 20px;
+
+  border: none;
+
+  border-radius: 999px;
+
+  background: var(--green);
+
+  color: #fff;
+
+  font-family: inherit;
+
+  font-size: 14px;
+
+  font-weight: 600;
+
+  cursor: pointer;
+}
+
+.foodlog-submit:disabled {
+  opacity: 0.6;
+
+  cursor: default;
+}
+
+.foodlog-error {
+  margin: 0 0 12px;
+
+  color: var(--danger);
+
+  font-size: 13px;
+}
+
+.foodlog-saved {
+  margin: 0 0 12px;
+
+  color: var(--green);
+
+  font-size: 13px;
+}
+
+.foodlog-recent {
+  margin-top: 24px;
+
+  padding-top: 18px;
+
+  border-top: 1px solid var(--border);
+}
+
+.foodlog-recent-title {
+  margin: 0 0 10px;
+
+  font-size: 13px;
+
+  font-weight: 700;
+
+  letter-spacing: 0.6px;
+
+  text-transform: uppercase;
+
+  color: var(--muted);
+}
+
+.foodlog-list {
+  margin: 0;
+
+  padding: 0;
+
+  list-style: none;
+}
+
+.foodlog-entry {
+  display: flex;
+
+  flex-wrap: wrap;
+
+  align-items: baseline;
+
+  gap: 8px;
+
+  padding: 9px 0;
+
+  border-bottom: 1px solid var(--border);
+
+  font-size: 14px;
+}
+
+.foodlog-entry:last-child {
+  border-bottom: none;
+}
+
+.foodlog-entry-meal {
+  min-width: 74px;
+
+  color: var(--green);
+
+  font-size: 12px;
+
+  font-weight: 600;
+}
+
+.foodlog-entry-food {
+  flex: 1;
+}
+
+.foodlog-entry-quantity,
+.foodlog-entry-when {
+  color: var(--muted);
+
+  font-size: 12px;
+}
+
+.foodlog-none {
+  margin: 20px 0 0;
+
+  color: var(--muted);
+
+  font-size: 13px;
+
+  line-height: 1.6;
+}

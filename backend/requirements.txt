@@ -1,0 +1,35 @@
+# MoveWell AI backend dependencies
+#
+# Everything the backend imports is listed here, and nothing else is needed.
+# The assessment, medical-report and AI-agent features added no packages, which
+# is a design consequence rather than an omission: pose estimation runs in the
+# browser with MoveNet, so no Python vision or machine-learning library is
+# involved, and the AI provider is called over HTTPS with urllib from the
+# standard library rather than through a vendor SDK.
+
+# Web framework and ASGI server
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+
+# Request parsing
+# pydantic[email] is required for the EmailStr type used in models.py.
+# python-multipart is required for the Form/File uploads in routes/profile.py.
+pydantic[email]==2.10.4
+python-multipart==0.0.20
+
+# Database (pymongo also provides the bson package used for ObjectId)
+#
+# The [srv] extra pulls in dnspython, which pymongo requires to resolve a
+# MongoDB Atlas "mongodb+srv://" URI. Without it, MongoClient raises
+# ConfigurationError as soon as database.py is imported, so the API fails to
+# start rather than failing on the first query. Plain "mongodb://" URIs do not
+# need it, but installing it costs nothing and makes local and Atlas
+# configurations interchangeable, which is the point of MONGODB_URI.
+pymongo[srv]==4.10.1
+
+# Configuration
+python-dotenv==1.0.1
+
+# Authentication
+bcrypt==4.2.1
+PyJWT==2.10.1

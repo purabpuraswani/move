@@ -103,27 +103,9 @@ function OnboardingPage() {
 
     try {
 
-      const user = JSON.parse(
-        localStorage.getItem("movewell_user")
-      );
-
-
-      if (!user?.id) {
-
-        throw new Error(
-          "User information not found. Please sign in again."
-        );
-
-      }
-
-
+      // The backend identifies the user from the auth token, so no user id
+      // is sent with the form.
       const formData = new FormData();
-
-
-      formData.append(
-        "user_id",
-        user.id
-      );
 
 
       Object.entries(form).forEach(

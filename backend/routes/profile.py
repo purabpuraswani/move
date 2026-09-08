@@ -1,10 +1,12 @@
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, Form
 
+from auth.deps import get_current_user
 from database import db
+from config import REPORT_MAX_UPLOAD_BYTES
 
 import os
-import shutil
 from datetime import datetime
+from uuid import uuid4
 
 
 router = APIRouter(
@@ -17,8 +19,8 @@ UPLOAD_DIR = "uploads"
 
 
 @router.post("/complete")
-async def complete_profile(
-    user_id: str = Form(...),
+def complete_profile(
+    current_user: dict = Depends(get_current_user),
 
     age: int = Form(...),
     sex: str = Form(...),
@@ -49,19 +51,23 @@ async def complete_profile(
 
     other_conditions: str = Form(""),
 
+    # Optional, added in Phase 4 for the Nutrition Agent. Optional (not
+    # required, unlike every field above) so the existing onboarding form,
+    # which does not send these yet, keeps working unchanged — a UI to
+    # actually collect them is separate, later work (see docs/architecture.md's
+    # Phase 4 "known limitations"). Self-reported estimates, not food-tracking
+    # data, mirroring exactly how daily_sitting_hours etc. above are collected.
+    meal_pattern: str | None = Form(None),
+    fruit_vegetable_servings: float | None = Form(None),
+    water_glasses_per_day: float | None = Form(None),
+    processed_food_frequency: str | None = Form(None),
+
     documents: list[UploadFile] | None = File(None)
 ):
 
-    # Check user exists
-    user = db["users"].find_one({
-        "_id": __import__("bson").ObjectId(user_id)
-    })
-
-    if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found"
-        )
+    # Identity comes from the verified token, never from the request body.
+    # get_current_user has already confirmed this user exists.
+    user_id = str(current_user["_id"])
 
 
     # Calculate BMI
@@ -94,6 +100,11 @@ async def complete_profile(
         "exercise_minutes": exercise_minutes,
 
         "work_type": work_type,
+
+        "meal_pattern": meal_pattern,
+        "fruit_vegetable_servings": fruit_vegetable_servings,
+        "water_glasses_per_day": water_glasses_per_day,
+        "processed_food_frequency": processed_food_frequency,
 
         "health": {
 
@@ -157,10 +168,9 @@ async def complete_profile(
                 continue
 
 
-            stored_filename = (
-                f"{datetime.utcnow().timestamp()}_"
-                f"{document.filename}"
-            )
+            # Generated name, not the client-supplied one: an uploaded
+            # filename is untrusted input and must never reach a filesystem path.
+            stored_filename = f"{uuid4().hex}{extension}"
 
 
             file_path = os.path.join(
@@ -169,12 +179,35 @@ async def complete_profile(
             )
 
 
-            with open(file_path, "wb") as buffer:
+            # Phase 6 security fix: this upload path had no size cap,
+            # unlike reports/storage.py's own upload path. Reuses the same
+            # REPORT_MAX_UPLOAD_BYTES limit (config.py) rather than
+            # inventing a second, separate one for the same concern
+            # (an oversized file exhausting disk space). Written in
+            # bounded chunks, and rejected/cleaned up mid-write rather
+            # than after the fact, exactly like reports/storage.py's own
+            # check.
+            total_written = 0
+            oversized = False
 
-                shutil.copyfileobj(
-                    document.file,
-                    buffer
-                )
+            with open(file_path, "wb") as buffer:
+                while True:
+                    chunk = document.file.read(1024 * 1024)
+
+                    if not chunk:
+                        break
+
+                    total_written += len(chunk)
+
+                    if total_written > REPORT_MAX_UPLOAD_BYTES:
+                        oversized = True
+                        break
+
+                    buffer.write(chunk)
+
+            if oversized:
+                os.remove(file_path)
+                continue
 
 
             document_record = {
@@ -201,4 +234,79 @@ async def complete_profile(
     return {
         "message": "Profile completed successfully",
         "bmi": round(bmi, 2)
+    }
+
+
+# Fields the dashboard needs, and nothing else.
+#
+# The stored profile also holds self-reported health answers (diabetes, joint
+# pain, and so on). Those are not sent to the browser here, because no screen
+# that reads this endpoint needs them, and health information should not travel
+# further than the feature that actually uses it.
+LIFESTYLE_FIELDS = (
+    "daily_sitting_hours",
+    "daily_screen_hours",
+    "sleep_hours",
+    "sleep_quality",
+    "daily_steps",
+    "exercise_days",
+    "exercise_minutes",
+    "work_type",
+    "bmi",
+    "age",
+    "sex"
+)
+
+
+@router.get("/summary")
+def profile_summary(
+    current_user: dict = Depends(get_current_user)
+):
+    """The lifestyle answers this user gave during setup.
+
+    These are self-reported values from onboarding, not measurements and not
+    anything this application observed. A screen showing them has to label them
+    that way, because "8.2 hours sitting" is something the user told us once,
+    not something tracked today.
+
+    A user who has not completed onboarding gets complete=False rather than
+    zeros, so the interface can say there is nothing yet instead of inventing
+    values.
+    """
+
+    user_id = str(current_user["_id"])
+
+    profile = db["health_profiles"].find_one(
+        {"user_id": user_id}
+    )
+
+
+    if not profile:
+
+        return {
+            "complete": False,
+            "profile": None
+        }
+
+
+    summary = {
+        field: profile.get(field)
+        for field in LIFESTYLE_FIELDS
+        if profile.get(field) is not None
+    }
+
+
+    updated_at = profile.get("updated_at")
+
+
+    return {
+        "complete": True,
+
+        "profile": summary,
+
+        "updatedAt": (
+            updated_at.isoformat()
+            if hasattr(updated_at, "isoformat")
+            else None
+        )
     }

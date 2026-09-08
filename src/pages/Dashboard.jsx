@@ -1,67 +1,291 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { fetchLatestAssessment } from "../services/assessments";
+import { clearSession, fetchMe, getToken } from "../services/auth";
+import { fetchProfileSummary } from "../services/profile";
+import { fetchReports } from "../services/reports";
+
 import "./Dashboard.css";
+
+
+const TEST_TITLES = {
+  shoulder: "Shoulder movement",
+  ftsst: "Sit to stand",
+  balance: "Standing on one leg"
+};
+
+
+/**
+ * One line describing what a test recorded.
+ *
+ * A skipped or unusable check says so. Nothing here turns a missing
+ * measurement into a number, and nothing here says whether a measurement is
+ * good or bad, because that judgement cannot be made from this data.
+ */
+function describeTest(testId, test) {
+
+  if (!test) {
+    return "Not recorded";
+  }
+
+
+  if (test.status === "skipped") {
+    return "Skipped";
+  }
+
+  if (test.status === "not_started") {
+    return "Not reached";
+  }
+
+  if (test.status === "invalid") {
+    return "We couldn't reliably assess this movement.";
+  }
+
+
+  const measurements = test.measurements;
+
+  if (!measurements) {
+    return "Recorded";
+  }
+
+
+  if (testId === "shoulder") {
+
+    const left = measurements.left?.finalElevationDeg;
+    const right = measurements.right?.finalElevationDeg;
+
+    if (
+      typeof left === "number" &&
+      typeof right === "number"
+    ) {
+      return `${Math.round(left)}° left · ${Math.round(right)}° right`;
+    }
+
+    return "Recorded";
+  }
+
+
+  if (testId === "ftsst") {
+
+    const seconds = measurements.completionTimeSeconds;
+
+    if (typeof seconds === "number") {
+      return `${seconds.toFixed(1)} s for five stands`;
+    }
+
+    return "Recorded";
+  }
+
+
+  if (testId === "balance") {
+
+    const left = measurements.left;
+    const right = measurements.right;
+
+    const parts = [];
+
+    if (left?.attempted && typeof left.holdDurationMs === "number") {
+      parts.push(`${(left.holdDurationMs / 1000).toFixed(1)} s left`);
+    }
+
+    if (right?.attempted && typeof right.holdDurationMs === "number") {
+      parts.push(`${(right.holdDurationMs / 1000).toFixed(1)} s right`);
+    }
+
+    return parts.length ? parts.join(" · ") : "Recorded";
+  }
+
+
+  return "Recorded";
+}
 
 
 function Dashboard() {
 
   const navigate = useNavigate();
 
-  const [user, setUser] = useState(null);
-
-  const [timeOfDay, setTimeOfDay] = useState("morning");
-
-  const [stats, setStats] = useState({
-    sitting: 8.2,
-    sleep: 7.1,
-    steps: 6240,
-    exerciseDays: 3
+  const [user, setUser] = useState(() => {
+    const storedUser = localStorage.getItem("movewell_user");
+    if (storedUser) {
+      try {
+        return JSON.parse(storedUser);
+      } catch {
+        return null;
+      }
+    }
+    return null;
   });
 
+  const [timeOfDay] = useState(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "morning";
+    if (hour < 18) return "afternoon";
+    return "evening";
+  });
 
+  // The latest real assessment, or null when the user has never done one.
+  // Never a placeholder: a user with no assessment has no numbers, and the
+  // interface has to say that rather than show zeros.
+  const [latest, setLatest] = useState(null);
+
+  const [assessmentCount, setAssessmentCount] = useState(0);
+
+  const [assessmentState, setAssessmentState] = useState("loading");
+
+  const [assessmentError, setAssessmentError] = useState(null);
+
+  // The lifestyle answers from onboarding. Self-reported, not measured.
+  const [profile, setProfile] = useState(null);
+
+  const [profileComplete, setProfileComplete] = useState(false);
+
+  const [profileState, setProfileState] = useState("loading");
+
+
+  const [reports, setReports] = useState([]);
+
+  const [reportState, setReportState] = useState("loading");
+
+
+  // Confirm with the backend who this token belongs to.
+  //
+  // The name on the screen should come from the account the server recognises,
+  // not from a value in localStorage that can go stale or be edited. This also
+  // catches an expired token on arrival: rather than letting each card fail its
+  // own request, the session is cleared once and the user is asked to sign in.
   useEffect(() => {
 
-    // Get logged-in user
-    const storedUser = localStorage.getItem(
-      "movewell_user"
-    );
+    let cancelled = false;
 
-    if (storedUser) {
+
+    async function confirmAccount() {
 
       try {
 
-        setUser(
-          JSON.parse(storedUser)
+        const account = await fetchMe();
+
+        if (cancelled) return;
+
+        setUser(account);
+
+        localStorage.setItem(
+          "movewell_user",
+          JSON.stringify(account)
         );
 
       } catch {
 
-        console.log(
-          "Could not read user data"
-        );
+        if (cancelled) return;
+
+        // Only a rejected token clears the session, and fetchMe has already
+        // done that. A network failure leaves the stored copy in place.
+        if (!getToken()) {
+          navigate("/login", { replace: true });
+        }
 
       }
 
     }
 
 
-    // Time-based greeting
-    const hour = new Date().getHours();
+    confirmAccount();
 
-    if (hour < 12) {
 
-      setTimeOfDay("morning");
+    return () => {
+      cancelled = true;
+    };
 
-    } else if (hour < 18) {
+  }, [navigate]);
 
-      setTimeOfDay("afternoon");
 
-    } else {
+  useEffect(() => {
 
-      setTimeOfDay("evening");
+    let cancelled = false;
+
+
+    async function loadAssessment() {
+
+      try {
+
+        const { assessment, total } =
+          await fetchLatestAssessment();
+
+        if (cancelled) return;
+
+        setLatest(assessment);
+        setAssessmentCount(total);
+        setAssessmentState("ready");
+
+      } catch (error) {
+
+        if (cancelled) return;
+
+        // A failure is shown as a failure. Falling back to zeros here would be
+        // indistinguishable from "you scored nothing".
+        setAssessmentError(error.message);
+        setAssessmentState("error");
+
+      }
 
     }
+
+
+    async function loadProfile() {
+
+      try {
+
+        const summary = await fetchProfileSummary();
+
+        if (cancelled) return;
+
+        setProfile(summary.profile);
+        setProfileComplete(summary.complete);
+        setProfileState("ready");
+
+      } catch {
+
+        if (cancelled) return;
+
+        setProfileState("error");
+
+      }
+
+    }
+
+
+    async function loadReports() {
+
+      try {
+
+        const page = await fetchReports({ limit: 50 });
+
+        if (cancelled) return;
+
+        setReports(page.reports);
+        setReportState("ready");
+
+      } catch {
+
+        if (cancelled) return;
+
+        // The dashboard works without reports, so a failure here is recorded
+        // and the panel says so rather than the whole page failing.
+        setReportState("error");
+
+      }
+
+    }
+
+
+    loadAssessment();
+    loadProfile();
+    loadReports();
+
+
+    return () => {
+      cancelled = true;
+    };
 
   }, []);
 
@@ -83,7 +307,28 @@ function Dashboard() {
   }[timeOfDay];
 
 
-  const movementProgress = 68;
+  // How many of the three checks recorded a usable measurement. This is a
+  // count of completed checks, not a rating of how well anything was done.
+  const checksRecorded =
+    latest?.summary?.testsCompleted ?? 0;
+
+  const checksRecordedPercent =
+    Math.round((checksRecorded / 3) * 100);
+
+
+  // Confirmed means the user checked the values against their own document and
+  // said they match. It is the only status that counts as usable, so it is the
+  // only one counted here.
+  const confirmedReportCount = reports.filter(
+    (report) => report.isConfirmed
+  ).length;
+
+  const reportsNeedingReview = reports.filter(
+    (report) =>
+      report.status === "needs_review" ||
+      report.status === "extracted" ||
+      report.status === "uploaded"
+  ).length;
 
 
   function startAssessment() {
@@ -93,11 +338,17 @@ function Dashboard() {
   }
 
 
+  function openHistory() {
+
+    navigate("/history");
+
+  }
+
+
   function handleLogout() {
 
-    localStorage.removeItem(
-      "movewell_user"
-    );
+    // Clears the stored user and the auth token together.
+    clearSession();
 
     navigate("/login");
 
@@ -155,8 +406,41 @@ function Dashboard() {
             Assessment
           </button>
 
-          <button className="nav-link">
+          <button
+            className="nav-link"
+            onClick={() =>
+              navigate("/plan")
+            }
+          >
+            My plan
+          </button>
+
+          <button
+            className="nav-link"
+            onClick={() =>
+              navigate("/progress")
+            }
+          >
             My progress
+          </button>
+
+          {/* Past assessment sessions. Distinct from "My progress": this is
+              the raw record of what was measured, that is what changed in the
+              plan because of it. */}
+          <button
+            className="nav-link"
+            onClick={openHistory}
+          >
+            Past sessions
+          </button>
+
+          <button
+            className="nav-link"
+            onClick={() =>
+              navigate("/reports")
+            }
+          >
+            Reports
           </button>
 
         </nav>
@@ -314,7 +598,7 @@ function Dashboard() {
           </div>
 
 
-          {/* Daily progress */}
+          {/* Latest movement check */}
 
           <div className="progress-card">
 
@@ -323,11 +607,15 @@ function Dashboard() {
               <div>
 
                 <span className="card-label">
-                  TODAY'S MOVEMENT
+                  LATEST MOVEMENT CHECK
                 </span>
 
                 <h3>
-                  You're doing great.
+                  {assessmentState === "loading"
+                    ? "Loading…"
+                    : latest
+                      ? "Checks recorded"
+                      : "Nothing recorded yet"}
                 </h3>
 
               </div>
@@ -339,59 +627,98 @@ function Dashboard() {
             </div>
 
 
-            <div className="progress-ring">
+            {assessmentState === "error" && (
 
-              <svg
-                viewBox="0 0 120 120"
-              >
+              <p className="card-empty">
+                Your last check could not be loaded.
+                {" "}
+                {assessmentError}
+              </p>
 
-                <circle
-                  className="ring-background"
-                  cx="60"
-                  cy="60"
-                  r="48"
-                />
-
-                <circle
-                  className="ring-progress"
-                  cx="60"
-                  cy="60"
-                  r="48"
-                  style={{
-                    strokeDashoffset:
-                      301 -
-                      (301 *
-                        movementProgress) /
-                        100
-                  }}
-                />
-
-              </svg>
+            )}
 
 
-              <div className="ring-content">
+            {assessmentState !== "error" && (
 
-                <strong>
-                  {movementProgress}%
-                </strong>
+              <div className="progress-ring">
 
-                <span>
-                  complete
-                </span>
+                <svg
+                  viewBox="0 0 120 120"
+                >
+
+                  <circle
+                    className="ring-background"
+                    cx="60"
+                    cy="60"
+                    r="48"
+                  />
+
+                  {latest && (
+
+                    <circle
+                      className="ring-progress"
+                      cx="60"
+                      cy="60"
+                      r="48"
+                      style={{
+                        strokeDashoffset:
+                          301 -
+                          (301 *
+                            checksRecordedPercent) /
+                            100
+                      }}
+                    />
+
+                  )}
+
+                </svg>
+
+
+                <div className="ring-content">
+
+                  <strong>
+                    {latest
+                      ? `${checksRecorded}/3`
+                      : "—"}
+                  </strong>
+
+                  <span>
+                    {latest
+                      ? "checks recorded"
+                      : "no check yet"}
+                  </span>
+
+                </div>
 
               </div>
 
-            </div>
+            )}
 
 
             <div className="progress-bottom">
 
               <span>
-                3 of 5 activities
+                {latest
+                  ? new Date(
+                      latest.startedAt
+                    ).toLocaleDateString(
+                      "en-US",
+                      {
+                        month: "short",
+                        day: "numeric"
+                      }
+                    )
+                  : "Not started"}
               </span>
 
               <span>
-                Keep going 🌱
+                {assessmentCount > 0
+                  ? `${assessmentCount} ${
+                      assessmentCount === 1
+                        ? "session"
+                        : "sessions"
+                    } saved`
+                  : ""}
               </span>
 
             </div>
@@ -410,7 +737,7 @@ function Dashboard() {
             <div>
 
               <span className="section-eyebrow">
-                YOUR ROUTINE
+                YOUR SETUP ANSWERS
               </span>
 
               <h2>
@@ -419,52 +746,123 @@ function Dashboard() {
 
             </div>
 
-            <button className="text-button">
-              View details →
+            <button
+              className="text-button"
+              onClick={() =>
+                navigate("/onboarding")
+              }
+            >
+              Update answers →
             </button>
 
           </div>
 
 
-          <div className="stats-grid">
+          <p className="section-note">
+            These are the answers you gave when you
+            set up your account. They are what you
+            told us, not activity measured today.
+          </p>
 
 
-            <StatCard
-              icon="🪑"
-              title="Sitting"
-              value={`${stats.sitting}h`}
-              description="today"
-              status="A little high"
-            />
+          {profileState === "loading" && (
+
+            <p className="card-empty">
+              Loading your answers…
+            </p>
+
+          )}
 
 
-            <StatCard
-              icon="☁"
-              title="Sleep"
-              value={`${stats.sleep}h`}
-              description="last night"
-              status="Looking good"
-            />
+          {profileState === "error" && (
+
+            <p className="card-empty">
+              Your setup answers could not be loaded
+              right now.
+            </p>
+
+          )}
 
 
-            <StatCard
-              icon="↗"
-              title="Steps"
-              value={stats.steps.toLocaleString()}
-              description="today"
-              status="1.8k to goal"
-            />
+          {profileState === "ready" &&
+            !profileComplete && (
+
+            <div className="empty-panel">
+
+              <h3>
+                You haven't filled this in yet.
+              </h3>
+
+              <p>
+                Your sitting, sleep, steps and
+                exercise answers come from setup.
+                Nothing is shown here until you
+                provide them.
+              </p>
+
+              <button
+                className="outline-button"
+                onClick={() =>
+                  navigate("/onboarding")
+                }
+              >
+                Complete setup
+                <span>→</span>
+              </button>
+
+            </div>
+
+          )}
 
 
-            <StatCard
-              icon="✦"
-              title="Exercise"
-              value={stats.exerciseDays}
-              description="days this week"
-              status="Nice streak!"
-            />
+          {profileState === "ready" &&
+            profileComplete && (
 
-          </div>
+            <div className="stats-grid">
+
+
+              <StatCard
+                icon="🪑"
+                title="Sitting"
+                value={formatHours(
+                  profile?.daily_sitting_hours
+                )}
+                description="a day"
+              />
+
+
+              <StatCard
+                icon="☁"
+                title="Sleep"
+                value={formatHours(
+                  profile?.sleep_hours
+                )}
+                description="a night"
+              />
+
+
+              <StatCard
+                icon="↗"
+                title="Steps"
+                value={formatCount(
+                  profile?.daily_steps
+                )}
+                description="a day"
+              />
+
+
+              <StatCard
+                icon="✦"
+                title="Exercise"
+                value={formatCount(
+                  profile?.exercise_days
+                )}
+                description="days a week"
+              />
+
+            </div>
+
+          )}
 
         </section>
 
@@ -474,7 +872,7 @@ function Dashboard() {
         <section className="lower-grid">
 
 
-          {/* Movement score */}
+          {/* Latest results */}
 
           <div className="score-card">
 
@@ -487,13 +885,13 @@ function Dashboard() {
                 </span>
 
                 <h2>
-                  Your MoveWell score
+                  Your latest results
                 </h2>
 
               </div>
 
               <span className="coming-pill">
-                NOT YET
+                NO SCORE YET
               </span>
 
             </div>
@@ -508,20 +906,30 @@ function Dashboard() {
               <div className="score-info">
 
                 <h3>
-                  Your score is waiting.
+                  {latest
+                    ? "There is no single score."
+                    : "Your results are waiting."}
                 </h3>
 
                 <p>
-                  Complete your first movement
-                  assessment to see your mobility,
-                  stability and movement insights.
+                  {latest
+                    ? `Your three checks are shown separately below.
+                       They are not combined into one number, and they are not
+                       compared to any reference population, because the
+                       thresholds that would make either meaningful have not
+                       been established for this application.`
+                    : `Complete your first movement check to see what it
+                       recorded. You will see the three checks separately,
+                       exactly as they were measured.`}
                 </p>
 
                 <button
                   className="outline-button"
                   onClick={startAssessment}
                 >
-                  Take assessment
+                  {latest
+                    ? "Take another check"
+                    : "Take assessment"}
                   <span>→</span>
                 </button>
 
@@ -530,24 +938,114 @@ function Dashboard() {
             </div>
 
 
-            <div className="score-bars">
+            {latest && (
 
-              <ScoreBar
-                label="Mobility"
-                value={0}
-              />
+              <div className="latest-checks">
 
-              <ScoreBar
-                label="Stability"
-                value={0}
-              />
+                {["shoulder", "ftsst", "balance"].map(
+                  (testId) => (
 
-              <ScoreBar
-                label="Symmetry"
-                value={0}
-              />
+                    <div
+                      className="latest-check"
+                      key={testId}
+                    >
+
+                      <span className="latest-check__name">
+                        {TEST_TITLES[testId]}
+                      </span>
+
+                      <span
+                        className={
+                          latest.tests?.[testId]
+                            ?.status === "completed"
+                            ? "latest-check__value"
+                            : "latest-check__value latest-check__value--none"
+                        }
+                      >
+                        {describeTest(
+                          testId,
+                          latest.tests?.[testId]
+                        )}
+                      </span>
+
+                    </div>
+
+                  )
+                )}
+
+
+                <button
+                  className="text-button"
+                  onClick={openHistory}
+                >
+                  See all sessions →
+                </button>
+
+              </div>
+
+            )}
+
+          </div>
+
+
+          {/* Medical reports.
+              Counts only. A dashboard is a glanceable surface and a lab value
+              on one would be both a privacy problem and an invitation to read
+              meaning into a number nobody has interpreted. */}
+
+          <div className="reports-summary">
+
+            <div className="section-heading">
+
+              <div>
+
+                <span className="section-eyebrow">
+                  MEDICAL REPORTS
+                </span>
+
+                <h2>
+                  {confirmedReportCount > 0
+                    ? `${confirmedReportCount} confirmed`
+                    : "Nothing confirmed yet"}
+                </h2>
+
+              </div>
 
             </div>
+
+
+            <p className="section-note">
+              {reportState === "error"
+                ? "Your reports could not be loaded just now."
+                : confirmedReportCount > 0
+                  ? "Values you have checked against your own document and confirmed. Only these are used for your guidance."
+                  : "You can add a report and check what is read from it. Nothing from a report is used until you confirm it."}
+            </p>
+
+
+            {reportsNeedingReview > 0 && (
+
+              <p className="reports-summary__pending">
+                {reportsNeedingReview}{" "}
+                {reportsNeedingReview === 1
+                  ? "report is waiting"
+                  : "reports are waiting"}{" "}
+                for you to check the values.
+              </p>
+
+            )}
+
+
+            <button
+              className="text-button"
+              onClick={() =>
+                navigate("/reports")
+              }
+            >
+              {reports.length > 0
+                ? "Open my reports →"
+                : "Add a report →"}
+            </button>
 
           </div>
 
@@ -576,24 +1074,34 @@ function Dashboard() {
             <div className="specialist-list">
 
 
+              {/* What the user's plan can actually cover, described as
+                  outcomes rather than as the components that produce them.
+                  The specialists behind these are chosen by need, so a given
+                  user may not receive all three -- which is why these are
+                  worded as areas the plan may include, not as a team roster.
+
+                  This panel previously advertised the legacy Wellness Guide
+                  and Care Navigator and sent the user to /guidance. That path
+                  is deprecated and is no longer part of the journey. */}
+
               <Specialist
-                emoji="🧘"
-                title="Yoga guide"
-                text="Mobility & mindful movement"
+                emoji="📄"
+                title="Report reader"
+                text="Transcribes your report for you to check"
               />
 
 
               <Specialist
                 emoji="🏃"
-                title="Fitness coach"
-                text="Strength & daily activity"
+                title="Movement"
+                text="Exercises matched to your assessment"
               />
 
 
               <Specialist
-                emoji="🦴"
-                title="Physio guide"
-                text="Movement & recovery"
+                emoji="🥗"
+                title="Nutrition & habits"
+                text="Everyday changes, where they are needed"
               />
 
             </div>
@@ -602,10 +1110,10 @@ function Dashboard() {
             <button
               className="specialist-button"
               onClick={() =>
-                navigate("/specialists")
+                navigate("/plan")
               }
             >
-              Explore your AI team
+              See your plan
               <span>→</span>
             </button>
 
@@ -660,6 +1168,29 @@ function Dashboard() {
 /* ───────────────── COMPONENTS ───────────────── */
 
 
+/** A self-reported number, or an em dash when it was not given. */
+function formatHours(value) {
+
+  if (typeof value !== "number") {
+    return "—";
+  }
+
+  return `${Number.isInteger(value) ? value : value.toFixed(1)}h`;
+
+}
+
+
+function formatCount(value) {
+
+  if (typeof value !== "number") {
+    return "—";
+  }
+
+  return value.toLocaleString();
+
+}
+
+
 function StatCard({
   icon,
   title,
@@ -685,47 +1216,16 @@ function StatCard({
         <span>{description}</span>
       </div>
 
-      <div className="stat-status">
-        {status}
-      </div>
+      {/* Only rendered when there is something factual to say. The previous
+          version showed judgements such as "A little high", which this
+          application is in no position to make. */}
+      {status && (
 
-    </div>
+        <div className="stat-status">
+          {status}
+        </div>
 
-  );
-
-}
-
-
-function ScoreBar({
-  label,
-  value
-}) {
-
-  return (
-
-    <div className="score-bar">
-
-      <div className="score-bar-header">
-
-        <span>
-          {label}
-        </span>
-
-        <span>
-          {value || "—"}
-        </span>
-
-      </div>
-
-      <div className="bar">
-
-        <div
-          style={{
-            width: `${value}%`
-          }}
-        />
-
-      </div>
+      )}
 
     </div>
 
