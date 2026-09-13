@@ -47,9 +47,11 @@ from orchestration.agent_result import validate_agent_result
 from orchestration.ids import TraceContext, start_workflow
 from orchestrator.decision import (
     decide_behaviour_required,
+    decide_exercise_activity_required,
     decide_nutrition_required,
     decide_physio_required,
     decide_progress_required,
+    decide_recovery_required,
 )
 from orchestrator.state_update import (
     apply_behaviour_plan,
@@ -395,16 +397,24 @@ def run_workflow(
     behaviour_decision = decide_behaviour_required(need_profile)
     nutrition_decision = decide_nutrition_required(need_profile)
     progress_decision = decide_progress_required(progress_trigger)
+    exercise_activity_decision = decide_exercise_activity_required(
+        user_state, need_profile
+    )
+    recovery_decision = decide_recovery_required(user_state)
 
     orchestrator_decision = {
         "physio_required": physio_decision["physio_required"],
         "behaviour_required": behaviour_decision["behaviour_required"],
         "nutrition_required": nutrition_decision["nutrition_required"],
         "progress_required": progress_decision["progress_required"],
+        "exercise_activity_required": exercise_activity_decision["exercise_activity_required"],
+        "recovery_required": recovery_decision["recovery_required"],
         "physio": physio_decision,
         "behaviour": behaviour_decision,
         "nutrition": nutrition_decision,
         "progress": progress_decision,
+        "exercise_activity": exercise_activity_decision,
+        "recovery": recovery_decision,
     }
 
     selected_agents = [

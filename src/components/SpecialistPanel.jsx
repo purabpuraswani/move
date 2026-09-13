@@ -1,64 +1,40 @@
-/**
- * One specialist, as the user meets them.
- *
- * This component renders what a specialist actually found, decided and is
- * watching — and it writes none of it. Every sentence here comes from the
- * server's `specialists` block (backend/workflow/response.py), which is
- * itself assembled from the persisted agent output: Need Assessment's own
- * evidence strings, the Physio Agent's own per-exercise rationale, the
- * exercise library's own progression and safety text, and the decision
- * types the agent recorded. The only strings this file contributes are
- * section headings.
- *
- * That constraint is the point. The previous Movement section was three
- * cards with a set count, and the only way to make it say more would have
- * been to write the explanation in React — which would have meant the app
- * telling the user a reason no agent ever gave. A field the server did not
- * send is omitted here rather than filled in.
- *
- * The same component renders all three specialists. Movement has a
- * programme of exercises to perform; Nutrition and Daily habits have a
- * focus list instead, because that is genuinely what those agents record —
- * shaping the UI around what exists rather than around what would look
- * symmetrical.
- */
+import { useEffect, useState } from "react";
 
+import MovementDemo from "../movementDemos/MovementDemo.jsx";
+import { getMovementDemo } from "../movementDemos/registry.js";
+import { fetchExerciseResults } from "../services/exerciseResults";
+import {
+  normalizeRecommendation,
+  safeDisplayValue,
+  toArray,
+} from "../services/specialistData.js";
 import "./SpecialistPanel.css";
 
-function Section({ title, children }) {
+function Section({ title, children, className = "" }) {
   if (!children) return null;
-
   return (
-    <section className="specialist-block">
+    <section className={`specialist-block ${className}`}>
       <h3 className="specialist-block-title">{title}</h3>
       {children}
     </section>
   );
 }
 
-/**
- * One assessment finding: what was looked at, what came back, and the
- * measurement behind it. "Not measured" is shown as its own state, never as
- * a low score — the distinction the whole system is built to preserve.
- */
 function Finding({ finding }) {
+  if (!finding) return null;
+  const capability = safeDisplayValue(finding.capability);
+  const verdict = safeDisplayValue(finding.finding);
+  const evidence = toArray(finding.evidence);
+
   return (
-    <li
-      className={
-        finding.measured
-          ? "specialist-finding"
-          : "specialist-finding specialist-finding--unmeasured"
-      }
-    >
+    <li className={finding.measured ? "specialist-finding" : "specialist-finding specialist-finding--unmeasured"}>
       <div className="specialist-finding-head">
-        <span className="specialist-finding-name">{finding.capability}</span>
-        <span className="specialist-finding-verdict">{finding.finding}</span>
+        <span className="specialist-finding-name">{capability}</span>
+        <span className="specialist-finding-verdict">{verdict}</span>
       </div>
-      {finding.evidence?.length ? (
+      {evidence.length ? (
         <ul className="specialist-evidence">
-          {finding.evidence.map((line) => (
-            <li key={line}>{line}</li>
-          ))}
+          {evidence.map((line, index) => <li key={index}>{safeDisplayValue(line)}</li>)}
         </ul>
       ) : null}
     </li>
@@ -67,281 +43,243 @@ function Finding({ finding }) {
 
 function prescriptionOf(exercise) {
   const parts = [];
-
   if (exercise.sets) parts.push(`${exercise.sets} sets`);
   if (exercise.repetitions) parts.push(`${exercise.repetitions} reps`);
-  if (exercise.duration_seconds) {
-    parts.push(`${exercise.duration_seconds} seconds`);
-  }
-
+  if (exercise.duration_seconds) parts.push(`${exercise.duration_seconds} seconds`);
   return parts.join(" · ") || null;
 }
 
-function ExerciseCard({ exercise, onStart }) {
+function ExerciseCard({ exercise, isCompletedToday = false, lastResult = null, onStart }) {
+  const [showDemo, setShowDemo] = useState(false);
+  const prescription = prescriptionOf(exercise);
+  const demo = getMovementDemo(`exercise-${exercise.id}`);
+  const watching = toArray(exercise.watching);
+  const isCameraGuided = watching.length > 0 && !watching.includes("whether you mark it as done");
+
   return (
-    <li className="specialist-exercise">
-      <div className="specialist-exercise-head">
-        <div>
-          <span className="specialist-exercise-name">{exercise.name}</span>
-          {exercise.target ? (
-            <span className="specialist-exercise-target">{exercise.target}</span>
-          ) : null}
+    <li className={`specialist-exercise-card ${isCompletedToday ? "specialist-exercise-card--completed" : ""}`}>
+      <div className="specialist-exercise-top">
+        <div className="specialist-exercise-main-info">
+          <div className="specialist-exercise-title-row">
+            <h4 className="specialist-exercise-name">{safeDisplayValue(exercise.name)}</h4>
+            {isCompletedToday ? <span className="specialist-completed-pill">✓ Done today</span> : null}
+          </div>
+          {exercise.target ? <p className="specialist-exercise-target"><span className="specialist-target-label">Focus:</span> {safeDisplayValue(exercise.target)}</p> : null}
         </div>
-        {exercise.change && exercise.change !== "Added" ? (
-          <span className="specialist-tag">{exercise.change}</span>
-        ) : null}
+        {exercise.change && exercise.change !== "Added" ? <span className="specialist-tag">{safeDisplayValue(exercise.change)}</span> : null}
       </div>
 
-      {exercise.why ? (
-        <p className="specialist-exercise-why">{exercise.why}</p>
+      {exercise.why ? <p className="specialist-exercise-why">{safeDisplayValue(exercise.why)}</p> : null}
+
+      <div className="specialist-exercise-pills">
+        {prescription ? <span className="specialist-pill specialist-pill--metric" title="Prescribed volume">{prescription}</span> : null}
+        {exercise.difficulty ? <span className="specialist-pill specialist-pill--level" title="Difficulty level">{safeDisplayValue(exercise.difficulty)}</span> : null}
+        <span className={`specialist-pill ${isCameraGuided ? "specialist-pill--camera" : "specialist-pill--manual"}`} title="Guidance mode">
+          {isCameraGuided ? "📷 Camera guided" : "✓ Guided practice"}
+        </span>
+      </div>
+
+      {isCompletedToday && lastResult?.measurements ? (
+        <div className="specialist-recorded-today-summary">
+          <span className="recorded-summary-icon">✓</span>
+          <span className="recorded-summary-text">
+            Recorded session: {lastResult.measurements.repetitions ? `${lastResult.measurements.repetitions} reps` : ""}
+            {lastResult.measurements.repetitions && lastResult.measurements.durationSeconds ? " · " : ""}
+            {lastResult.measurements.durationSeconds ? `${lastResult.measurements.durationSeconds}s hold` : ""}
+          </span>
+        </div>
       ) : null}
 
-      <dl className="specialist-exercise-facts">
-        {prescriptionOf(exercise) ? (
-          <div>
-            <dt>Do</dt>
-            <dd>{prescriptionOf(exercise)}</dd>
+      {toArray(exercise.safety).length ? (
+        <div className="specialist-exercise-safety-callout">
+          <span className="specialist-safety-icon" aria-hidden="true">⚠️</span>
+          <div className="specialist-safety-body">
+            <strong>Safety note:</strong>
+            {toArray(exercise.safety).map((note, index) => <span key={index} className="specialist-safety-line">{safeDisplayValue(note)}</span>)}
           </div>
-        ) : null}
-        {exercise.difficulty ? (
-          <div>
-            <dt>Level</dt>
-            <dd>{exercise.difficulty}</dd>
-          </div>
-        ) : null}
-        {exercise.watching?.length ? (
-          <div>
-            <dt>Watched</dt>
-            <dd>{exercise.watching.join(", ")}</dd>
-          </div>
-        ) : null}
-      </dl>
-
-      {exercise.safety?.length ? (
-        <ul className="specialist-safety">
-          {exercise.safety.map((note) => (
-            <li key={note}>{note}</li>
-          ))}
-        </ul>
+        </div>
       ) : null}
 
       {exercise.progression || exercise.regression ? (
-        <div className="specialist-steps">
-          {exercise.progression ? (
-            <p>
-              <span className="specialist-step-label">To make it harder</span>
-              {exercise.progression}
-            </p>
-          ) : null}
-          {exercise.regression ? (
-            <p>
-              <span className="specialist-step-label">To make it easier</span>
-              {exercise.regression}
-            </p>
-          ) : null}
+        <div className="specialist-exercise-adjustments">
+          {exercise.progression ? <div className="specialist-adj-row"><span className="specialist-adj-label">Make it harder:</span><span className="specialist-adj-text">{safeDisplayValue(exercise.progression)}</span></div> : null}
+          {exercise.regression ? <div className="specialist-adj-row"><span className="specialist-adj-label">Make it easier:</span><span className="specialist-adj-text">{safeDisplayValue(exercise.regression)}</span></div> : null}
         </div>
       ) : null}
 
-      {/* The demonstration lives on the exercise page itself, ahead of the
-          camera step, so this is one button rather than two that land in
-          the same place. */}
-      <button
-        type="button"
-        className="specialist-start"
-        onClick={() => onStart(exercise.id)}
-      >
-        Watch and start
-      </button>
+      {demo ? (
+        <div className="specialist-demo-container">
+          <button type="button" className="specialist-demo-toggle-btn" onClick={() => setShowDemo(!showDemo)}>
+            {showDemo ? "Hide demonstration ▲" : "View demonstration preview ▼"}
+          </button>
+          {showDemo ? <div className="specialist-inline-demo"><MovementDemo demo={demo} /></div> : null}
+        </div>
+      ) : null}
+
+      <div className="specialist-exercise-cta-row">
+        <button type="button" className={`specialist-start-btn ${isCompletedToday ? "specialist-start-btn--completed" : ""}`} onClick={() => onStart(exercise.id)}>
+          {isCompletedToday ? "Repeat exercise ↻" : "Start exercise →"}
+        </button>
+      </div>
     </li>
   );
 }
 
-function SpecialistPanel({
-  specialist,
-  onStartExercise = null,
-  // Rendered directly under "Today". Used by the habits specialist to put
-  // the record-an-action control where the action itself is described,
-  // rather than in a separate place the user has to go and find.
-  actionSlot = null,
-}) {
+function FindingsBlock({ findings, label }) {
+  if (!findings.length) return null;
+  return (
+    <div className="specialist-baseline-context">
+      <span className="specialist-context-label">{label}</span>
+      <div className="specialist-findings-grid">
+        {findings.map((finding, index) => (
+          <div key={index} className={`specialist-finding-pill ${finding.measured ? "" : "specialist-finding-pill--unmeasured"}`}>
+            <span className="finding-pill-cap">{safeDisplayValue(finding.capability)}:</span>
+            <span className="finding-pill-res">{safeDisplayValue(finding.finding)}</span>
+          </div>
+        ))}
+      </div>
+      {findings.some((finding) => !finding.measured || finding.finding === "Not measured") ? (
+        <div className="specialist-unmeasured-notice"><span className="unmeasured-notice-icon">ℹ</span><span>Some capabilities were not fully observed during baseline testing.</span></div>
+      ) : null}
+    </div>
+  );
+}
+
+function LearningBlock({ learning, subject }) {
+  return learning.length ? (
+    <div className="specialist-learning-evidence">
+      <span className="specialist-evidence-title">Recorded {subject} evidence:</span>
+      <ul className="specialist-learning-list">
+        {learning.map((item, index) => <li key={index} className="specialist-learning-item"><span className="learning-item-icon">📊</span><span>{safeDisplayValue(item)}</span></li>)}
+      </ul>
+    </div>
+  ) : <p className="specialist-learning-empty">No {subject} sessions recorded yet today.</p>;
+}
+
+function ChangesBlock({ changes, variant = "" }) {
+  if (!changes.length) return null;
+  return (
+    <div className={`specialist-adaptation-banner${variant ? ` specialist-adaptation-banner--${variant}` : ""}`}>
+      <div className="specialist-adaptation-banner-head"><h4 className="adaptation-title">Recent routine adjustments</h4></div>
+      <ul className="specialist-changes-list">
+        {changes.map((change, index) => {
+          const exercise = safeDisplayValue(change?.exercise);
+          const action = safeDisplayValue(change?.change);
+          const reason = safeDisplayValue(change?.reason);
+          return (
+            <li key={index} className="specialist-change-card">
+              <div className="change-card-title-row"><strong className="change-exercise-name">{exercise || "Routine adjustment"}</strong><span className={`change-action-tag change-action-tag--${action.toLowerCase()}`}>{action}</span></div>
+              {reason ? <p className="change-reason-text">{reason}</p> : null}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function RecordingGuidance({ items, open, onToggle }) {
+  return (
+    <div className="specialist-recording-guidance">
+      <button type="button" className="specialist-disclosure-toggle" onClick={onToggle}>{open ? "Hide recording guidance ▲" : "View recording guidance ▼"}</button>
+      {open ? <ul className="specialist-asks-list">{items.map((item, index) => <li key={index}>{safeDisplayValue(item)}</li>)}</ul> : null}
+    </div>
+  );
+}
+
+function SpecialistPanel({ specialist, onStartExercise = null, actionSlot = null }) {
+  const [showRecordingGuidance, setShowRecordingGuidance] = useState(false);
+  const [completedExerciseIds, setCompletedExerciseIds] = useState(new Set());
+  const [todayResults, setTodayResults] = useState([]);
+
+  useEffect(() => {
+    let active = true;
+    if (specialist?.completedExerciseIds) {
+      setCompletedExerciseIds(new Set(specialist.completedExerciseIds));
+      return undefined;
+    }
+    if (typeof window !== "undefined" && window.__mockCompletedExerciseIds) {
+      setCompletedExerciseIds(new Set(window.__mockCompletedExerciseIds));
+      return undefined;
+    }
+    fetchExerciseResults({ limit: 50 }).then((response) => {
+      if (!active || !response?.results) return;
+      const results = toArray(response.results);
+      setTodayResults(results);
+      const today = new Date().toISOString().slice(0, 10);
+      setCompletedExerciseIds(new Set(results.filter((result) => result.status === "completed" || result.status === "incomplete").filter((result) => safeDisplayValue(result.completedAt).startsWith(today)).map((result) => result.exerciseId)));
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [specialist]);
+
+  useEffect(() => {
+    window.__setCompletedExerciseIds = (ids) => setCompletedExerciseIds(new Set(ids));
+    return () => { delete window.__setCompletedExerciseIds; };
+  }, []);
+
   if (!specialist) return null;
 
   const {
     title,
     goal,
-    what_i_found: findings = [],
-    working_on: workingOn = [],
+    what_i_found: rawFindings,
+    working_on: rawWorkingOn,
     why_this_programme: whyProgramme,
     why_involved: whyInvolved,
-    programme = [],
-    focus_items: focusItems = [],
-    today = [],
-    need_from_you: needFromYou = [],
-    learning = [],
-    watching = [],
-    changes = [],
+    programme: rawProgramme,
+    focus_items: rawFocusItems,
+    today: rawToday,
+    need_from_you: rawNeedFromYou,
+    learning: rawLearning,
+    watching: rawWatching,
+    changes: rawChanges,
     plan_version: planVersion,
     next_review: nextReview,
   } = specialist;
 
+  const findings = toArray(rawFindings);
+  const workingOn = toArray(rawWorkingOn);
+  const programme = toArray(rawProgramme);
+  const focusItems = toArray(rawFocusItems);
+  const today = toArray(rawToday);
+  const needFromYou = toArray(rawNeedFromYou);
+  const learning = toArray(rawLearning);
+  const watching = toArray(rawWatching);
+  const changes = toArray(rawChanges);
+  const safeTitle = safeDisplayValue(title);
+  const safeGoal = safeDisplayValue(goal);
+  const safeRationale = safeDisplayValue(whyProgramme || whyInvolved);
+  const safeNextReview = safeDisplayValue(nextReview);
+  const isMovement = safeTitle === "Movement" || programme.length > 0;
+  const isNutrition = safeTitle === "Nutrition";
+  const isBehaviour = safeTitle === "Daily habits" || safeTitle === "Behaviour";
+  const subject = isNutrition ? "nutrition" : isBehaviour ? "habit" : "exercise";
+
+  if (isMovement) {
+    const totalCount = programme.length;
+    const completedCount = programme.filter((exercise) => completedExerciseIds.has(exercise?.id)).length;
+    const progressPercentage = totalCount ? Math.round((completedCount / totalCount) * 100) : 0;
+    return (
+      <article id="specialist-movement" className="specialist specialist--movement">
+        <header className="specialist-coaching-head"><div className="specialist-coaching-brand"><span className="specialist-coaching-badge">Movement plan • Physio</span><h2 className="specialist-coaching-title">Your movement plan</h2></div>{planVersion ? <span className="specialist-version-pill">Plan v{safeDisplayValue(planVersion)}</span> : null}</header>
+        <section className="specialist-today-hero"><div className="specialist-today-header"><span className="specialist-section-eyebrow">Today</span><h3 className="specialist-today-heading">Today's Movement Session</h3></div>{safeGoal ? <p className="specialist-coaching-goal">{safeGoal}</p> : null}<div className="specialist-daily-progress-card"><div className="specialist-progress-row"><span className="specialist-progress-label">Today's completion</span><span className="specialist-progress-fraction"><strong>{completedCount}</strong> of {totalCount} {totalCount === 1 ? "exercise" : "exercises"} completed</span></div><div className="specialist-progress-bar-track"><div className="specialist-progress-bar-fill" style={{ width: `${progressPercentage}%` }} /></div></div></section>
+        <section className="specialist-coaching-section specialist-focus-section"><div className="specialist-section-header"><span className="specialist-section-eyebrow">Your Focus</span><h3 className="specialist-section-title">What we're working on</h3></div>{workingOn.length ? <ul className="specialist-chips">{workingOn.map((item, index) => <li key={index} className="specialist-chip">{safeDisplayValue(item)}</li>)}</ul> : null}{safeRationale ? <p className="specialist-rationale-text">{safeRationale}</p> : null}<FindingsBlock findings={findings} label="From your baseline assessment:" /></section>
+        <section className="specialist-coaching-section specialist-exercises-section"><div className="specialist-section-header specialist-exercises-header-row"><div><span className="specialist-section-eyebrow">Your Exercises</span><h3 className="specialist-section-title">Prescribed Movements</h3></div><span className="specialist-exercise-count-tag">{programme.length} {programme.length === 1 ? "movement" : "movements"}</span></div>{programme.length ? <ul className="specialist-exercises-list">{programme.map((exercise, index) => <ExerciseCard key={exercise?.id || index} exercise={exercise} isCompletedToday={completedExerciseIds.has(exercise?.id)} lastResult={todayResults.find((result) => result.exerciseId === exercise?.id)} onStart={onStartExercise || (() => {})} />)}</ul> : <div className="specialist-empty-programme"><p className="specialist-text--quiet">No specific exercises scheduled for today.</p></div>}</section>
+        <section className="specialist-coaching-section specialist-learning-section"><div className="specialist-section-header"><span className="specialist-section-eyebrow">Adaptive Intelligence</span><h3 className="specialist-section-title">What MoveWell is learning from you</h3></div><LearningBlock learning={learning} subject={subject} /></section>
+        <section className="specialist-coaching-section specialist-next-section"><div className="specialist-section-header"><span className="specialist-section-eyebrow">The Adaptive Loop</span><h3 className="specialist-section-title">What happens next</h3></div>{safeNextReview ? <p className="specialist-review-timeline"><strong>Your review cycle:</strong> {safeNextReview}</p> : null}{planVersion > 1 ? <ChangesBlock changes={changes} /> : null}{needFromYou.length ? <RecordingGuidance items={needFromYou} open={showRecordingGuidance} onToggle={() => setShowRecordingGuidance(!showRecordingGuidance)} /> : null}</section>
+      </article>
+    );
+  }
+
+  const layout = isNutrition ? "nutrition" : "behaviour";
   return (
-    <article className="specialist">
-      <header className="specialist-head">
-        <div>
-          <span className="specialist-eyebrow">Specialist</span>
-          <h2 className="specialist-title">{title}</h2>
-        </div>
-        {planVersion ? (
-          <span className="specialist-version">v{planVersion}</span>
-        ) : null}
-      </header>
-
-      {goal ? <p className="specialist-goal">{goal}</p> : null}
-
-      <Section title="What I found">
-        {findings.length ? (
-          <ul className="specialist-findings">
-            {findings.map((finding) => (
-              <Finding key={finding.capability} finding={finding} />
-            ))}
-          </ul>
-        ) : null}
-      </Section>
-
-      <Section title="What we're working on">
-        {workingOn.length ? (
-          <ul className="specialist-chips">
-            {workingOn.map((item) => (
-              <li key={item} className="specialist-chip">
-                {item}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </Section>
-
-      <Section title="Why this">
-        {whyProgramme || whyInvolved ? (
-          <p className="specialist-text">{whyProgramme || whyInvolved}</p>
-        ) : null}
-      </Section>
-
-      <Section title="Your programme">
-        {programme.length ? (
-          <ul className="specialist-exercises">
-            {programme.map((exercise) => (
-              <ExerciseCard
-                key={exercise.id}
-                exercise={exercise}
-                onStart={onStartExercise || (() => {})}
-              />
-            ))}
-          </ul>
-        ) : null}
-      </Section>
-
-      {/* Nutrition and habits have goals to follow rather than exercises
-          to perform, so they show the action, the reason, and what is known
-          about following it -- including, explicitly, when nothing is
-          known. */}
-      <Section title="Your focus">
-        {focusItems.length ? (
-          <ul className="specialist-goals">
-            {focusItems.map((item) => (
-              <li key={item.name} className="specialist-goal">
-                <span className="specialist-goal-name">{item.name}</span>
-                {item.action ? (
-                  <span className="specialist-goal-action">{item.action}</span>
-                ) : null}
-                {item.why ? (
-                  <span className="specialist-goal-why">{item.why}</span>
-                ) : null}
-                {item.adherence ? (
-                  <span className="specialist-goal-status">{item.adherence}</span>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </Section>
-
-      {/* The concrete thing to do now. Taken from the goals' own practical
-          wording, so it is the same sentence the library and the agent
-          used -- not a restatement written here. */}
-      <Section title="Today">
-        {today.length ? (
-          <ul className="specialist-today">
-            {today.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        ) : null}
-      </Section>
-
-      {actionSlot}
-
-      {/* What the specialist is missing. This is how a user learns that
-          "not enough evidence" is about what has been recorded, not about
-          them. */}
-      <Section title="What I need from you">
-        {needFromYou.length ? (
-          <ul className="specialist-asks">
-            {needFromYou.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        ) : null}
-      </Section>
-
-      <Section title="What I'm watching">
-        {watching.length ? (
-          <ul className="specialist-watching">
-            {watching.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        ) : null}
-      </Section>
-
-      {/* What it has actually learned. When nothing has been recorded the
-          section says so, rather than being filled with something that
-          sounds like a finding. */}
-      <Section title="What I'm learning">
-        {learning.length ? (
-          <ul className="specialist-learning">
-            {learning.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        ) : (
-          <p className="specialist-text specialist-text--quiet">
-            Nothing recorded for this yet.
-          </p>
-        )}
-      </Section>
-
-      <Section title="What changed">
-        {changes.length ? (
-          <ul className="specialist-changes">
-            {changes.map((change, index) => (
-              <li key={`${change.exercise}-${index}`}>
-                <span className="specialist-change-what">
-                  {change.exercise
-                    ? `${change.exercise} — ${change.change}`
-                    : change.change}
-                </span>
-                {change.reason ? (
-                  <span className="specialist-change-why">{change.reason}</span>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </Section>
-
-      <Section title="What happens next">
-        {nextReview ? <p className="specialist-text">{nextReview}</p> : null}
-      </Section>
+    <article id={isNutrition ? "specialist-nutrition" : "specialist-daily-habits"} className={`specialist specialist--${layout}`}>
+      <header className="specialist-coaching-head"><div className="specialist-coaching-brand"><span className={`specialist-coaching-badge specialist-coaching-badge--${layout}`}>{isNutrition ? "Nutrition focus • Nutrition" : "Daily habit focus • Behaviour"}</span><h2 className="specialist-coaching-title">{isNutrition ? "Your nutrition focus" : "Your daily habit focus"}</h2></div>{planVersion ? <span className="specialist-version-pill">Plan v{safeDisplayValue(planVersion)}</span> : null}</header>
+      <section className={`specialist-today-hero specialist-today-hero--${layout}`}><div className="specialist-today-header"><span className="specialist-section-eyebrow">Today</span><h3 className="specialist-today-heading">{isNutrition ? "Today's Nutrition Focus" : "Today's Habit Action"}</h3></div>{safeGoal ? <p className="specialist-coaching-goal">{safeGoal}</p> : null}{today.length ? <ul className="specialist-today-actions-list">{today.map((item, index) => <li key={index} className="specialist-today-action-item"><span className="today-action-icon" aria-hidden="true">{isNutrition ? "🥗" : "🎯"}</span><span>{safeDisplayValue(item)}</span></li>)}</ul> : null}</section>
+      <section className="specialist-coaching-section specialist-focus-section"><div className="specialist-section-header"><span className="specialist-section-eyebrow">Your Focus</span><h3 className="specialist-section-title">{isNutrition ? "What we're working on" : "Habit formation & routine focus"}</h3></div>{workingOn.length ? <ul className="specialist-chips">{workingOn.map((item, index) => <li key={index} className={`specialist-chip specialist-chip--${layout}`}>{safeDisplayValue(item)}</li>)}</ul> : null}{safeRationale ? <p className="specialist-rationale-text">{safeRationale}</p> : null}{focusItems.length ? <ul className="specialist-focus-cards-list">{focusItems.map((item, index) => { const normalized = normalizeRecommendation(item); const name = safeDisplayValue(normalized.title || normalized.name); const action = safeDisplayValue(normalized.action); const why = safeDisplayValue(normalized.why); const adherence = safeDisplayValue(normalized.adherence); return <li key={index} className="specialist-focus-card"><div className="specialist-focus-card-top"><h4 className="specialist-focus-card-name">{name}</h4>{adherence ? <span className="specialist-adherence-pill">{adherence}</span> : null}</div>{action ? <p className="specialist-focus-card-action"><strong>{isNutrition ? "Daily focus:" : "Action:"}</strong> {action}</p> : null}{why ? <p className="specialist-focus-card-why">{why}</p> : null}</li>; })}</ul> : null}<FindingsBlock findings={findings} label="From your intake & assessment:" /></section>
+      <section className="specialist-coaching-section specialist-actions-section"><div className="specialist-section-header"><span className="specialist-section-eyebrow">Your Actions</span><h3 className="specialist-section-title">{isNutrition ? "Record your meals" : "Record today's habit"}</h3></div>{actionSlot}</section>
+      <section className="specialist-coaching-section specialist-learning-section"><div className="specialist-section-header"><span className="specialist-section-eyebrow">Adaptive Intelligence</span><h3 className="specialist-section-title">What MoveWell is learning from your {subject}s</h3></div><LearningBlock learning={learning} subject={subject} /></section>
+      <section className="specialist-coaching-section specialist-next-section"><div className="specialist-section-header"><span className="specialist-section-eyebrow">The Adaptive Loop</span><h3 className="specialist-section-title">What happens next</h3></div>{safeNextReview ? <p className="specialist-review-timeline"><strong>Your review cycle:</strong> {safeNextReview}</p> : null}{planVersion > 1 ? <ChangesBlock changes={changes} variant={layout} /> : null}{needFromYou.length ? <RecordingGuidance items={needFromYou} open={showRecordingGuidance} onToggle={() => setShowRecordingGuidance(!showRecordingGuidance)} /> : null}</section>
     </article>
   );
 }

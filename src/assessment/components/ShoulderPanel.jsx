@@ -1,15 +1,21 @@
 import { useCallback } from "react";
 
 import { ShoulderAbductionTest } from "../tests/shoulder/shoulderLogic.js";
-import { SHOULDER } from "../config/protocol.js";
+import { POSE, SHOULDER } from "../config/protocol.js";
 import { useTestRunner } from "../hooks/useTestRunner.js";
 import { formatDegrees } from "../utils/labels.js";
 import { LiveCounter, Measurement } from "./Feedback.jsx";
 import AssessmentFlow from "./AssessmentFlow.jsx";
 
 export default function ShoulderPanel({ engine, onComplete, onSkip, onCameraStateChange }) {
-  const createTest = useCallback(() => new ShoulderAbductionTest(), []);
-  const isFinished = useCallback((test) => test.hasEnoughRepetitions(), []);
+  const createTest = useCallback(
+    () => new ShoulderAbductionTest({ ...SHOULDER, maxRecoveryMs: POSE.maxRecoveryMs }),
+    []
+  );
+  const isFinished = useCallback(
+    (test) => test.hasEnoughRepetitions() || test.isTrackingFailed(),
+    []
+  );
 
   const runner = useTestRunner({ engine, createTest, isFinished });
 
@@ -50,9 +56,10 @@ export default function ShoulderPanel({ engine, onComplete, onSkip, onCameraStat
             />
           </div>
 
-          <div className="assess-panel__live">
-            <span>Left now: {formatDegrees(live.left)}</span>
-            <span>Right now: {formatDegrees(live.right)}</span>
+          <div className="assess-panel__live assess-panel__live--split">
+            <span className="assess-panel__live-item">Left now: <strong>{formatDegrees(live.left)}</strong></span>
+            <span className="assess-panel__live-divider">·</span>
+            <span className="assess-panel__live-item">Right now: <strong>{formatDegrees(live.right)}</strong></span>
           </div>
 
           <ol className="assess-panel__list">
@@ -95,6 +102,8 @@ export default function ShoulderPanel({ engine, onComplete, onSkip, onCameraStat
       testType="shoulder"
       stepLabel="Check 1 of 3"
       title="Shoulder movement"
+      stepLabel="Assessment 1 of 3"
+      title="Hand / Shoulder Raise"
       demoId="assessment-shoulder-raise"
       description={`Stand facing the camera with your whole body in the frame, arms relaxed at your sides. Stand still for a moment first, then raise both arms out to the side and lower them again, ${SHOULDER.requiredRepetitions} times.`}
       instructionsList={[

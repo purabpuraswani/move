@@ -16,7 +16,7 @@
  * and combines the two with combineBalanceResults.
  */
 
-import { BALANCE, POSE, REASON, SHOULDER } from "../../config/protocol.js";
+import { BALANCE, POSE, REASON, SHOULDER, TEST_STATUS } from "../../config/protocol.js";
 import { distance, midpoint, tiltFromVertical, round } from "../../utils/geometry.js";
 import { MedianFilter } from "../../utils/smoothing.js";
 import { measuredResult, skippedResult } from "../../utils/results.js";
@@ -68,6 +68,7 @@ export class SingleLegStanceTest {
 
     this.quality = new QualityTracker({
       trackedKeypoints: REQUIRED_KEYPOINTS.balance,
+      maxRecoveryMs: this.config.maxRecoveryMs,
     });
 
     this.filter = new MedianFilter(this.config.smoothingWindow);
@@ -81,6 +82,7 @@ export class SingleLegStanceTest {
     this.endReason = null;
     this.supportAnkleReferenceX = null;
     this.lastReasons = [];
+    this.footDownFrames = 0;
 
     // Bounds the WAITING/STABILISING setup period so it cannot run forever;
     // see push() and #handleNotYetTiming().
@@ -116,7 +118,10 @@ export class SingleLegStanceTest {
       // While timing, a long gap in usable pose means the end of the hold
       // cannot be located, so the attempt is ended and marked unreliable
       // rather than reporting a duration that might be wrong.
-      if (this.phase === BALANCE_PHASE.TIMING && state.poseLostFor > POSE.maxPoseLossMs) {
+      if (
+        this.phase === BALANCE_PHASE.TIMING &&
+        state.poseLostFor > (this.config.maxRecoveryMs ?? POSE.maxPoseLossMs)
+      ) {
         this.#end(frame.timestamp, END_REASON.POSE_LOST);
       } else if (this.phase === BALANCE_PHASE.STABILISING) {
         this.validPositionSince = null;
@@ -127,8 +132,8 @@ export class SingleLegStanceTest {
     }
 
     const points = keypointCheck.points;
-
-    const orientation = checkFrontFacing(points, SHOULDER.minFrontFacingRatio);
+    const minRatio = this.config.minFrontFacingRatio ?? 0.30;
+    const orientation = checkFrontFacing(points, minRatio);
     const combined = combineChecks(orientation);
 
     if (!combined.usable) {
@@ -173,10 +178,18 @@ export class SingleLegStanceTest {
 
     // Timing.
     if (smoothed < this.config.lossLiftRatio) {
-      this.#end(frame.timestamp, END_REASON.FOOT_LOWERED);
+      this.footDownFrames += 1;
+
+      if (this.footDownFrames >= (this.config.footDownConfirmationFrames ?? 1)) {
+        // The person is still visible and the lifted foot has returned to the
+        // floor. This is a normal end of the hold, not a tracking failure.
+        this.#end(frame.timestamp, END_REASON.FOOT_LOWERED);
+      }
 
       return this.#status(true, []);
     }
+
+    this.footDownFrames = 0;
 
     if (trunkLean !== null && trunkLean > this.config.maxTrunkLeanDeg) {
       this.#end(frame.timestamp, END_REASON.TRUNK_LEAN);
@@ -192,7 +205,7 @@ export class SingleLegStanceTest {
       return this.#status(true, []);
     }
 
-    if (frame.timestamp - this.startTimestamp >= this.config.maxDurationMs) {
+    if (this.quality.activeTimestamp(frame.timestamp) - this.startTimestamp >= this.config.maxDurationMs) {
       this.#end(frame.timestamp, END_REASON.MAX_DURATION);
 
       return this.#status(true, []);
@@ -210,15 +223,15 @@ export class SingleLegStanceTest {
     }
 
     if (this.validPositionSince === null) {
-      this.validPositionSince = frame.timestamp;
+      this.validPositionSince = this.quality.activeTimestamp(frame.timestamp);
       this.phase = BALANCE_PHASE.STABILISING;
 
       return;
     }
 
-    if (frame.timestamp - this.validPositionSince >= this.config.stabilizationMs) {
+    if (this.quality.activeTimestamp(frame.timestamp) - this.validPositionSince >= this.config.stabilizationMs) {
       this.phase = BALANCE_PHASE.TIMING;
-      this.startTimestamp = frame.timestamp;
+      this.startTimestamp = this.quality.activeTimestamp(frame.timestamp);
       this.supportAnkleReferenceX = supportAnkle.x;
 
       // The usable-frame check in finish() must judge the timed hold, not
@@ -234,36 +247,58 @@ export class SingleLegStanceTest {
     this.phase = BALANCE_PHASE.DONE;
     this.endTimestamp = timestamp;
     this.endReason = reason;
-    this.durationMs = this.startTimestamp === null ? null : timestamp - this.startTimestamp;
+    this.durationMs = this.startTimestamp === null
+      ? null
+      : this.quality.activeTimestamp(timestamp) - this.startTimestamp;
   }
 
   #recordUnusable(frame, reasons) {
-    const { poseLostFor } = this.quality.record(frame, false, reasons);
+    const { poseLostFor, trackingState, trackingWarning } = this.quality.record(frame, false, reasons);
 
     this.lastReasons = reasons;
 
+    let assessmentState = "waiting_for_one_leg";
+    if (this.phase === BALANCE_PHASE.STABILISING) assessmentState = "stabilising";
+    else if (this.phase === BALANCE_PHASE.TIMING) assessmentState = "hold_in_progress";
+    else if (this.phase === BALANCE_PHASE.DONE) {
+      assessmentState = this.endReason === END_REASON.FOOT_LOWERED ? "foot_returned_to_ground" : "completed";
+    }
+
     return {
       phase: this.phase,
+      assessmentState,
       usable: false,
       reasons,
       supportSide: this.supportSide,
       liftRatio: this.liftRatio,
       elapsedMs: this.elapsedMs(),
       poseLostFor,
+      trackingState,
+      trackingWarning,
     };
   }
 
   #status(usable, reasons) {
     this.lastReasons = reasons;
 
+    let assessmentState = "waiting_for_one_leg";
+    if (this.phase === BALANCE_PHASE.STABILISING) assessmentState = "stabilising";
+    else if (this.phase === BALANCE_PHASE.TIMING) assessmentState = "hold_in_progress";
+    else if (this.phase === BALANCE_PHASE.DONE) {
+      assessmentState = this.endReason === END_REASON.FOOT_LOWERED ? "foot_returned_to_ground" : "completed";
+    }
+
     return {
       phase: this.phase,
+      assessmentState,
       usable,
       reasons,
       supportSide: this.supportSide,
       liftRatio: this.liftRatio,
       elapsedMs: this.elapsedMs(),
       poseLostFor: 0,
+      trackingState: this.quality.getTrackingState(),
+      trackingWarning: this.quality.isTrackingWarning(),
     };
   }
 
@@ -277,7 +312,9 @@ export class SingleLegStanceTest {
 
     if (this.durationMs !== null) return this.durationMs;
 
-    const latest = this.endTimestamp ?? this.lastTimestamp ?? this.startTimestamp;
+    const latest = this.quality.activeTimestamp(
+      this.endTimestamp ?? this.lastTimestamp ?? this.startTimestamp
+    );
 
     return Math.max(0, latest - this.startTimestamp);
   }
@@ -325,6 +362,8 @@ export class SingleLegStanceTest {
     const valid = invalidReasons.length === 0 && this.durationMs !== null;
 
     return {
+      testId: "balance",
+      status: valid ? TEST_STATUS.COMPLETED : TEST_STATUS.INVALID,
       supportSide: this.supportSide,
       valid,
       holdDurationMs: valid ? Math.round(this.durationMs) : null,
@@ -336,12 +375,25 @@ export class SingleLegStanceTest {
       attempts,
     };
   }
+
+  currentGuidance() {
+    if (this.lastReasons.includes(REASON.KEYPOINTS_MISSING)) return "step_back_into_frame";
+    if (this.lastReasons.includes(REASON.LOW_CONFIDENCE)) return "improve_lighting";
+    if (this.lastReasons.includes(REASON.NOT_FRONT_FACING)) return "face_the_camera";
+    if (this.lastReasons.includes(REASON.EXCESSIVE_TRUNK_LEAN)) return "stand_upright";
+    if (this.phase === BALANCE_PHASE.WAITING) return "lift_one_foot";
+    if (this.phase === BALANCE_PHASE.STABILISING) return "hold_still";
+
+    return "continue";
+  }
 }
 
 /** A side the user chose not to attempt. Duration stays null, never zero. */
 export function skippedSide(supportSide) {
   return {
+    testId: "balance",
     supportSide,
+    status: TEST_STATUS.SKIPPED,
     valid: false,
     skipped: true,
     holdDurationMs: null,

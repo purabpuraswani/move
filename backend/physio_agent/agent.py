@@ -205,17 +205,38 @@ def _measurement_method(exercise: dict) -> str:
     return MEASUREMENT_MOVENET if support.get("implemented") else MEASUREMENT_MANUAL
 
 
-def _rank_candidates(exercises: list) -> list:
+DIMENSION_PRIMARY_BODY_AREAS = {
+    "mobility_need": {"shoulders", "arms"},
+    "functional_movement_need": {"legs", "hips"},
+    "stability_need": {"legs", "hips", "core", "ankles"},
+}
+
+
+def _rank_candidates(exercises: list, target_dimension: str = None) -> list:
     """Intervention exercises first, baseline assessment movements last.
 
     A stable sort on one key, so within each group the library's own order
     is preserved and the selection stays reproducible.
+    When target_dimension is provided, non-assessment exercises that directly
+    target that dimension's primary body areas are ranked ahead of other
+    interventions, ensuring relevant exercises (e.g. upper-body reach for
+    mobility need, seated marching/knee extensions for functional movement need)
+    are prioritized before falling back to other areas.
     """
 
-    return sorted(
-        exercises,
-        key=lambda exercise: exercise["exercise_id"] in BASELINE_ASSESSMENT_MOVEMENTS,
-    )
+    primary_areas = DIMENSION_PRIMARY_BODY_AREAS.get(target_dimension) or set()
+
+    def sort_key(exercise):
+        is_baseline = exercise["exercise_id"] in BASELINE_ASSESSMENT_MOVEMENTS
+        areas = set(exercise.get("target_body_area") or [])
+        matches_area = bool(areas & primary_areas) if primary_areas else True
+        if is_baseline:
+            return 2
+        if matches_area:
+            return 0
+        return 1
+
+    return sorted(exercises, key=sort_key)
 
 
 def _rationale_for(
@@ -629,7 +650,7 @@ def run_physio_agent(
     for capability in triggers_by_capability:
         try:
             search_result = tool_client.search_exercises(
-                target_capability=capability, movenet_implemented_only=True
+                target_capability=capability
             )
 
         except Exception as error:  # noqa: BLE001
@@ -697,7 +718,7 @@ def run_physio_agent(
             "dimension"
         )
 
-        for exercise in _rank_candidates(exercises):
+        for exercise in _rank_candidates(exercises, target_dimension=target_dimension):
             if len(plan_entries) >= max_exercises:
                 break
 

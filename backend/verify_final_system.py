@@ -87,7 +87,8 @@ def verify_workflow():
     assert "physio" in result_high["selected_agents"], "Physio agent must be selected for HIGH mobility need"
     high_plans = result_high["updated_user_state"]["exercise_history"]["data"]["plans"]
     assert high_plans[0]["source"] == "physio_agent"
-    assert "standing-shoulder-raise" in high_plans[0]["exercise_ids"]
+    assert "standing-overhead-reach" in high_plans[0]["exercise_ids"]
+    assert "standing-shoulder-raise" not in high_plans[0]["exercise_ids"]
     assert high_plans[0]["exercise_ids"] != list(STARTER_EXERCISE_IDS), "Specialist plan must not be starter plan"
     print("[PASS] 3B. HIGH mobility need receives specialist-driven exercises (not generic starter).")
 
@@ -455,6 +456,8 @@ def main():
         print("==================================================================")
     except AssertionError as e:
         print(f"\n[FAIL] Assertion failed: {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
     except Exception as e:
         print(f"\n[ERROR] Unexpected error: {e}")

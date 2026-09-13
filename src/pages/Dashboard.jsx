@@ -1088,26 +1088,60 @@ function Dashboard() {
                 emoji="📄"
                 title="Report reader"
                 text="Transcribes your report for you to check"
+                onClick={() => navigate("/reports")}
+                emoji="🏃"
+                title="Exercise & Physical Activity"
+                text="Daily walking volume, steps & sedentary pacing"
+                onClick={() => navigate("/specialist/exercise")}
               />
 
+              <Specialist
+                emoji="🧑‍⚕️"
+                title="Physiotherapy & Movement"
+                text="Mobility, balance & corrective exercise matched to checks"
+                onClick={() => navigate("/specialist/physio")}
+              />
 
               <Specialist
                 emoji="🏃"
                 title="Movement"
                 text="Exercises matched to your assessment"
+                onClick={() => navigate("/plan")}
+                emoji="🍎"
+                title="Nutrition & Lifestyle"
+                text="Balanced dietary quality, hydration & authentic meal logging"
+                onClick={() => navigate("/specialist/nutrition")}
               />
 
+              <Specialist
+                emoji="🌙"
+                title="Recovery & Care"
+                text="Rest days, sleep hygiene & fatigue management"
+                onClick={() => navigate("/specialist/recovery")}
+              />
 
               <Specialist
                 emoji="🥗"
                 title="Nutrition & habits"
                 text="Everyday changes, where they are needed"
+                onClick={() => navigate("/plan")}
+                emoji="🧠"
+                title="Behaviour & Adherence"
+                text="Micro-habits, routine pacing & consistency"
+                onClick={() => navigate("/specialist/behaviour")}
               />
 
+              <Specialist
+                emoji="🛡️"
+                title="Safety & Clinical Escalation"
+                text="Clinical gatekeeping & contraindication checks"
+                onClick={() => navigate("/specialist/safety")}
+              />
             </div>
 
 
             <button
+              type="button"
               className="specialist-button"
               onClick={() =>
                 navigate("/plan")
@@ -1237,37 +1271,34 @@ function StatCard({
 function Specialist({
   emoji,
   title,
-  text
+  text,
+  onClick,
 }) {
-
   return (
-
-    <div className="specialist">
-
-      <div className="specialist-avatar">
+    <button
+      type="button"
+      className="specialist"
+      onClick={onClick}
+      aria-label={`${title}: ${text}`}
+    >
+      <div className="specialist-avatar" aria-hidden="true">
         {emoji}
       </div>
 
       <div className="specialist-info">
-
         <strong>
           {title}
         </strong>
-
         <span>
           {text}
         </span>
-
       </div>
 
-      <span className="specialist-arrow">
+      <span className="specialist-arrow" aria-hidden="true">
         →
       </span>
-
-    </div>
-
+    </button>
   );
-
 }
 
 

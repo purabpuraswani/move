@@ -34,7 +34,7 @@ function formatWhen(value) {
   });
 }
 
-function FoodLogPanel({ planAvailable = false, planId = null }) {
+function FoodLogPanel({ planAvailable = false, planId = null, onMealLogged = null, className = "" }) {
   const [meal, setMeal] = useState("breakfast");
   const [foodName, setFoodName] = useState("");
   const [quantity, setQuantity] = useState("");
@@ -46,6 +46,11 @@ function FoodLogPanel({ planAvailable = false, planId = null }) {
   const [saved, setSaved] = useState(false);
 
   const load = useCallback(async () => {
+    if (typeof window !== "undefined" && window.__mockFoodEntries) {
+      setEntries(window.__mockFoodEntries);
+      return;
+    }
+
     try {
       const page = await fetchFoodLog({ limit: 8 });
 
@@ -59,6 +64,11 @@ function FoodLogPanel({ planAvailable = false, planId = null }) {
 
   useEffect(() => {
     let ignore = false;
+
+    if (typeof window !== "undefined" && window.__mockFoodEntries) {
+      setEntries(window.__mockFoodEntries);
+      return;
+    }
 
     fetchFoodLog({ limit: 8 })
       .then((page) => {
@@ -74,6 +84,16 @@ function FoodLogPanel({ planAvailable = false, planId = null }) {
 
     return () => {
       ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    window.__setMockFoodEntries = (mockList) => {
+      window.__mockFoodEntries = mockList;
+      setEntries(mockList);
+    };
+    return () => {
+      delete window.__setMockFoodEntries;
     };
   }, []);
 
@@ -105,6 +125,10 @@ function FoodLogPanel({ planAvailable = false, planId = null }) {
         setNotes("");
         setSaved(true);
 
+        if (typeof onMealLogged === "function") {
+          onMealLogged({ meal, foodName: foodName.trim(), quantity: quantity.trim() });
+        }
+
         await load();
       } catch (saveError) {
         setError(saveError.message);
@@ -112,17 +136,26 @@ function FoodLogPanel({ planAvailable = false, planId = null }) {
         setSaving(false);
       }
     },
-    [meal, foodName, quantity, notes, planId, load],
+    [meal, foodName, quantity, notes, planId, load, onMealLogged],
   );
 
   return (
-    <section className="foodlog">
-      <h2 className="foodlog-title">Food log</h2>
-      <p className="foodlog-blurb">
-        {planAvailable
-          ? "Recording meals is what makes the nutrition side of your plan able to change with you."
-          : "You can record meals whenever you like, whether or not you have a nutrition plan."}
-      </p>
+    <section className={`foodlog ${className}`}>
+      <div className="foodlog-head">
+        <h3 className="foodlog-title">Log your food</h3>
+        <p className="foodlog-blurb">
+          {planAvailable
+            ? "Record what you eat to help your Nutrition specialist understand your daily habits and calibrate recommendations."
+            : "Record meals whenever you like to track your eating pattern."}
+        </p>
+      </div>
+
+      <div className="foodlog-coaching-notice">
+        <span className="foodlog-notice-icon">ℹ</span>
+        <span className="foodlog-notice-text">
+          Logged meals provide real evidence for your Nutrition specialist to review meal regularity and dietary variety over time. MoveWell does not invent calories or macros from rough descriptions; nutritional analysis will calibrate as verified data is available.
+        </span>
+      </div>
 
       <form className="foodlog-form" onSubmit={submit}>
         <div className="foodlog-meals" role="group" aria-label="Meal">
@@ -143,44 +176,54 @@ function FoodLogPanel({ planAvailable = false, planId = null }) {
           ))}
         </div>
 
-        <label className="foodlog-label" htmlFor="foodlog-food">
-          What did you eat?
-        </label>
-        <input
-          id="foodlog-food"
-          className="foodlog-input"
-          value={foodName}
-          onChange={(event) => setFoodName(event.target.value)}
-          placeholder="Poha, dal and rice, two eggs…"
-          maxLength={200}
-        />
+        <div className="foodlog-field">
+          <label className="foodlog-label" htmlFor="foodlog-food">
+            What did you eat?
+          </label>
+          <input
+            id="foodlog-food"
+            className="foodlog-input"
+            value={foodName}
+            onChange={(event) => setFoodName(event.target.value)}
+            placeholder="Poha, dal and rice, two eggs…"
+            maxLength={200}
+          />
+        </div>
 
-        <label className="foodlog-label" htmlFor="foodlog-quantity">
-          Roughly how much?
-        </label>
-        <input
-          id="foodlog-quantity"
-          className="foodlog-input"
-          value={quantity}
-          onChange={(event) => setQuantity(event.target.value)}
-          placeholder="1 bowl, 2 rotis, half a plate…"
-          maxLength={200}
-        />
+        <div className="foodlog-field">
+          <label className="foodlog-label" htmlFor="foodlog-quantity">
+            Roughly how much?
+          </label>
+          <input
+            id="foodlog-quantity"
+            className="foodlog-input"
+            value={quantity}
+            onChange={(event) => setQuantity(event.target.value)}
+            placeholder="1 bowl, 2 rotis, half a plate…"
+            maxLength={200}
+          />
+        </div>
 
-        <label className="foodlog-label" htmlFor="foodlog-notes">
-          Anything to add? <span className="foodlog-optional">Optional</span>
-        </label>
-        <input
-          id="foodlog-notes"
-          className="foodlog-input"
-          value={notes}
-          onChange={(event) => setNotes(event.target.value)}
-          placeholder="Ate late, was travelling…"
-          maxLength={500}
-        />
+        <div className="foodlog-field">
+          <label className="foodlog-label" htmlFor="foodlog-notes">
+            Anything to add? <span className="foodlog-optional">Optional</span>
+          </label>
+          <input
+            id="foodlog-notes"
+            className="foodlog-input"
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            placeholder="Ate late, was travelling…"
+            maxLength={500}
+          />
+        </div>
 
         {error ? <p className="foodlog-error">{error}</p> : null}
-        {saved && !error ? <p className="foodlog-saved">Saved.</p> : null}
+        {saved && !error ? (
+          <p className="foodlog-saved">
+            ✓ Meal recorded! Added to your nutrition timeline for your specialist's review.
+          </p>
+        ) : null}
 
         <button type="submit" className="foodlog-submit" disabled={saving}>
           {saving ? "Saving…" : "Add to log"}
@@ -189,29 +232,36 @@ function FoodLogPanel({ planAvailable = false, planId = null }) {
 
       {entries.length > 0 ? (
         <div className="foodlog-recent">
-          <h3 className="foodlog-recent-title">Recently logged</h3>
+          <h4 className="foodlog-recent-title">Recently logged meals</h4>
           <ul className="foodlog-list">
             {entries.map((entry) => (
               <li key={entry.id || entry.entry_id} className="foodlog-entry">
-                <span className="foodlog-entry-meal">
-                  {MEAL_LABELS[entry.meal] || entry.meal}
-                </span>
-                <span className="foodlog-entry-food">{entry.food_name}</span>
-                {entry.quantity ? (
-                  <span className="foodlog-entry-quantity">{entry.quantity}</span>
-                ) : null}
-                <span className="foodlog-entry-when">
-                  {formatWhen(entry.recorded_at)}
-                </span>
+                <div className="foodlog-entry-primary">
+                  <span className="foodlog-entry-meal">
+                    {MEAL_LABELS[entry.meal] || entry.meal}
+                  </span>
+                  <span className="foodlog-entry-food">{entry.food_name}</span>
+                  {entry.quantity ? (
+                    <span className="foodlog-entry-quantity">({entry.quantity})</span>
+                  ) : null}
+                </div>
+                <div className="foodlog-entry-meta">
+                  <span className="foodlog-entry-when">
+                    {formatWhen(entry.recorded_at)}
+                  </span>
+                  <span className="foodlog-entry-status">Recorded for review</span>
+                </div>
               </li>
             ))}
           </ul>
         </div>
       ) : (
-        <p className="foodlog-none">
-          Nothing logged yet. There is no catching up to do — start whenever
-          you like.
-        </p>
+        <div className="foodlog-empty-box">
+          <p className="foodlog-none">
+            Nothing logged yet. There is no catching up to do — start whenever
+            you like.
+          </p>
+        </div>
       )}
     </section>
   );

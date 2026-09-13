@@ -174,7 +174,7 @@ export function ChairSetupStep({ onContinue, onSkip }) {
       </p>
 
       <label className="assess-field">
-        <span>Seat height in centimetres</span>
+        <span>Seat height in centimetres (optional)</span>
         <input
           type="number"
           inputMode="decimal"
@@ -212,7 +212,7 @@ export function ChairSetupStep({ onContinue, onSkip }) {
           className="assess-btn assess-btn--primary"
           onClick={() => onContinue(isNumber ? parsed : null)}
         >
-          Continue
+          Continue to Sit-to-Stand →
         </button>
       </div>
     </div>

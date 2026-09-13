@@ -4,7 +4,7 @@ import {
   SingleLegStanceTest,
   BALANCE_PHASE,
 } from "../tests/balance/balanceLogic.js";
-import { BALANCE } from "../config/protocol.js";
+import { BALANCE, POSE } from "../config/protocol.js";
 import { useTestRunner } from "../hooks/useTestRunner.js";
 import { describeEndReason, formatSeconds } from "../utils/labels.js";
 import { Measurement } from "./Feedback.jsx";
@@ -14,6 +14,7 @@ const PHASE_HINT = {
   [BALANCE_PHASE.WAITING]: "Lift one foot when you feel steady.",
   [BALANCE_PHASE.STABILISING]: "Hold it there…",
   [BALANCE_PHASE.TIMING]: "Timing. Hold as long as you comfortably can.",
+  [BALANCE_PHASE.DONE]: "Hold complete! Processing your results…",
 };
 
 export default function BalancePanel({
@@ -24,7 +25,10 @@ export default function BalancePanel({
   onCameraStateChange,
 }) {
   const createTest = useCallback(
-    () => new SingleLegStanceTest({ supportSide }),
+    () => new SingleLegStanceTest({
+      supportSide,
+      config: { ...BALANCE, maxRecoveryMs: POSE.maxRecoveryMs },
+    }),
     [supportSide]
   );
 
@@ -98,8 +102,8 @@ export default function BalancePanel({
   return (
     <AssessmentFlow
       testType="balance"
-      stepLabel={`Check 3 of 3 · ${supportLabel} leg`}
-      title={`Stand on your ${supportLabel} leg`}
+      stepLabel={`Assessment 3 of 3 · ${supportLabel === "left" ? "Left" : "Right"} leg`}
+      title={`One-Leg Stand (${supportLabel === "left" ? "Left" : "Right"} leg)`}
       demoId="assessment-one-leg-stand"
       safetyNote="Only do this if you feel safe. Stand next to a wall, worktop, or sturdy chair so you have something to hold. You can skip this check entirely and the rest of your results are unaffected."
       description={`Face the camera, then lift your ${liftLabel} foot off the floor and stand on your ${supportLabel} leg with your eyes open. Hold it for as long as you comfortably can, up to ${BALANCE.maxDurationMs / 1000} seconds.`}

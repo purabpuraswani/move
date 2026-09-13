@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 
 import { FiveTimesSitToStandTest, FTSST_PHASE } from "../tests/ftsst/ftsstLogic.js";
-import { FTSST } from "../config/protocol.js";
+import { FTSST, POSE } from "../config/protocol.js";
 import { useTestRunner } from "../hooks/useTestRunner.js";
 import { formatSeconds } from "../utils/labels.js";
 import { LiveCounter, Measurement, ReasonList } from "./Feedback.jsx";
@@ -22,11 +22,17 @@ export default function FtsstPanel({
   onCameraStateChange,
 }) {
   const createTest = useCallback(
-    () => new FiveTimesSitToStandTest({ chairSeatHeightCm }),
+    () => new FiveTimesSitToStandTest({
+      chairSeatHeightCm,
+      config: { ...FTSST, maxRecoveryMs: POSE.maxRecoveryMs },
+    }),
     [chairSeatHeightCm]
   );
 
-  const isFinished = useCallback((test) => test.isComplete() || test.isTimedOut(), []);
+  const isFinished = useCallback(
+    (test) => test.isComplete() || test.isTimedOut() || test.isTrackingFailed(),
+    []
+  );
 
   const runner = useTestRunner({ engine, createTest, isFinished });
 
@@ -115,6 +121,8 @@ export default function FtsstPanel({
       testType="ftsst"
       stepLabel="Check 2 of 3"
       title="Sit to stand"
+      stepLabel="Assessment 2 of 3"
+      title="Chair Sit-to-Stand ×5"
       demoId="assessment-chair-sit-to-stand"
       description="Turn your chair so the camera sees you from the side, with your hips, knees, and ankles all inside the frame. Sit down, then stand up and sit back down five times at your own pace."
       instructionsList={[

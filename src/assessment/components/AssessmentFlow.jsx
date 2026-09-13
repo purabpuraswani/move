@@ -21,6 +21,12 @@ import {
   ProgressIndicator,
   ReasonList,
 } from "./Feedback.jsx";
+import {
+  toArray,
+  safeDisplayValue,
+  normalizeRecommendation,
+  normalizeEvidence,
+} from "../../services/specialistData.js";
 
 const FLOW_PHASE = {
   INSTRUCTIONS: "instructions",
@@ -56,16 +62,56 @@ export default function AssessmentFlow({
 
   const stableFramesRef = useRef(0);
   const countdownTimerRef = useRef(null);
+  const [debugPhase, setDebugPhase] = useState(null);
+  const [debugResult, setDebugResult] = useState(null);
+  const [debugStatus, setDebugStatus] = useState(null);
+  useEffect(() => {
+    window.__setAssessmentFlow = (override = {}) => {
+      if (override.phase !== undefined) {
+        setDebugPhase(override.phase);
+        setPhase(override.phase);
+      }
+      if (override.result !== undefined) setDebugResult(override.result);
+      if (override.status !== undefined) setDebugStatus(override.status);
+      if (override.positioning !== undefined) setPositioning(override.positioning);
+    };
+  }, []);
 
-  const { running, status, result, attempts, start, stop, clear, guidance } = runner;
+  const { running, start, stop, clear, guidance } = runner;
+  const attempts = runner.attempts ?? 1;
+  const result = debugResult !== null ? debugResult : runner.result;
+  const status = debugStatus !== null ? debugStatus : runner.status;
 
-  const effectivePhase = result ? FLOW_PHASE.RESULT : phase;
+  const effectivePhase = result ? FLOW_PHASE.RESULT : (debugPhase || phase);
+
+  // Sync camera state for instructions (camera hidden while reading instructions)
+  useEffect(() => {
+    if (effectivePhase !== FLOW_PHASE.INSTRUCTIONS) return;
+    onCameraStateChange?.({
+      outline: null,
+      countdown: null,
+      trackingStatus: null,
+      guidance: null,
+      visible: false,
+    });
+  }, [effectivePhase, onCameraStateChange]);
 
   // Handle positioning frame evaluation
   useEffect(() => {
     if (effectivePhase !== FLOW_PHASE.POSITIONING) return undefined;
 
     engine?.startLoop?.();
+
+    const outlineType = testType === "ftsst" ? "side" : testType === "shoulder" ? "upper" : "front";
+
+    // Immediate initial sync on entering positioning
+    onCameraStateChange?.({
+      outline: outlineType,
+      countdown: null,
+      trackingStatus: "repositioning",
+      guidance: null,
+      visible: true,
+    });
 
     const handleFrame = (frame) => {
       const evaluation = evaluatePositioning(frame, testType, {
@@ -82,6 +128,7 @@ export default function AssessmentFlow({
         countdown: null,
         trackingStatus: evaluation.trackingQuality,
         guidance: evaluation.guidance,
+        visible: true,
       });
 
       // Auto-trigger countdown when positioning has been stable
@@ -107,6 +154,7 @@ export default function AssessmentFlow({
       countdown: 3,
       trackingStatus: "ready",
       guidance: "Get ready...",
+      visible: true,
     });
 
     let count = 3;
@@ -119,6 +167,7 @@ export default function AssessmentFlow({
           countdown: count,
           trackingStatus: "ready",
           guidance: "Get ready...",
+          visible: true,
         });
       } else if (count === 0) {
         setCountdown("Start!");
@@ -127,6 +176,7 @@ export default function AssessmentFlow({
           countdown: "Start!",
           trackingStatus: "ready",
           guidance: "Start moving now!",
+          visible: true,
         });
       } else {
         clearInterval(countdownTimerRef.current);
@@ -137,6 +187,7 @@ export default function AssessmentFlow({
           countdown: null,
           trackingStatus: "tracking",
           guidance: null,
+          visible: true,
         });
         start();
       }
@@ -151,18 +202,22 @@ export default function AssessmentFlow({
   useEffect(() => {
     if (effectivePhase !== FLOW_PHASE.RECORDING) return;
 
-    const trackingState = status?.trackingState || (status?.usable ? "tracking" : "recovering");
-    const activeGuidance = guidance() || (status?.usable === false ? "lost_position_briefly" : null);
+    const trackingState = status?.trackingWarning
+      ? (status.trackingState === "recovering" ? "recovering" : "repositioning")
+      : "tracking";
+    const activeGuidance = status?.trackingWarning ? "lost_position_briefly" : guidance();
 
     onCameraStateChange?.({
       outline: null,
       countdown: null,
       trackingStatus: trackingState,
-      guidance: activeGuidance ? null : null,
+      guidance: activeGuidance,
+      visible: true,
     });
   }, [effectivePhase, status, guidance, onCameraStateChange]);
 
   // Clear camera overlay when result is produced
+  // Hide camera overlay when result is produced
   useEffect(() => {
     if (!result) return;
     onCameraStateChange?.({
@@ -170,6 +225,7 @@ export default function AssessmentFlow({
       countdown: null,
       trackingStatus: isUsableResult(result) ? "ready" : "repositioning",
       guidance: null,
+      visible: false,
     });
   }, [result, onCameraStateChange]);
 
@@ -193,6 +249,7 @@ export default function AssessmentFlow({
       countdown: null,
       trackingStatus: null,
       guidance: null,
+      visible: false,
     });
   }, [onCameraStateChange]);
 
@@ -207,31 +264,42 @@ export default function AssessmentFlow({
 
     return (
       <div className="assess-panel">
-        <span className="assess-panel__step">{stepLabel}</span>
-        <h2>{title}</h2>
+        <span className="assess-panel__step">{safeDisplayValue(stepLabel)}</span>
+        <h2>{safeDisplayValue(title)}</h2>
 
-        {demo && <MovementDemo demo={demo} />}
-
-        {safetyNote && <p className="assess-panel__safety">{safetyNote}</p>}
-
-        <p>{description}</p>
-
-        {instructionsList.length > 0 && (
-          <ul className="assess-panel__list">
-            {instructionsList.map((item, idx) => (
-              <li key={idx}>{item}</li>
-            ))}
-          </ul>
+        {demo && (
+          <div className="assess-demo-container">
+            <MovementDemo demo={demo} />
+          </div>
         )}
 
-        {caveat && <p className="assess-panel__caveat">{caveat}</p>}
+        <p className="assess-panel__desc">{safeDisplayValue(description)}</p>
+
+        {toArray(instructionsList).length > 0 && (
+          <div className="assess-instructions-block">
+            <h3>How to perform this check</h3>
+            <ul className="assess-panel__list">
+              {toArray(instructionsList).map((item, idx) => (
+                <li key={idx}>{safeDisplayValue(item?.instruction || item?.text || item)}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {safetyNote && (
+          <div className="assess-panel__safety">
+            <strong>Safety guidance:</strong> {safeDisplayValue(safetyNote)}
+          </div>
+        )}
+
+        {caveat && <p className="assess-panel__caveat">{safeDisplayValue(caveat)}</p>}
 
         <div className="assess-panel__actions">
+          <button type="button" className="assess-btn assess-btn--primary" onClick={handleStartSetup}>
+            Start camera setup →
+          </button>
           <button type="button" className="assess-btn assess-btn--ghost" onClick={onSkip}>
             Skip this check
-          </button>
-          <button type="button" className="assess-btn assess-btn--primary" onClick={handleStartSetup}>
-            Position yourself
           </button>
         </div>
       </div>
@@ -244,7 +312,7 @@ export default function AssessmentFlow({
 
     return (
       <div className="assess-panel">
-        <span className="assess-panel__step">{stepLabel} · Camera setup</span>
+        <span className="assess-panel__step">{safeDisplayValue(stepLabel)} · Camera setup</span>
         <h2>Let's get you ready</h2>
 
         <p className="assess-setup-instruction">
@@ -256,32 +324,32 @@ export default function AssessmentFlow({
         </p>
 
         <div className="assess-checklist">
-          <div className={`assess-checklist__item ${checklist.head ? "is-checked" : ""}`}>
-            <span className="assess-checklist__icon">{checklist.head ? "✓" : "○"}</span>
+          <div className={`assess-checklist__item ${checklist?.head ? "is-checked" : ""}`}>
+            <span className="assess-checklist__icon">{checklist?.head ? "✓" : "○"}</span>
             <span>Head visible</span>
           </div>
-          <div className={`assess-checklist__item ${checklist.shoulders ? "is-checked" : ""}`}>
-            <span className="assess-checklist__icon">{checklist.shoulders ? "✓" : "○"}</span>
+          <div className={`assess-checklist__item ${checklist?.shoulders ? "is-checked" : ""}`}>
+            <span className="assess-checklist__icon">{checklist?.shoulders ? "✓" : "○"}</span>
             <span>Shoulders visible</span>
           </div>
           {testType === "shoulder" && (
-            <div className={`assess-checklist__item ${checklist.arms ? "is-checked" : ""}`}>
-              <span className="assess-checklist__icon">{checklist.arms ? "✓" : "○"}</span>
+            <div className={`assess-checklist__item ${checklist?.arms ? "is-checked" : ""}`}>
+              <span className="assess-checklist__icon">{checklist?.arms ? "✓" : "○"}</span>
               <span>Arms & wrists visible</span>
             </div>
           )}
           {testType !== "shoulder" && (
             <>
-              <div className={`assess-checklist__item ${checklist.hips ? "is-checked" : ""}`}>
-                <span className="assess-checklist__icon">{checklist.hips ? "✓" : "○"}</span>
+              <div className={`assess-checklist__item ${checklist?.hips ? "is-checked" : ""}`}>
+                <span className="assess-checklist__icon">{checklist?.hips ? "✓" : "○"}</span>
                 <span>Hips visible</span>
               </div>
-              <div className={`assess-checklist__item ${checklist.knees ? "is-checked" : ""}`}>
-                <span className="assess-checklist__icon">{checklist.knees ? "✓" : "○"}</span>
+              <div className={`assess-checklist__item ${checklist?.knees ? "is-checked" : ""}`}>
+                <span className="assess-checklist__icon">{checklist?.knees ? "✓" : "○"}</span>
                 <span>Knees visible</span>
               </div>
-              <div className={`assess-checklist__item ${checklist.feet ? "is-checked" : ""}`}>
-                <span className="assess-checklist__icon">{checklist.feet ? "✓" : "○"}</span>
+              <div className={`assess-checklist__item ${checklist?.feet ? "is-checked" : ""}`}>
+                <span className="assess-checklist__icon">{checklist?.feet ? "✓" : "○"}</span>
                 <span>Feet visible</span>
               </div>
             </>
@@ -291,7 +359,7 @@ export default function AssessmentFlow({
         {actionableTip && (
           <div className="assess-guidance-tip">
             <span className="assess-guidance-tip__icon">💡</span>
-            <span>{actionableTip}</span>
+            <span>{safeDisplayValue(actionableTip)}</span>
           </div>
         )}
 
@@ -299,7 +367,7 @@ export default function AssessmentFlow({
           <div className="assess-preflight-progress__bar">
             <div
               className="assess-preflight-progress__fill"
-              style={{ width: `${Math.round(progress * 100)}%` }}
+              style={{ width: `${Math.min(100, Math.max(0, Math.round((Number(progress) || 0) * 100)))}%` }}
             />
           </div>
           <span className="assess-preflight-progress__label">
@@ -308,18 +376,18 @@ export default function AssessmentFlow({
         </div>
 
         <div className="assess-panel__actions">
-          <button type="button" className="assess-btn assess-btn--ghost" onClick={handleBackToInstructions}>
-            Back
-          </button>
-          <button type="button" className="assess-btn assess-btn--ghost" onClick={onSkip}>
-            Skip this check
-          </button>
           <button
             type="button"
             className="assess-btn assess-btn--primary"
             onClick={handleManualStart}
           >
             I'm ready · Start test
+          </button>
+          <button type="button" className="assess-btn assess-btn--ghost" onClick={handleBackToInstructions}>
+            ← Back to instructions
+          </button>
+          <button type="button" className="assess-btn assess-btn--ghost" onClick={onSkip}>
+            Skip this check
           </button>
         </div>
       </div>
@@ -330,11 +398,11 @@ export default function AssessmentFlow({
   if (phase === FLOW_PHASE.COUNTDOWN) {
     return (
       <div className="assess-panel">
-        <span className="assess-panel__step">{stepLabel} · Starting</span>
+        <span className="assess-panel__step">{safeDisplayValue(stepLabel)} · Starting</span>
         <h2>Get ready to begin</h2>
 
         <div className="assess-countdown-display">
-          <span className="assess-countdown-display__number">{countdown}</span>
+          <span className="assess-countdown-display__number">{safeDisplayValue(countdown)}</span>
         </div>
 
         <p className="assess-panel__live">
@@ -353,25 +421,29 @@ export default function AssessmentFlow({
   // Phase 5: Result Review (when a test attempt produces a result)
   if (result) {
     const usable = isUsableResult(result);
-    const primaryReason = result.invalidReasons?.[0] || null;
+    const invalidReasonsList = toArray(result?.invalidReasons);
+    const primaryReason = invalidReasonsList[0] || null;
     const actionableTip = getActionableSuggestion(primaryReason, testType);
 
     return (
       <div className="assess-panel">
         <span className="assess-panel__step">
-          {stepLabel} · Attempt {attempts}
+          {safeDisplayValue(stepLabel)} · Attempt {safeDisplayValue(attempts)}
         </span>
-        <h2>{usable ? `${title} recorded` : "We're having trouble seeing your movement"}</h2>
+        <h2>{usable ? `${safeDisplayValue(title)} recorded` : "We're having trouble seeing your movement"}</h2>
 
         {usable ? (
           <>
             {renderMeasurements && renderMeasurements(result)}
-            {caveat && <p className="assess-panel__caveat">{caveat}</p>}
+            {caveat && <p className="assess-panel__caveat">{safeDisplayValue(caveat)}</p>}
           </>
         ) : (
           <>
-            <ActionableRetryNotice suggestion={actionableTip} />
-            <ReasonList codes={result.invalidReasons} title="Why this attempt could not be used" />
+            <ActionableRetryNotice suggestion={safeDisplayValue(actionableTip)} />
+            <ReasonList
+              codes={invalidReasonsList.map((r) => (typeof r === "string" ? r : r?.code || r?.reason || safeDisplayValue(r)))}
+              title="Why this attempt could not be used"
+            />
             <p className="assess-panel__caveat">
               No problem — home camera tracking can take a moment to calibrate. Try adjusting your position as suggested and try again.
             </p>
@@ -379,16 +451,33 @@ export default function AssessmentFlow({
         )}
 
         <div className="assess-panel__actions">
-          <button type="button" className="assess-btn assess-btn--ghost" onClick={handleRetry}>
-            Try again
-          </button>
-          <button
-            type="button"
-            className="assess-btn assess-btn--primary"
-            onClick={() => onComplete(result)}
-          >
-            Continue to next check →
-          </button>
+          {usable ? (
+            <>
+              <button
+                type="button"
+                className="assess-btn assess-btn--primary"
+                onClick={() => onComplete(result)}
+              >
+                {stepLabel?.toLowerCase?.().includes("right")
+                  ? "Continue to assessment results →"
+                  : stepLabel?.toLowerCase?.().includes("left")
+                    ? "Continue to right leg →"
+                    : "Continue to next check →"}
+              </button>
+              <button type="button" className="assess-btn assess-btn--ghost" onClick={handleRetry}>
+                Try again
+              </button>
+            </>
+          ) : (
+            <>
+              <button type="button" className="assess-btn assess-btn--primary" onClick={handleRetry}>
+                Try again
+              </button>
+              <button type="button" className="assess-btn assess-btn--ghost" onClick={onSkip}>
+                Skip this check
+              </button>
+            </>
+          )}
         </div>
       </div>
     );
@@ -400,8 +489,8 @@ export default function AssessmentFlow({
 
     return (
       <div className="assess-panel">
-        <span className="assess-panel__step">{stepLabel} · Recording</span>
-        <h2>{title}</h2>
+        <span className="assess-panel__step">{safeDisplayValue(stepLabel)} · Recording</span>
+        <h2>{safeDisplayValue(title)}</h2>
 
         {renderActiveContent && renderActiveContent(status)}
 
@@ -420,7 +509,7 @@ export default function AssessmentFlow({
 
         <div className="assess-panel__actions">
           <button type="button" className="assess-btn assess-btn--ghost" onClick={stop}>
-            Stop
+            Finish test
           </button>
         </div>
       </div>

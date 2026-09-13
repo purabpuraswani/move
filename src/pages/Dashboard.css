@@ -1770,11 +1770,15 @@
 
   gap: 10px;
 
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
   margin-top: 24px;
 }
 
 
-.specialist {
+.specialist-list .specialist {
+  width: 100%;
+
   display: flex;
 
   align-items: center;
@@ -1790,6 +1794,14 @@
 
   background: rgba(250, 252, 249, 0.7);
 
+  text-align: left;
+
+  font-family: inherit;
+
+  color: inherit;
+
+  cursor: pointer;
+
   transition:
     transform 0.25s ease,
     background 0.25s ease,
@@ -1797,7 +1809,13 @@
 }
 
 
-.specialist:hover {
+.specialist-list .specialist:focus-visible {
+  outline: 2px solid #659174;
+  outline-offset: 2px;
+}
+
+
+.specialist-list .specialist:hover {
   transform: translateX(5px);
 
   border-color: #d5e3d7;
@@ -1905,6 +1923,12 @@
 
   box-shadow:
     0 8px 20px rgba(48, 91, 62, 0.08);
+}
+
+
+.specialist-button:focus-visible {
+  outline: 2px solid #659174;
+  outline-offset: 2px;
 }
 
 

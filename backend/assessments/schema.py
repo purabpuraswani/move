@@ -374,13 +374,28 @@ def _validate_summary(raw, tests: dict) -> dict:
         _require_mapping(raw, "summary")
 
     statuses = [tests[test_id]["status"] for test_id in TEST_IDS]
+    completed_count = statuses.count("completed")
+    invalid_count = statuses.count("invalid")
+
+    if completed_count == len(TEST_IDS):
+        summary_status = "COMPLETE"
+    elif completed_count > 0:
+        summary_status = "PARTIAL"
+    elif invalid_count > 0:
+        summary_status = "INSUFFICIENT_DATA"
+    else:
+        summary_status = "NONE_COMPLETED"
 
     return {
         "tests_completed": statuses.count("completed"),
         "tests_invalid": statuses.count("invalid"),
+        "tests_completed": completed_count,
+        "tests_invalid": invalid_count,
         "tests_skipped": statuses.count("skipped"),
         "tests_not_started": statuses.count("not_started"),
         "has_any_usable_result": "completed" in statuses,
+        "has_any_usable_result": completed_count > 0,
+        "status": summary_status,
     }
 
 

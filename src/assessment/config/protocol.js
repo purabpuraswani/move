@@ -32,6 +32,12 @@ export const POSE = {
 
   /** Consecutive milliseconds of unusable pose that aborts a running test. */
   maxPoseLossMs: 1500,
+
+  /** Show repositioning guidance before a loss becomes a final failure. */
+  trackingWarningMs: 500,
+
+  /** Sustained loss timeout for an active assessment attempt. */
+  maxRecoveryMs: 5000,
 };
 
 /** Test 1 - bilateral active shoulder abduction, front-facing camera. */
@@ -150,6 +156,9 @@ export const BALANCE = {
   /** The lift ratio at which the foot is considered to have come back down. */
   lossLiftRatio: 0.05,
 
+  /** Consecutive visible frames required to confirm a deliberate foot return. */
+  footDownConfirmationFrames: 3,
+
   /** Valid position must be held this long before the clock starts. */
   stabilizationMs: 400,
 
@@ -172,6 +181,9 @@ export const BALANCE = {
    * quality accounting forever. A software ceiling, not a clinical cut-off.
    */
   maxSetupDurationMs: 20000,
+
+  /** Front-facing ratio threshold for balance: allows slight natural sway without flagging orientation failure. */
+  minFrontFacingRatio: 0.30,
 
   sides: ["left", "right"],
 };

@@ -249,6 +249,7 @@ def _serialise_summary(summary) -> dict:
         "testsSkipped": summary.get("tests_skipped", 0),
         "testsNotStarted": summary.get("tests_not_started", 0),
         "hasAnyUsableResult": summary.get("has_any_usable_result", False),
+        "status": summary.get("status", "NONE_COMPLETED"),
     }
 
 

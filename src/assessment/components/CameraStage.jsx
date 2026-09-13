@@ -38,6 +38,7 @@ export default function CameraStage({
   countdown = null,
   trackingStatus = null,
   guidance = null,
+  visible = true,
 }) {
   const { videoRef, subscribe, state, error, getFps, retry } = engine;
   const canvasRef = useRef(null);
@@ -110,8 +111,10 @@ export default function CameraStage({
     cannot_see: "assess-camera__badge--error",
   };
 
+  const recovering = trackingStatus === "repositioning" || trackingStatus === "recovering";
+
   return (
-    <div className="assess-camera">
+    <div className={`assess-camera ${visible ? "" : "assess-camera--hidden"}`}>
       <div className="assess-camera__frame">
         <video
           ref={videoRef}
@@ -219,9 +222,16 @@ export default function CameraStage({
           </div>
         )}
 
-        {!connecting && !error && tracking.fps !== null && (
-          <div className="assess-camera__fps">{Math.round(tracking.fps)} fps</div>
+        {recovering && (
+          <div className="assess-camera__recovery" role="status">
+            <strong>We lost sight of you for a moment</strong>
+            <span>Step back slightly and make sure your body is visible.</span>
+            <small>Waiting for you to reposition...</small>
+          </div>
         )}
+
+
+
       </div>
 
       {(guidance || hint) && (

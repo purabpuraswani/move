@@ -21,6 +21,7 @@ import {
   fetchReports,
 } from "../services/reports";
 import { getToken } from "../services/auth";
+import AppNavigation from "../components/AppNavigation.jsx";
 
 import "./AssessmentPage.css";
 import "./ReportsPage.css";
@@ -216,6 +217,7 @@ function ReportsPage() {
             MoveWell<small>AI</small>
           </span>
         </button>
+      <AppNavigation backTo="/dashboard" backLabel="← Dashboard" />
 
         <span className="assess-header__title">Medical reports</span>
 

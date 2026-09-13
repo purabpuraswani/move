@@ -13,6 +13,7 @@ import {
   combineBalanceResults,
 } from "../tests/balance/balanceLogic.js";
 import { BALANCE, POSE, REASON, TEST_STATUS } from "../config/protocol.js";
+import { isUsableResult } from "../utils/results.js";
 import {
   balanceSequence,
   withMissingKeypoints,
@@ -455,3 +456,103 @@ test("a stance genuinely lost mid-hold and a brief recoverable dropout are unaff
   assert.equal(briefSide.valid, true);
   assert.equal(briefSide.endReason, END_REASON.FOOT_LOWERED);
 });
+
+test("holding for 5 seconds and lowering foot records a valid completed result with holdDuration ~5s", () => {
+  const { frames } = balanceSequence({ supportSide: "left", holdFrames: 162, trailingFrames: 6 });
+  const test3 = run(frames);
+
+  assert.equal(test3.phase, BALANCE_PHASE.DONE);
+  const side = test3.finish();
+
+  assert.equal(side.testId, "balance");
+  assert.equal(side.status, TEST_STATUS.COMPLETED);
+  assert.equal(side.valid, true);
+  assert.equal(side.endReason, END_REASON.FOOT_LOWERED);
+  assert.deepEqual(side.invalidReasons, []);
+  assert.ok(side.holdDurationSeconds >= 4.8 && side.holdDurationSeconds <= 5.2, `expected ~5s, got ${side.holdDurationSeconds}`);
+  assert.equal(isUsableResult(side), true);
+});
+
+test("holding for 15 seconds and lowering foot records a valid completed result without camera errors and isUsableResult is true", () => {
+  const { frames } = balanceSequence({ supportSide: "left", holdFrames: 462, trailingFrames: 6 });
+  const test3 = run(frames);
+
+  assert.equal(test3.phase, BALANCE_PHASE.DONE);
+  const side = test3.finish();
+
+  assert.equal(side.testId, "balance");
+  assert.equal(side.status, TEST_STATUS.COMPLETED);
+  assert.equal(side.valid, true);
+  assert.equal(side.endReason, END_REASON.FOOT_LOWERED);
+  assert.deepEqual(side.invalidReasons, []);
+  assert.ok(side.holdDurationSeconds >= 14.8 && side.holdDurationSeconds <= 15.2, `expected ~15s, got ${side.holdDurationSeconds}`);
+  assert.equal(side.reachedMaxDuration, false);
+  assert.equal(isUsableResult(side), true);
+});
+
+test("reaching the 30-second ceiling records a valid completed result with reachedMaxDuration true", () => {
+  const { frames } = balanceSequence({ supportSide: "right", holdFrames: 930, trailingFrames: 6 });
+  const test3 = run(frames, { supportSide: "right" });
+
+  assert.equal(test3.phase, BALANCE_PHASE.DONE);
+  const side = test3.finish();
+
+  assert.equal(side.testId, "balance");
+  assert.equal(side.status, TEST_STATUS.COMPLETED);
+  assert.equal(side.valid, true);
+  assert.equal(side.reachedMaxDuration, true);
+  assert.equal(side.endReason, END_REASON.MAX_DURATION);
+  assert.deepEqual(side.invalidReasons, []);
+  assert.ok(side.holdDurationMs >= 30000, `expected at least 30000ms, got ${side.holdDurationMs}`);
+  assert.equal(isUsableResult(side), true);
+});
+
+test("currentGuidance returns contextual guidance across phases and conditions", () => {
+  const test3 = new SingleLegStanceTest({ supportSide: "left" });
+  assert.equal(test3.currentGuidance(), "lift_one_foot");
+
+  // Standing frame -> still waiting
+  const standingFrame = makeFrame(0, frontFacingBase(), { score: 0.9 });
+  test3.push(standingFrame);
+  assert.equal(test3.currentGuidance(), "lift_one_foot");
+
+  // Missing keypoints frame -> step back into frame
+  const missingFrame = makeFrame(33, {}, { score: 0.9 });
+  test3.push(missingFrame);
+  assert.equal(test3.currentGuidance(), "step_back_into_frame");
+});
+
+test("frames pushed after completion do not corrupt duration, reason, or status", () => {
+  const { frames } = balanceSequence({ supportSide: "left", holdFrames: 90 });
+  const test3 = run(frames);
+
+  assert.equal(test3.phase, BALANCE_PHASE.DONE);
+  const sideBefore = test3.finish();
+
+  // Push 10 additional frames after completion
+  const lastTs = frames[frames.length - 1].timestamp;
+  for (let i = 1; i <= 10; i += 1) {
+    const status = test3.push(makeFrame(lastTs + i * 33, frontFacingBase(), { score: 0.9 }));
+    assert.equal(status.phase, BALANCE_PHASE.DONE);
+    assert.equal(status.assessmentState, "foot_returned_to_ground");
+  }
+
+  const sideAfter = test3.finish();
+  assert.equal(sideAfter.holdDurationMs, sideBefore.holdDurationMs);
+  assert.equal(sideAfter.holdDurationSeconds, sideBefore.holdDurationSeconds);
+  assert.equal(sideAfter.endReason, sideBefore.endReason);
+  assert.equal(sideAfter.status, TEST_STATUS.COMPLETED);
+  assert.equal(sideAfter.valid, true);
+});
+
+test("skippedSide produces a valid-false result with status SKIPPED and null duration", () => {
+  const skipped = skippedSide("left");
+  assert.equal(skipped.testId, "balance");
+  assert.equal(skipped.status, TEST_STATUS.SKIPPED);
+  assert.equal(skipped.valid, false);
+  assert.equal(skipped.skipped, true);
+  assert.equal(skipped.holdDurationMs, null);
+  assert.equal(skipped.holdDurationSeconds, null);
+  assert.equal(isUsableResult(skipped), false);
+});
+

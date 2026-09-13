@@ -51,6 +51,7 @@ const STEP = {
 };
 
 /** Steps where the camera preview is on screen. */
+/** Steps where the camera preview is active. */
 const CAMERA_STEPS = [
   STEP.SHOULDER,
   STEP.CHAIR,
@@ -67,15 +68,38 @@ const CAMERA_HINTS = {
   [STEP.BALANCE_RIGHT]: "Face the camera, with something steady within reach.",
 };
 
+const ACTIVE_SESSION_KEY = "movewell_active_assessment_session";
+
+function loadStoredSession() {
+  if (typeof window === "undefined" || !window.localStorage) return null;
+  try {
+    const raw = localStorage.getItem(ACTIVE_SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.session && parsed.session.sessionId) {
+      return parsed;
+    }
+  } catch (_) {}
+  return null;
+}
+
+function clearStoredSession() {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  try {
+    localStorage.removeItem(ACTIVE_SESSION_KEY);
+  } catch (_) {}
+}
+
 function AssessmentPage() {
   const navigate = useNavigate();
   const engine = usePoseEngine();
 
-  const [step, setStep] = useState(STEP.INTRO);
-  const [session, setSession] = useState(() => createSession());
-  const [chairSeatHeightCm, setChairSeatHeightCm] = useState(null);
-  const [leftLeg, setLeftLeg] = useState(null);
-  const [finalSession, setFinalSession] = useState(null);
+  const [initialData] = useState(() => loadStoredSession());
+  const [step, setStep] = useState(() => initialData?.step || STEP.INTRO);
+  const [session, setSession] = useState(() => initialData?.session || createSession());
+  const [chairSeatHeightCm, setChairSeatHeightCm] = useState(() => initialData?.chairSeatHeightCm ?? null);
+  const [leftLeg, setLeftLeg] = useState(() => initialData?.leftLeg ?? null);
+  const [finalSession, setFinalSession] = useState(() => initialData?.finalSession ?? null);
   const [signedIn] = useState(() => Boolean(getToken()));
   const [saveState, setSaveState] = useState("idle");
   const [saveError, setSaveError] = useState(null);
@@ -85,7 +109,19 @@ function AssessmentPage() {
     countdown: null,
     trackingStatus: null,
     guidance: null,
+    visible: false,
   });
+
+  useEffect(() => {
+    window.__setAssessStep = (newStep, options = {}) => {
+      if (options.finalSession !== undefined) setFinalSession(options.finalSession);
+      if (options.chairSeatHeightCm !== undefined) setChairSeatHeightCm(options.chairSeatHeightCm);
+      if (options.cameraState !== undefined) setCameraState((prev) => ({ ...prev, ...options.cameraState }));
+      if (options.saveState !== undefined) setSaveState(options.saveState);
+      if (newStep) setStep(newStep);
+    };
+    window.__finishSession = finishSession;
+  }, [finishSession]);
 
   const { connect, release, stopLoop } = engine;
 
@@ -95,12 +131,48 @@ function AssessmentPage() {
    * rather than holding it open while the user reads.
    */
   useEffect(() => {
-    if (CAMERA_STEPS.includes(step)) return;
+    if (CAMERA_STEPS.includes(step)) {
+      connect();
+      return;
+    }
 
     stopLoop();
 
     if (step === STEP.RESULTS) release();
-  }, [step, stopLoop, release]);
+  }, [step, stopLoop, release, connect]);
+
+  function persistSnapshot(updatedSession, nextStep, extra = {}) {
+    const payload = {
+      session: updatedSession,
+      step: nextStep,
+      chairSeatHeightCm: extra.chairSeatHeightCm !== undefined ? extra.chairSeatHeightCm : chairSeatHeightCm,
+      leftLeg: extra.leftLeg !== undefined ? extra.leftLeg : leftLeg,
+      finalSession: extra.finalSession !== undefined ? extra.finalSession : finalSession,
+    };
+
+    if (typeof window !== "undefined" && window.localStorage) {
+      try {
+        localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(payload));
+      } catch (_) {}
+    }
+
+    if (signedIn && updatedSession && nextStep !== STEP.RESULTS) {
+      saveAssessment(toStoredPayload(updatedSession)).catch((err) => {
+        console.warn("Auto-save assessment progress failed:", err);
+      });
+    }
+  }
+
+  function startOver() {
+    clearStoredSession();
+    resetCamera();
+    const fresh = createSession();
+    setSession(fresh);
+    setFinalSession(null);
+    setChairSeatHeightCm(null);
+    setLeftLeg(null);
+    setStep(STEP.INTRO);
+  }
 
   function resetCamera() {
     setCameraState({
@@ -108,27 +180,43 @@ function AssessmentPage() {
       countdown: null,
       trackingStatus: null,
       guidance: null,
+      visible: false,
     });
   }
 
   function recordAndAdvance(testId, result, nextStep) {
     resetCamera();
-    setSession((current) => withTestResult(current, testId, result));
+    const updated = withTestResult(session, testId, result);
+    setSession(updated);
     setStep(nextStep);
+    persistSnapshot(updated, nextStep);
   }
 
   function finishSession(balanceResult) {
     resetCamera();
     const withBalance = withTestResult(session, "balance", balanceResult);
+    const finalised = finaliseSession(withBalance);
 
     setSession(withBalance);
-    setFinalSession(finaliseSession(withBalance));
+    setFinalSession(finalised);
     setStep(STEP.RESULTS);
+    persistSnapshot(withBalance, STEP.RESULTS, { finalSession: finalised });
+
+    if (signedIn) {
+      setSaveState("saving");
+      saveAssessment(toStoredPayload(finalised))
+        .then(() => setSaveState("saved"))
+        .catch((error) => {
+          setSaveState("idle");
+          setSaveError(error.message || "Your results could not be saved.");
+        });
+    }
   }
 
   function completeLeftLeg(sideResult) {
     setLeftLeg(sideResult);
     setStep(STEP.BALANCE_RIGHT);
+    persistSnapshot(session, STEP.BALANCE_RIGHT, { leftLeg: sideResult });
   }
 
   function completeRightLeg(sideResult) {
@@ -142,9 +230,10 @@ function AssessmentPage() {
    * description of a session the backend accepts, and it contains no frames and
    * no keypoint sequence. A failure is reported as a failure; the results stay
    * on screen so the user does not lose them.
+   * Manual save button handler (for retrying if auto-save had an issue or when requested).
    */
   async function handleSave() {
-    if (!finalSession) return;
+    if (!finalSession || saveState === "saving") return;
 
     setSaveState("saving");
     setSaveError(null);
@@ -172,13 +261,35 @@ function AssessmentPage() {
       const skippedBalance = combineBalanceResults(leftLeg ?? skippedSide("left"), skippedSide("right"));
       currentSession = withTestResult(currentSession, "balance", skippedBalance);
     }
+    const finalised = finaliseSession(currentSession);
     setSession(currentSession);
-    setFinalSession(finaliseSession(currentSession));
+    setFinalSession(finalised);
     setStep(STEP.RESULTS);
+    persistSnapshot(currentSession, STEP.RESULTS, { finalSession: finalised });
+
+    if (signedIn) {
+      setSaveState("saving");
+      saveAssessment(toStoredPayload(finalised))
+        .then(() => setSaveState("saved"))
+        .catch((error) => {
+          setSaveState("idle");
+          setSaveError(error.message || "Your results could not be saved.");
+        });
+    }
   }
 
   function exit() {
     navigate("/dashboard");
+  }
+
+  function handleExitResults() {
+    clearStoredSession();
+    exit();
+  }
+
+  function handleViewPlan() {
+    clearStoredSession();
+    navigate("/plan");
   }
 
   const showCamera = CAMERA_STEPS.includes(step);
@@ -195,14 +306,24 @@ function AssessmentPage() {
 
         <span className="assess-header__title">Movement check</span>
 
-        <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+        <div className="assess-header__actions">
+          {initialData && step !== STEP.INTRO && step !== STEP.RESULTS && (
+            <button type="button" className="assess-btn assess-btn--quiet" onClick={startOver}>
+              Start over
+            </button>
+          )}
           {CAMERA_STEPS.includes(step) && (
             <button type="button" className="assess-btn assess-btn--quiet" onClick={skipToResults}>
               Skip to results →
             </button>
           )}
-          <button type="button" className="assess-btn assess-btn--quiet" onClick={exit}>
-            Exit
+          <button
+            type="button"
+            className="assess-btn assess-btn--quiet"
+            onClick={exit}
+            aria-label="Back to Dashboard"
+          >
+            ← Dashboard
           </button>
         </div>
       </header>
@@ -216,6 +337,7 @@ function AssessmentPage() {
             countdown={cameraState.countdown}
             trackingStatus={cameraState.trackingStatus}
             guidance={cameraState.guidance}
+            visible={cameraState.visible}
           />
         )}
 
@@ -255,6 +377,7 @@ function AssessmentPage() {
             onContinue={(height) => {
               setChairSeatHeightCm(height);
               setStep(STEP.FTSST);
+              persistSnapshot(session, STEP.FTSST, { chairSeatHeightCm: height });
             }}
             onSkip={() => recordAndAdvance("ftsst", skippedResult("ftsst"), STEP.BALANCE_LEFT)}
           />
@@ -296,8 +419,8 @@ function AssessmentPage() {
             onSave={signedIn ? handleSave : undefined}
             saveState={saveState}
             saveError={saveError}
-            onExit={exit}
-            onViewPlan={() => navigate("/plan")}
+            onExit={handleExitResults}
+            onViewPlan={handleViewPlan}
           />
         )}
       </main>

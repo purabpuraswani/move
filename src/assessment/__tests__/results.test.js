@@ -17,6 +17,8 @@ import {
   withTestResult,
   finaliseSession,
   toStoredPayload,
+  ASSESSMENT_SUMMARY_STATUS,
+  computeSummaryStatus,
 } from "../utils/results.js";
 import { PROTOCOL_VERSION, TEST_STATUS, REASON } from "../config/protocol.js";
 
@@ -142,6 +144,7 @@ test("the session summary counts statuses and does not combine measurements", ()
     testsSkipped: 1,
     testsNotStarted: 0,
     hasAnyUsableResult: true,
+    status: "PARTIAL",
   });
   assert.ok(finalised.completedAt);
 
@@ -259,3 +262,80 @@ test("the stored payload keeps setup metadata such as chair seat height", () => 
   // Tests that collected no setup metadata do not gain an empty object.
   assert.equal("setup" in payload.tests.shoulder, false);
 });
+
+test("summary status distinguishes NONE_COMPLETED, PARTIAL, COMPLETE, and INSUFFICIENT_DATA", () => {
+  // NONE_COMPLETED
+  assert.equal(
+    computeSummaryStatus([TEST_STATUS.NOT_STARTED, TEST_STATUS.NOT_STARTED, TEST_STATUS.NOT_STARTED]),
+    ASSESSMENT_SUMMARY_STATUS.NONE_COMPLETED
+  );
+  assert.equal(
+    computeSummaryStatus([TEST_STATUS.SKIPPED, TEST_STATUS.SKIPPED, TEST_STATUS.SKIPPED]),
+    ASSESSMENT_SUMMARY_STATUS.NONE_COMPLETED
+  );
+
+  // PARTIAL (1 or 2 completed)
+  assert.equal(
+    computeSummaryStatus([TEST_STATUS.COMPLETED, TEST_STATUS.NOT_STARTED, TEST_STATUS.NOT_STARTED]),
+    ASSESSMENT_SUMMARY_STATUS.PARTIAL
+  );
+  assert.equal(
+    computeSummaryStatus([TEST_STATUS.COMPLETED, TEST_STATUS.INVALID, TEST_STATUS.SKIPPED]),
+    ASSESSMENT_SUMMARY_STATUS.PARTIAL
+  );
+  assert.equal(
+    computeSummaryStatus([TEST_STATUS.COMPLETED, TEST_STATUS.COMPLETED, TEST_STATUS.SKIPPED]),
+    ASSESSMENT_SUMMARY_STATUS.PARTIAL
+  );
+
+  // COMPLETE (all 3 completed)
+  assert.equal(
+    computeSummaryStatus([TEST_STATUS.COMPLETED, TEST_STATUS.COMPLETED, TEST_STATUS.COMPLETED]),
+    ASSESSMENT_SUMMARY_STATUS.COMPLETE
+  );
+
+  // INSUFFICIENT_DATA (0 completed, >=1 invalid)
+  assert.equal(
+    computeSummaryStatus([TEST_STATUS.INVALID, TEST_STATUS.SKIPPED, TEST_STATUS.NOT_STARTED]),
+    ASSESSMENT_SUMMARY_STATUS.INSUFFICIENT_DATA
+  );
+});
+
+test("CRITICAL: Assessment 1 valid and Assessment 2 failed preserves Assessment 1 and marks status PARTIAL", () => {
+  let session = createSession();
+
+  // 1. Shoulder completes validly
+  const shoulderResult = measuredResult("shoulder", {
+    valid: true,
+    measurements: { left: { finalElevationDeg: 140 }, right: { finalElevationDeg: 142 } },
+    quality: { fps: 30, usableFrameRatio: 0.95 },
+  });
+  session = withTestResult(session, "shoulder", shoulderResult);
+
+  assert.equal(session.tests.shoulder.status, TEST_STATUS.COMPLETED);
+  assert.equal(session.summary.status, ASSESSMENT_SUMMARY_STATUS.PARTIAL);
+  assert.equal(session.summary.testsCompleted, 1);
+
+  // 2. FTSST fails (invalid attempt)
+  const ftsstResult = measuredResult("ftsst", {
+    valid: false,
+    measurements: null,
+    quality: { fps: 28, usableFrameRatio: 0.4 },
+    invalidReasons: [REASON.INSUFFICIENT_REPETITIONS],
+  });
+  session = withTestResult(session, "ftsst", ftsstResult);
+
+  // Assert Shoulder remains VALID and untouched
+  assert.equal(session.tests.shoulder.status, TEST_STATUS.COMPLETED);
+  assert.equal(session.tests.shoulder.measurements.left.finalElevationDeg, 140);
+
+  // Assert FTSST is recorded as INVALID
+  assert.equal(session.tests.ftsst.status, TEST_STATUS.INVALID);
+
+  // Assert Summary is PARTIAL, NOT wiped or set to NO DATA
+  assert.equal(session.summary.status, ASSESSMENT_SUMMARY_STATUS.PARTIAL);
+  assert.equal(session.summary.testsCompleted, 1);
+  assert.equal(session.summary.testsInvalid, 1);
+  assert.equal(session.summary.hasAnyUsableResult, true);
+});
+

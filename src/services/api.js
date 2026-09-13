@@ -1,34 +1,18 @@
 /**
  * Shared API configuration and resilient fetcher for MoveWell AI.
  *
- * Automatically handles port discovery and failover between port 8000
- * (standard FastAPI/Uvicorn default) and port 8100 (alternative port).
- * If a network connection error occurs on one port, it seamlessly falls back
- * to the other port and caches the working port for the session,
- * completely eliminating "Failed to fetch / ERR_CONNECTION_REFUSED" errors.
+ * Local development uses the MoveWell backend on port 8100.
  */
 
 const envUrl =
   typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_URL
     ? import.meta.env.VITE_API_URL
-    : "http://127.0.0.1:8000";
+    : "http://127.0.0.1:8100";
 
 let cachedBaseUrl = null;
 
 export function getApiUrl() {
   if (cachedBaseUrl) return cachedBaseUrl;
-
-  try {
-    if (typeof sessionStorage !== "undefined") {
-      const stored = sessionStorage.getItem("movewell_api_url");
-      if (stored) {
-        cachedBaseUrl = stored;
-        return stored;
-      }
-    }
-  } catch {
-    // Ignore storage errors (sandboxed iframes / private mode)
-  }
 
   return envUrl;
 }
@@ -45,32 +29,51 @@ export function setWorkingApiUrl(url) {
 }
 
 export function getAlternateUrl(urlString) {
-  if (!urlString || typeof urlString !== "string") return null;
-
-  if (urlString.includes(":8100")) {
-    return urlString.replace(":8100", ":8000");
-  }
-  if (urlString.includes(":8000")) {
-    return urlString.replace(":8000", ":8100");
-  }
+  // There is one local backend endpoint; do not silently retry port 8000.
   return null;
 }
 
+// Default budget for the small, database-backed endpoints. It is deliberately
+// short so a dead backend surfaces quickly instead of hanging a screen.
+export const DEFAULT_TIMEOUT_MS = 2500;
+
+// The orchestrator-backed plan run is not one of those endpoints: it calls the
+// AI provider for every specialist the server decides is required, and the
+// backend allows AI_REQUEST_TIMEOUT_SECONDS (90s) per call. Aborting it after
+// the default budget cancelled every real plan run before it could return.
+export const WORKFLOW_RUN_TIMEOUT_MS = 180000;
+
+function withTimeout(init, timeoutMs) {
+  if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
+    const timeoutSignal = AbortSignal.timeout(timeoutMs);
+    if (!init?.signal) {
+      return { ...init, signal: timeoutSignal };
+    }
+    if (typeof AbortSignal.any === "function") {
+      return { ...init, signal: AbortSignal.any([init.signal, timeoutSignal]) };
+    }
+  }
+  return init;
+}
+
 /**
- * Resilient fetch wrapper with automatic port failover between 8000 and 8100.
+ * Fetch wrapper for the configured backend endpoint.
+ *
+ * `timeoutMs` overrides DEFAULT_TIMEOUT_MS for the slow endpoints (see
+ * WORKFLOW_RUN_TIMEOUT_MS).
  */
-export async function apiFetch(input, init) {
+export async function apiFetch(input, init, timeoutMs = DEFAULT_TIMEOUT_MS) {
   const url = typeof input === "string" ? input : input?.url;
 
   try {
-    return await fetch(input, init);
+    return await fetch(input, withTimeout(init, timeoutMs));
   } catch (err) {
     const altUrl = getAlternateUrl(url);
     if (altUrl) {
       try {
         const altInput =
           typeof input === "string" ? altUrl : new Request(altUrl, init);
-        const res = await fetch(altInput, init);
+        const res = await fetch(altInput, withTimeout(init, timeoutMs));
 
         // Record successful port failover
         const currentBase = getApiUrl();

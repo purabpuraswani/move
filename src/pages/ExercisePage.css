@@ -294,3 +294,111 @@
   font-weight: bold;
   color: var(--blue, #3b82f6);
 }
+
+.exercise-results-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.exercise-result-tile {
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: var(--radius-sm, 8px);
+  padding: 12px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.result-tile-val {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--dark, #1f2937);
+}
+
+.result-tile-val--status {
+  font-size: 15px;
+  color: var(--green, #10b981);
+}
+
+.result-tile-lbl {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted, #6b7280);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.exercise-observation-card {
+  margin: 16px 0;
+  padding: 16px 18px;
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 12px;
+  text-align: left;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.exercise-observation-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.exercise-observation-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  background: #f1f5f9;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted, #64748b);
+}
+
+.exercise-observation-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--dark, #1e293b);
+}
+
+.exercise-observation-body {
+  margin: 0 0 12px 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: #334155;
+}
+
+.exercise-coach-feedback {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--blue-light, #eff6ff);
+  border-radius: 8px;
+  border-left: 3px solid var(--blue, #3b82f6);
+}
+
+.exercise-coach-badge {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--blue, #2563eb);
+  margin-top: 1px;
+}
+
+.exercise-coach-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #1e3a8a;
+}

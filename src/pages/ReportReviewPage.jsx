@@ -500,6 +500,23 @@ function ReportReviewPage() {
         >
           All reports
         </button>
+        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          <button
+            type="button"
+            className="assess-btn assess-btn--quiet"
+            onClick={() => navigate("/reports")}
+          >
+            ← Back to reports
+          </button>
+          <button
+            type="button"
+            className="assess-btn assess-btn--quiet"
+            onClick={() => navigate("/dashboard")}
+            aria-label="Back to Dashboard"
+          >
+            ← Dashboard
+          </button>
+        </div>
       </header>
 
       <main className="reports-main">

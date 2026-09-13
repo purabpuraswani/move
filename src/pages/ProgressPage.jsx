@@ -18,12 +18,13 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 
 import { getToken } from "../services/auth";
 import { fetchExerciseResults } from "../services/exerciseResults";
 import { fetchFoodLog } from "../services/foodLog";
 import { fetchLatestWorkflow, hasAnyPlan, runWorkflow } from "../services/workflow";
+import AppNavigation from "../components/AppNavigation.jsx";
 
 import "./ProgressPage.css";
 
@@ -167,7 +168,18 @@ function ProgressPage() {
 
   return (
     <div className="progress-page">
+      <AppNavigation backTo="/dashboard" backLabel="← Dashboard" />
       <main className="progress-main">
+        <div className="progress-breadcrumb">
+          <Link
+            to="/dashboard"
+            className="page-back-link"
+            aria-label="Back to Dashboard"
+          >
+            ← Dashboard
+          </Link>
+        </div>
+
         <div className="progress-intro">
           <span className="progress-eyebrow">Progress</span>
           <h1 className="progress-title">How things are going</h1>
@@ -260,6 +272,14 @@ function ProgressPage() {
                 onClick={() => navigate("/plan")}
               >
                 Back to your plan
+              </button>
+
+              <button
+                type="button"
+                className="progress-button progress-button--quiet"
+                onClick={() => navigate("/dashboard")}
+              >
+                ← Dashboard
               </button>
             </div>
           </>

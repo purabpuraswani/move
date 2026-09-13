@@ -163,6 +163,107 @@ def build_user_state_for_user(user_id: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
+def _is_mcp_enabled() -> bool:
+    """Check whether external MCP tool servers are explicitly configured."""
+    return os.getenv("USE_MCP", "").lower() in ("true", "1", "yes")
+
+
+def _build_physio_client(*, workflow_id: str, request_id: str):
+    if _is_mcp_enabled() or os.getenv("PHYSIO_MCP_URL"):
+        url = os.getenv("PHYSIO_MCP_URL", PHYSIO_MCP_URL)
+        try:
+            from physio_agent.mcp_client import McpExerciseToolClient
+
+            client = McpExerciseToolClient(
+                server_url=url, workflow_id=workflow_id, request_id=request_id
+            )
+            logger.info("Workflow tools: using MCP exercise client (%s)", url)
+            return client
+        except (ImportError, Exception) as exc:
+            logger.info(
+                "Workflow tools: MCP exercise client unavailable (%s), using in-process exercise client",
+                exc,
+            )
+    else:
+        logger.info("Workflow tools: MCP unavailable, using in-process exercise client")
+
+    from physio_agent.tool_client import InProcessExerciseToolClient
+
+    return InProcessExerciseToolClient(workflow_id=workflow_id, request_id=request_id)
+
+
+def _build_behaviour_client(*, workflow_id: str, request_id: str):
+    if _is_mcp_enabled() or os.getenv("BEHAVIOUR_MCP_URL"):
+        url = os.getenv("BEHAVIOUR_MCP_URL", BEHAVIOUR_MCP_URL)
+        try:
+            from behaviour_agent.mcp_client import McpBehaviourToolClient
+
+            client = McpBehaviourToolClient(
+                server_url=url, workflow_id=workflow_id, request_id=request_id
+            )
+            logger.info("Workflow tools: using MCP behaviour client (%s)", url)
+            return client
+        except (ImportError, Exception) as exc:
+            logger.info(
+                "Workflow tools: MCP behaviour client unavailable (%s), using in-process behaviour client",
+                exc,
+            )
+    else:
+        logger.info("Workflow tools: MCP unavailable, using in-process behaviour client")
+
+    from behaviour_agent.tool_client import InProcessBehaviourToolClient
+
+    return InProcessBehaviourToolClient(workflow_id=workflow_id, request_id=request_id)
+
+
+def _build_nutrition_client(*, workflow_id: str, request_id: str):
+    if _is_mcp_enabled() or os.getenv("NUTRITION_MCP_URL"):
+        url = os.getenv("NUTRITION_MCP_URL", NUTRITION_MCP_URL)
+        try:
+            from nutrition_agent.mcp_client import McpNutritionToolClient
+
+            client = McpNutritionToolClient(
+                server_url=url, workflow_id=workflow_id, request_id=request_id
+            )
+            logger.info("Workflow tools: using MCP nutrition client (%s)", url)
+            return client
+        except (ImportError, Exception) as exc:
+            logger.info(
+                "Workflow tools: MCP nutrition client unavailable (%s), using in-process nutrition client",
+                exc,
+            )
+    else:
+        logger.info("Workflow tools: MCP unavailable, using in-process nutrition client")
+
+    from nutrition_agent.tool_client import InProcessNutritionToolClient
+
+    return InProcessNutritionToolClient(workflow_id=workflow_id, request_id=request_id)
+
+
+def _build_progress_client(*, workflow_id: str, request_id: str):
+    if _is_mcp_enabled() or os.getenv("PROGRESS_MCP_URL"):
+        url = os.getenv("PROGRESS_MCP_URL", PROGRESS_MCP_URL)
+        try:
+            from progress_agent.mcp_client import McpProgressToolClient
+
+            client = McpProgressToolClient(
+                server_url=url, workflow_id=workflow_id, request_id=request_id
+            )
+            logger.info("Workflow tools: using MCP progress client (%s)", url)
+            return client
+        except (ImportError, Exception) as exc:
+            logger.info(
+                "Workflow tools: MCP progress client unavailable (%s), using in-process progress client",
+                exc,
+            )
+    else:
+        logger.info("Workflow tools: MCP unavailable, using in-process progress client")
+
+    from progress_agent.tool_client import InProcessProgressToolClient
+
+    return InProcessProgressToolClient(workflow_id=workflow_id, request_id=request_id)
+
+
 def _build_tool_clients(
     *,
     workflow_id: str,
@@ -172,41 +273,32 @@ def _build_tool_clients(
     need_nutrition: bool,
     need_progress: bool,
 ) -> dict:
-    """Construct the real Mcp*ToolClient(s) this cycle actually needs.
+    """Construct the tool client(s) this cycle actually needs.
 
-    Raises ImportError, uncaught, if the `mcp` package is not installed —
-    the caller is responsible for turning that into a 503, never a stack
-    trace surfaced to the end user.
+    Uses real MCP tool clients when MCP is configured and available;
+    falls back cleanly to native in-process tool clients so the workflow
+    runs reliably in environments without external MCP daemons.
     """
-
     clients = {}
 
     if need_physio:
-        from physio_agent.mcp_client import McpExerciseToolClient
-
-        clients["tool_client"] = McpExerciseToolClient(
-            server_url=PHYSIO_MCP_URL, workflow_id=workflow_id, request_id=request_id
+        clients["tool_client"] = _build_physio_client(
+            workflow_id=workflow_id, request_id=request_id
         )
 
     if need_behaviour:
-        from behaviour_agent.mcp_client import McpBehaviourToolClient
-
-        clients["behaviour_tool_client"] = McpBehaviourToolClient(
-            server_url=BEHAVIOUR_MCP_URL, workflow_id=workflow_id, request_id=request_id
+        clients["behaviour_tool_client"] = _build_behaviour_client(
+            workflow_id=workflow_id, request_id=request_id
         )
 
     if need_nutrition:
-        from nutrition_agent.mcp_client import McpNutritionToolClient
-
-        clients["nutrition_tool_client"] = McpNutritionToolClient(
-            server_url=NUTRITION_MCP_URL, workflow_id=workflow_id, request_id=request_id
+        clients["nutrition_tool_client"] = _build_nutrition_client(
+            workflow_id=workflow_id, request_id=request_id
         )
 
     if need_progress:
-        from progress_agent.mcp_client import McpProgressToolClient
-
-        clients["progress_tool_client"] = McpProgressToolClient(
-            server_url=PROGRESS_MCP_URL, workflow_id=workflow_id, request_id=request_id
+        clients["progress_tool_client"] = _build_progress_client(
+            workflow_id=workflow_id, request_id=request_id
         )
 
     return clients
@@ -391,12 +483,11 @@ def run_user_workflow(
             need_nutrition=need_nutrition,
             need_progress=need_progress,
         )
-    except ImportError as error:
-        # Never a stack trace, never the word "mcp"/"ImportError" to the
-        # end user — the real technical detail goes to the server log only.
+    except (ImportError, Exception) as error:
+        # Never a stack trace to the end user — the real technical detail
+        # goes to the server log only.
         logger.error(
-            "Could not construct an Mcp*ToolClient for user %s (the 'mcp' "
-            "package is likely not installed in this environment): %s",
+            "Could not construct tool clients for user %s: %s",
             user_id,
             error,
         )
@@ -452,6 +543,7 @@ def run_user_workflow(
     return serialise_workflow_state(
         updated_user_state,
         safety_status=safety_result["status"] if safety_result else None,
+        safety_result=safety_result,
     )
 
 
@@ -469,6 +561,27 @@ def read_latest_workflow_state(current_user: dict = Depends(get_current_user)):
         raise _database_error() from None
 
     if document is None:
+        try:
+            assessment_doc = latest_assessment(user_id)
+        except PyMongoError:
+            raise _database_error() from None
+
+        if assessment_doc is not None:
+            user_state = build_user_state_for_user(user_id)
+            serialized = serialise_workflow_state(user_state)
+            serialized["plan_state"] = {
+                "state": "NEVER_RUN",
+                "reason": "Your movement assessment is saved and ready.",
+                "missing": [],
+                "next_action": None,
+            }
+            serialized["plan_status"] = "NEVER_RUN"
+            return {
+                "available": False,
+                **serialise_workflow_state(user_state),
+                **serialized,
+            }
+
         return never_run_response()
 
     return {
@@ -478,6 +591,7 @@ def read_latest_workflow_state(current_user: dict = Depends(get_current_user)):
             safety_status=(document.get("last_safety_result") or {}).get("status")
             if document.get("last_safety_result")
             else None,
+            safety_result=document.get("last_safety_result"),
         ),
     }
 

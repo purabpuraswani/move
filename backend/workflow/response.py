@@ -22,6 +22,10 @@ from nutrition_library.catalog import (
     NutritionTopicNotFoundError,
     get_nutrition_topic_details,
 )
+from orchestrator.decision import (
+    decide_exercise_activity_required,
+    decide_recovery_required,
+)
 
 # safety/schema.py's SAFETY_STATUSES, translated into a plain-language
 # sentence a non-technical user can act on. These are the only five values
@@ -807,18 +811,52 @@ def specialists(user_state: dict) -> list:
     return [section for section in sections if section is not None]
 
 
-def serialise_workflow_state(user_state: dict, safety_status=None) -> dict:
-    """The one, clean, user-facing shape this API ever returns for a
-    workflow run or a persisted User State: which plans exist now (by
-    name, never by raw agent/tool-call metadata), a plain-language safety
-    status, and which of the three plan states the caller is in.
+_ASSESSMENT_TEST_IDS = ("shoulder", "ftsst", "balance")
 
-    `safety_status` is the Safety Result's `status` string (or None) — the
-    caller passes it in rather than this function reaching into a
-    `safety_result` dict itself, since a persisted-and-reloaded User State
-    (GET /api/workflow/latest) and a fresh run_workflow() result carry the
-    safety status at different places.
-    """
+
+def _physical_assessment_summary(user_state: dict) -> dict:
+    section = user_state.get("physical_assessment") or {}
+    tests = (section.get("data") or {}).get("tests") or {}
+
+    completed_tests = [
+        t for t in _ASSESSMENT_TEST_IDS
+        if (tests.get(t) or {}).get("status") == "completed"
+    ]
+    invalid_tests = [
+        t for t in _ASSESSMENT_TEST_IDS
+        if (tests.get(t) or {}).get("status") == "invalid"
+    ]
+    remaining_tests = [
+        t for t in _ASSESSMENT_TEST_IDS
+        if t not in completed_tests
+    ]
+
+    if len(completed_tests) == len(_ASSESSMENT_TEST_IDS):
+        summary_status = "COMPLETE"
+    elif len(completed_tests) > 0:
+        summary_status = "PARTIAL"
+    elif len(invalid_tests) > 0:
+        summary_status = "INSUFFICIENT_DATA"
+    else:
+        summary_status = "NONE_COMPLETED"
+
+    return {
+        "status": summary_status,
+        "tests_completed": len(completed_tests),
+        "tests_total": len(_ASSESSMENT_TEST_IDS),
+        "completed_tests": completed_tests,
+        "remaining_tests": remaining_tests,
+        "tests": {
+            t: (tests.get(t) or {}).get("status", "not_started")
+            for t in _ASSESSMENT_TEST_IDS
+        },
+    }
+
+
+def serialise_workflow_state(
+    user_state: dict, safety_status=None, safety_result=None
+) -> dict:
+    """Build the user-facing workflow response from persisted user state."""
 
     exercise_plan = _exercise_plan_summary(user_state)
     nutrition_plan = _nutrition_plan_summary(user_state)
@@ -828,6 +866,7 @@ def serialise_workflow_state(user_state: dict, safety_status=None) -> dict:
         summary["available"]
         for summary in (exercise_plan, nutrition_plan, behaviour_plan)
     )
+    current_plan_state = plan_state(user_state, plans_available=plans_available)
 
     return {
         "generated_at": user_state.get("generatedAt"),
@@ -835,13 +874,359 @@ def serialise_workflow_state(user_state: dict, safety_status=None) -> dict:
         "nutrition_plan": nutrition_plan,
         "behaviour_plan": behaviour_plan,
         "safety_status": safety_status_message(safety_status),
-        "plan_state": plan_state(user_state, plans_available=plans_available),
-        # The specialist view: what each involved specialist found, decided,
-        # and is watching. Assembled from persisted agent output so the UI
-        # explains the plan with the agent's own reasoning rather than a
-        # sentence written in React.
+        "plan_state": current_plan_state,
+        "plan_status": current_plan_state["state"],
         "specialists": specialists(user_state),
+        "specialists_team": build_specialists_team(
+            user_state, safety_status=safety_status, safety_result=safety_result
+        ),
+        "assessment_summary": _physical_assessment_summary(user_state),
     }
+
+
+def build_specialists_team(user_state: dict = None, safety_status=None, safety_result=None) -> list:
+    user_state = user_state or {}
+    need_profile = _need_profile(user_state) or {}
+    exercise_plan = _exercise_plan_summary(user_state)
+    nutrition_plan = _nutrition_plan_summary(user_state)
+    behaviour_plan = _behaviour_plan_summary(user_state)
+
+    # 1. Exercise & Physical Activity
+    exercise_dec = decide_exercise_activity_required(user_state, need_profile)
+    is_exercise_active = exercise_dec.get("exercise_activity_required", False)
+    exercise_evaluated = exercise_dec.get("evaluated", False)
+    exercise_recs = []
+    if is_exercise_active:
+        exercise_recs = [
+            {
+                "id": "daily_walking_routine",
+                "title": "Daily Walking Routine",
+                "action": "Build up to 6,000–7,500 brisk steps a day, divided into 15–20 minute walks.",
+                "why": "Supports aerobic capacity and baseline metabolic activity without joint strain.",
+            },
+            {
+                "id": "sedentary_interruption",
+                "title": "Active Movement Breaks",
+                "action": "Stand up and walk or gently stretch for 2 minutes every hour of seated work.",
+                "why": "Interrupts prolonged hip flexion and reduces postural fatigue.",
+            },
+        ]
+
+    exercise_status = (
+        "ACTIVE"
+        if is_exercise_active
+        else ("EVALUATED_NOT_REQUIRED" if exercise_evaluated else "NOT_ASSESSED")
+    )
+    exercise_label = (
+        "Active recommendation included"
+        if is_exercise_active
+        else (
+            "Reviewed — no specific intervention required"
+            if exercise_evaluated
+            else "Not yet evaluated"
+        )
+    )
+
+    # 2. Physiotherapy & Movement
+    is_physio_active = exercise_plan.get("available", False)
+    has_physio_eval = bool(
+        need_profile.get("mobility_need")
+        or need_profile.get("stability_need")
+        or need_profile.get("functional_movement_need")
+    )
+    physio_status = (
+        "ACTIVE"
+        if is_physio_active
+        else ("EVALUATED_NOT_REQUIRED" if has_physio_eval else "NOT_ASSESSED")
+    )
+    physio_label = (
+        "Active recommendation included"
+        if is_physio_active
+        else (
+            "Reviewed — no specific intervention required"
+            if has_physio_eval
+            else "Not yet evaluated"
+        )
+    )
+    physio_reason = (
+        exercise_plan.get("goal")
+        or "Tailored movement exercises matched to your baseline movement assessment."
+        if is_physio_active
+        else (
+            "Movement assessment tests showed capability within baseline norms; no corrective exercises needed."
+            if has_physio_eval
+            else "Complete the baseline movement check (shoulder raise, sit-to-stand, balance) to evaluate."
+        )
+    )
+    physio_recs = (
+        [
+            {
+                "id": item.get("id"),
+                "title": item.get("name"),
+                "action": f"Perform {item.get('name')} as part of your movement routine.",
+                "why": "Targets functional mobility and stability identified in assessment.",
+            }
+            for item in exercise_plan.get("exercise_items", [])
+        ]
+        if is_physio_active
+        else []
+    )
+
+    # 3. Nutrition & Lifestyle
+    is_nutrition_active = nutrition_plan.get("available", False)
+    has_nutrition_eval = bool(need_profile.get("nutrition_need"))
+    nutrition_status = (
+        "ACTIVE"
+        if is_nutrition_active
+        else ("EVALUATED_NOT_REQUIRED" if has_nutrition_eval else "NOT_ASSESSED")
+    )
+    nutrition_label = (
+        "Active recommendation included"
+        if is_nutrition_active
+        else (
+            "Reviewed — no specific intervention required"
+            if has_nutrition_eval
+            else "Not yet evaluated"
+        )
+    )
+    nutrition_reason = (
+        nutrition_plan.get("goal")
+        or "Nutritional guidance tailored to your recorded eating patterns and hydration."
+        if is_nutrition_active
+        else (
+            "Reported meal patterns and dietary variety are adequate; no active nutrition intervention required."
+            if has_nutrition_eval
+            else "Answer the lifestyle questionnaire to evaluate everyday nutrition habits."
+        )
+    )
+    nutrition_recs = (
+        [
+            {
+                "id": f"nutrition_{i}",
+                "title": goal,
+                "action": f"Focus on {goal.lower()} in your daily food routine.",
+                "why": "Provides evidence-based dietary balance calibrated with your health profile.",
+            }
+            for i, goal in enumerate(nutrition_plan.get("goals", []))
+        ]
+        if is_nutrition_active
+        else []
+    )
+
+    # 4. Recovery & Care
+    recovery_dec = decide_recovery_required(user_state)
+    is_recovery_active = recovery_dec.get("recovery_required", False)
+    recovery_evaluated = recovery_dec.get("evaluated", False)
+    recovery_recs = []
+    if is_recovery_active:
+        recovery_recs = [
+            {
+                "id": "sleep_rhythm",
+                "title": "Sleep Rhythm & Consistency",
+                "action": "Maintain a regular 7–8 hour sleep schedule with a 30-minute wind-down routine.",
+                "why": "Restorative sleep is essential for muscle protein synthesis and neural motor recovery.",
+            },
+            {
+                "id": "recovery_intervals",
+                "title": "Movement Recovery Spacing",
+                "action": "Allow at least 24 hours between higher-demand sit-to-stand and strength sets.",
+                "why": "Enables musculoskeletal tissue recovery and prevents cumulative fatigue.",
+            },
+        ]
+
+    recovery_status = (
+        "ACTIVE"
+        if is_recovery_active
+        else ("EVALUATED_NOT_REQUIRED" if recovery_evaluated else "NOT_ASSESSED")
+    )
+    recovery_label = (
+        "Active recommendation included"
+        if is_recovery_active
+        else (
+            "Reviewed — no specific intervention required"
+            if recovery_evaluated
+            else "Not yet evaluated"
+        )
+    )
+
+    # 5. Behaviour & Adherence
+    is_behaviour_active = behaviour_plan.get("available", False)
+    has_behaviour_eval = bool(need_profile.get("behaviour_need"))
+    behaviour_status = (
+        "ACTIVE"
+        if is_behaviour_active
+        else ("EVALUATED_NOT_REQUIRED" if has_behaviour_eval else "NOT_ASSESSED")
+    )
+    behaviour_label = (
+        "Active recommendation included"
+        if is_behaviour_active
+        else (
+            "Reviewed — no specific intervention required"
+            if has_behaviour_eval
+            else "Not yet evaluated"
+        )
+    )
+    behaviour_reason = (
+        behaviour_plan.get("goal")
+        or "Adaptive habit routines designed to fit into your existing daily schedule."
+        if is_behaviour_active
+        else (
+            "Daily activity pacing and routine adherence meet standard guidelines; no habit intervention needed."
+            if has_behaviour_eval
+            else "Answer the lifestyle questionnaire to evaluate behavioural habits."
+        )
+    )
+    behaviour_recs = (
+        [
+            {
+                "id": f"behaviour_{i}",
+                "title": goal,
+                "action": f"Practice {goal.lower()} consistently.",
+                "why": "Anchoring micro-habits builds durable adherence over time.",
+            }
+            for i, goal in enumerate(behaviour_plan.get("goals", []))
+        ]
+        if is_behaviour_active
+        else []
+    )
+
+    # 6. Safety & Clinical Escalation
+    raw_status = safety_status or (safety_result or {}).get("status")
+    has_safety_eval = raw_status is not None
+    safety_code = raw_status or "NOT_ASSESSED"
+    safety_label = (
+        "Safety review completed — CLEAR"
+        if safety_code == "ALLOW"
+        else (
+            "Recommendation modified for safety"
+            if safety_code == "MODIFY"
+            else (
+                "Recommendation paused for safety"
+                if safety_code == "PAUSE"
+                else (
+                    "Clinical escalation — Referral recommended"
+                    if safety_code == "REFER"
+                    else "Not yet evaluated"
+                )
+            )
+        )
+    )
+    safety_reason = (
+        (safety_result or {}).get("reason")
+        or safety_status_message(safety_code)
+        if has_safety_eval
+        else "Safety Gate screens all recommendations before plans are approved."
+    )
+
+    team = {
+        "exercise": {
+            "id": "exercise_activity",
+            "alias": "exercise",
+            "name": "Exercise & Physical Activity",
+            "title": "Exercise & Physical Activity",
+            "subtitle": "Build healthier movement and activity routines",
+            "icon": "🏃",
+            "evaluated": exercise_evaluated,
+            "active": is_exercise_active,
+            "status": exercise_status,
+            "status_label": exercise_label,
+            "focus": "Daily walking, step volume & sedentary reduction",
+            "reason": exercise_dec.get("reason"),
+            "evidence": exercise_dec.get("evidence", []),
+            "recommendations": exercise_recs,
+        },
+        "physio": {
+            "id": "physio",
+            "alias": "physio",
+            "name": "Physiotherapy & Movement",
+            "title": "Physiotherapy & Movement",
+            "subtitle": "Exercises matched to your movement assessment",
+            "icon": "🧑‍⚕️",
+            "evaluated": has_physio_eval,
+            "active": is_physio_active,
+            "status": physio_status,
+            "status_label": physio_label,
+            "focus": "Upper-body mobility, balance & functional strength",
+            "reason": physio_reason,
+            "evidence": (need_profile.get("overallSummary") or {}).get("headline")
+            or "Baseline movement check metrics (shoulder elevation, sit-to-stand timing, single-leg stance).",
+            "recommendations": physio_recs,
+            "evidence": [
+                (need_profile.get("overallSummary") or {}).get("headline")
+                or "Baseline movement check metrics (shoulder elevation, sit-to-stand timing, single-leg stance)."
+            ],
+            "recommendations": [],
+        },
+        "nutrition": {
+            "id": "nutrition",
+            "alias": "nutrition",
+            "name": "Nutrition & Lifestyle",
+            "title": "Nutrition & Lifestyle",
+            "subtitle": "Everyday nutrition and lifestyle support",
+            "icon": "🍎",
+            "evaluated": has_nutrition_eval,
+            "active": is_nutrition_active,
+            "status": nutrition_status,
+            "status_label": nutrition_label,
+            "focus": "Everyday dietary patterns, hydration & meal regularity",
+            "reason": nutrition_reason,
+            "evidence": (need_profile.get("nutrition_need") or {}).get("evidence", []),
+            "recommendations": nutrition_recs,
+        },
+        "recovery": {
+            "id": "recovery",
+            "alias": "recovery",
+            "name": "Recovery & Care",
+            "title": "Recovery & Care",
+            "subtitle": "Support rest, recovery, and sustainable routines",
+            "icon": "🌙",
+            "evaluated": recovery_evaluated,
+            "active": is_recovery_active,
+            "status": recovery_status,
+            "status_label": recovery_label,
+            "focus": "Restorative sleep, movement spacing & workload pacing",
+            "reason": recovery_dec.get("reason"),
+            "evidence": recovery_dec.get("evidence", []),
+            "recommendations": recovery_recs,
+        },
+        "behaviour": {
+            "id": "behaviour",
+            "alias": "behaviour",
+            "name": "Behaviour & Adherence",
+            "title": "Behaviour & Adherence",
+            "subtitle": "Build habits that are easier to maintain",
+            "icon": "🧠",
+            "evaluated": has_behaviour_eval,
+            "active": is_behaviour_active,
+            "status": behaviour_status,
+            "status_label": behaviour_label,
+            "focus": "Micro-habit formation, movement breaks & routine consistency",
+            "reason": behaviour_reason,
+            "evidence": (need_profile.get("behaviour_need") or {}).get("evidence", []),
+            "recommendations": behaviour_recs,
+        },
+        "safety": {
+            "id": "safety",
+            "alias": "safety",
+            "name": "Safety & Clinical Escalation",
+            "title": "Safety & Clinical Escalation",
+            "subtitle": "Review recommendations for safety and escalation needs",
+            "icon": "🛡️",
+            "evaluated": has_safety_eval,
+            "active": True,
+            "status": safety_code,
+            "status_label": safety_label,
+            "focus": "Clinical screening, contraindications & exercise boundary safety",
+            "reason": safety_reason,
+            "evidence": ["Screened against self-reported conditions, confirmed medical reports, and candidate exercise intensity."],
+            "flags": (safety_result or {}).get("flags", []),
+            "actions": (safety_result or {}).get("actions", []),
+            "requires_referral": (safety_result or {}).get("requires_referral", False),
+            "recommendations": [],
+        },
+    }
+
+    return list(team.values())
 
 
 def never_run_response() -> dict:
@@ -861,5 +1246,14 @@ def never_run_response() -> dict:
             "reason": NEVER_RUN_REASON,
             "missing": [],
             "next_action": NEXT_ACTION_ASSESSMENT,
+        },
+        "specialists_team": build_specialists_team({}, safety_status=None),
+        "assessment_summary": {
+            "status": "NONE_COMPLETED",
+            "tests_completed": 0,
+            "tests_total": len(_ASSESSMENT_TEST_IDS),
+            "completed_tests": [],
+            "remaining_tests": list(_ASSESSMENT_TEST_IDS),
+            "tests": {t: "not_started" for t in _ASSESSMENT_TEST_IDS},
         },
     }

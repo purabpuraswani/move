@@ -20,6 +20,36 @@
   padding: 38px 24px 90px;
 }
 
+.progress-breadcrumb {
+  margin-bottom: 20px;
+}
+
+.page-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm, 10px);
+  background: var(--green-light);
+  text-decoration: none;
+  transition:
+    background 0.2s ease,
+    transform 0.2s ease;
+}
+
+.page-back-link:hover {
+  background: #cce2d3;
+  transform: translateX(-2px);
+}
+
+.page-back-link:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
 .progress-intro {
   margin-bottom: 26px;
 }

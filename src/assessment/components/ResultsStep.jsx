@@ -40,13 +40,13 @@ export default function ResultsStep({ session, onSave, saveState, saveError, onE
             disabled={saveState === "saving"}
             onClick={onSave}
           >
-            {saveState === "saving" ? "Saving…" : "Save these results"}
+            {saveState === "saving" ? "Saving…" : saveError ? "Retry saving" : "Save these results"}
           </button>
         )}
 
         {saveState === "saved" && (
-          <>
-            <span className="assess-saved">Saved to your account</span>
+          <div className="assess-card__saved-group">
+            <span className="assess-saved">✓ Saved to your account</span>
             {onViewPlan && (
               <button
                 type="button"
@@ -56,7 +56,7 @@ export default function ResultsStep({ session, onSave, saveState, saveError, onE
                 See your personalized plan →
               </button>
             )}
-          </>
+          </div>
         )}
       </div>
     </div>

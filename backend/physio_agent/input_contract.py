@@ -162,9 +162,12 @@ def validate_physio_agent_input(payload) -> None:
     # raw pose/frame data may cross this boundary, however it got here.
     forbidden_substrings = ("keypoint", "landmark", "skeleton", "rawframe", "video", "image", "base64", "dataurl")
     serialised = str(payload).lower()
+    # "image_plane" is legitimate protocol definition metadata (e.g. camera_image_plane_projection,
+    # downward_vertical_image_plane) describing projection geometry, not raw image data.
+    sanitized = serialised.replace("image_plane", "").replace("camera_image", "")
 
     for term in forbidden_substrings:
-        if term in serialised:
+        if term in sanitized:
             _fail(
                 f"Physio Agent input appears to contain {term!r} — refusing "
                 "to build an input that might carry pose/frame data"

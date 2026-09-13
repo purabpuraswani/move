@@ -498,7 +498,11 @@ class WorkflowRouteImportClientBuildingTests(unittest.TestCase):
 
         with self.assertRaises(ImportError):
             with mock.patch.dict(
-                "sys.modules", {"physio_agent.mcp_client": None}
+                "sys.modules",
+                {
+                    "physio_agent.mcp_client": None,
+                    "physio_agent.tool_client": None,
+                },
             ):
                 workflow_route._build_tool_clients(
                     workflow_id="wf_test",

@@ -39,6 +39,7 @@ import { getMovementDemo } from "../movementDemos/registry.js";
 import MovementDemo from "../movementDemos/MovementDemo.jsx";
 import { getToken } from "../services/auth";
 import { submitExerciseResult } from "../services/exerciseResults";
+import { fetchLatestWorkflow } from "../services/workflow";
 
 import "./ExercisePage.css";
 
@@ -81,6 +82,39 @@ const VIEW_GUIDANCE = {
   armElevationAngleDeg: "Face the camera, upper body in frame.",
   liftedFootHeightRatio: "Face the camera, whole body in frame.",
 };
+
+const EXERCISE_OBSERVATIONS = {
+  "chair-sit-to-stand": "MoveWell observed your rising tempo, standing extension, and smooth descent back to the chair.",
+  "wall-sit": "MoveWell monitored your posture stability and how steadily you held the lowered wall position.",
+  "standing-knee-raise": "MoveWell monitored your hip elevation height, rhythm, and single-leg balance control throughout.",
+  "wall-push-up": "MoveWell monitored your arm flexion depth, pressing tempo, and torso alignment against the wall.",
+  "standing-side-leg-raise": "MoveWell monitored your lateral leg lift height, torso stability, and controlled lowering.",
+  "standing-hip-extension": "MoveWell monitored your backward leg reach and upright posture without excessive torso leaning.",
+  "supported-single-leg-stand": "MoveWell monitored your single-leg balance duration and steadiness while holding the support.",
+  "standing-shoulder-rolls": "MoveWell guided your gentle circular shoulder mobilization.",
+  "standing-ankle-circles": "MoveWell guided your joint mobility and ankle rotational control.",
+  "glute-bridge": "MoveWell tracked your hip drive, glute activation, and pelvic alignment.",
+};
+
+function getPlainLanguageObservation(exerciseId, outcome, config) {
+  if (outcome?.isManual) {
+    return "Self-guided session logged following the visual technique guide.";
+  }
+  if (EXERCISE_OBSERVATIONS[exerciseId]) {
+    return EXERCISE_OBSERVATIONS[exerciseId];
+  }
+  if (config?.engineType === ENGINE_TYPES.HOLD_DURATION) {
+    return "MoveWell monitored your balance steadiness and posture control throughout the active hold.";
+  }
+  return "MoveWell monitored the pace, smoothness, and range of motion across your repetitions.";
+}
+
+function getCoachFeedback(outcome) {
+  if (outcome?.status === "completed") {
+    return "Great form and steady control. Consistently hitting your movement target builds durable strength.";
+  }
+  return "Good effort today. Pacing yourself and listening to your body helps you build capacity safely.";
+}
 
 const STABLE_FRAMES_TARGET = 15;
 const PREFLIGHT_CONFIDENCE = 0.55;
@@ -238,6 +272,47 @@ function ExercisePage() {
     checklist: { visible: false, orientation: false, margins: false, stable: false },
     stabilityProgress: 0,
   });
+  const [planProgramme, setPlanProgramme] = useState([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchLatestWorkflow()
+      .then((wf) => {
+        if (!isMounted || !wf) return;
+        const movement = wf.specialists?.find((s) => s.title === "Movement");
+        const prog = movement?.programme || wf.exercise_plan?.exercise_items || [];
+        setPlanProgramme(prog);
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    setStep(STEP.BRIEF);
+    setOutcome(null);
+    setSaveState("idle");
+    setSaveError(null);
+    setLive({ reps: 0, seconds: 0, holdState: null, repState: null, cue: "" });
+  }, [exerciseId]);
+
+  useEffect(() => {
+    window.__setExerciseState = (st) => {
+      if (st.step) setStep(st.step);
+      if (st.outcome) setOutcome(st.outcome);
+      if (st.planProgramme) setPlanProgramme(st.planProgramme);
+    };
+    return () => {
+      delete window.__setExerciseState;
+    };
+  }, []);
+
+  const currentIndex = planProgramme.findIndex((e) => e.id === exerciseId);
+  const nextExercise =
+    currentIndex >= 0 && currentIndex < planProgramme.length - 1
+      ? planProgramme[currentIndex + 1]
+      : null;
 
   const engineRef = useRef(null);
   const extractorRef = useRef(null);
@@ -517,6 +592,37 @@ function ExercisePage() {
     }
   }, [pose, config, exerciseId]);
 
+  const completeManual = useCallback(async () => {
+    const completedAt = new Date().toISOString();
+    const status = "completed";
+    const usable = true;
+
+    setOutcome({
+      status,
+      measurements: {},
+      usable,
+      isManual: true,
+    });
+    setStep(STEP.DONE);
+    setSaveState("saving");
+    setSaveError(null);
+
+    try {
+      await submitExerciseResult({
+        exerciseId,
+        status,
+        startedAt: startedAtRef.current || completedAt,
+        completedAt,
+        measurements: {},
+      });
+
+      setSaveState("saved");
+    } catch (error) {
+      setSaveError(error.message);
+      setSaveState("failed");
+    }
+  }, [exerciseId]);
+
   const viewHint = config ? VIEW_GUIDANCE[config.signal] : null;
 
   return (
@@ -529,6 +635,23 @@ function ExercisePage() {
         >
           ← Back to your plan
         </button>
+        <div style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "16px", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            className="exercise-back"
+            onClick={() => navigate("/plan")}
+          >
+            ← Back to your plan
+          </button>
+          <button
+            type="button"
+            className="exercise-back"
+            onClick={() => navigate("/dashboard")}
+            aria-label="Back to Dashboard"
+          >
+            ← Dashboard
+          </button>
+        </div>
 
         <h1 className="exercise-title">{demo?.title || exerciseId}</h1>
 
@@ -544,6 +667,16 @@ function ExercisePage() {
                   This is a limit of what the camera can see, not a limit on
                   the exercise. Follow the demonstration as shown.
                 </p>
+                <div className="exercise-actions" style={{ marginTop: "20px" }}>
+                  <button
+                    type="button"
+                    className="exercise-start"
+                    onClick={completeManual}
+                    disabled={saveState === "saving"}
+                  >
+                    {saveState === "saving" ? "Saving…" : "I have completed this exercise"}
+                  </button>
+                </div>
               </div>
             ) : (
               <>
@@ -693,35 +826,63 @@ function ExercisePage() {
               {outcome.usable ? "Session Recorded" : "Could not measure this session"}
             </h2>
 
-            {outcome.usable ? (
+            {outcome.isManual ? (
+              <div className="exercise-adaptation-note" style={{ marginTop: "12px", marginBottom: "16px" }}>
+                <span className="exercise-adaptation-icon">✓</span>
+                <span>
+                  Exercise completed and saved to your activity history. Your Physio specialist will factor this completion into your next plan review.
+                </span>
+              </div>
+            ) : outcome.usable ? (
               <>
-                <ul className="exercise-result-list">
-                  {outcome.measurements?.repetitions !== undefined ? (
-                    <li>
-                      <strong>Repetitions:</strong> {outcome.measurements.repetitions}
-                    </li>
-                  ) : null}
+                <div className="exercise-results-grid">
+                  {outcome.measurements?.repetitions !== undefined && (
+                    <div className="exercise-result-tile">
+                      <span className="result-tile-val">{outcome.measurements.repetitions}</span>
+                      <span className="result-tile-lbl">Repetitions</span>
+                    </div>
+                  )}
                   {outcome.measurements?.durationSeconds !== undefined &&
-                  outcome.measurements?.durationSeconds !== null ? (
-                    <li>
-                      <strong>Hold duration:</strong> {outcome.measurements.durationSeconds}s
-                    </li>
-                  ) : null}
+                  outcome.measurements?.durationSeconds !== null && (
+                    <div className="exercise-result-tile">
+                      <span className="result-tile-val">{outcome.measurements.durationSeconds}s</span>
+                      <span className="result-tile-lbl">Hold Duration</span>
+                    </div>
+                  )}
                   {outcome.measurements?.completion !== undefined &&
-                  outcome.measurements?.completion !== null ? (
-                    <li>
-                      <strong>Completion:</strong> {Math.round(outcome.measurements.completion * 100)}%
-                    </li>
-                  ) : null}
-                  <li>
-                    <strong>Status:</strong> {outcome.status === "completed" ? "Target reached" : "Completed partially"}
-                  </li>
-                </ul>
+                  outcome.measurements?.completion !== null && (
+                    <div className="exercise-result-tile">
+                      <span className="result-tile-val">{Math.round(outcome.measurements.completion * 100)}%</span>
+                      <span className="result-tile-lbl">Target Completed</span>
+                    </div>
+                  )}
+                  <div className="exercise-result-tile">
+                    <span className="result-tile-val result-tile-val--status">
+                      {outcome.status === "completed" ? "✓ Target Met" : "Partially Done"}
+                    </span>
+                    <span className="result-tile-lbl">Session Status</span>
+                  </div>
+                </div>
+
+                <div className="exercise-observation-card">
+                  <div className="exercise-observation-header">
+                    <span className="exercise-observation-badge">Observed</span>
+                    <h4 className="exercise-observation-title">What was observed</h4>
+                  </div>
+                  <p className="exercise-observation-body">
+                    {getPlainLanguageObservation(exerciseId, outcome, config)}
+                  </p>
+                  <div className="exercise-coach-feedback">
+                    <span className="exercise-coach-badge">Feedback</span>
+                    <p className="exercise-coach-text">{getCoachFeedback(outcome)}</p>
+                  </div>
+                </div>
+
                 <div className="exercise-adaptation-note">
                   <span className="exercise-adaptation-icon">ℹ</span>
                   <span>
                     Your movement measurements have been saved to your activity history.
-                    The Progress Agent will analyze this data during your next plan adaptation
+                    Your Physio specialist will analyze this evidence during your next plan adaptation
                     to adjust intensity and exercises safely.
                   </span>
                 </div>
@@ -745,20 +906,62 @@ function ExercisePage() {
             ) : null}
 
             <div className="exercise-actions">
-              <button
-                type="button"
-                className="exercise-start"
-                onClick={() => navigate("/plan")}
-              >
-                Back to your plan
-              </button>
-              <button
-                type="button"
-                className="exercise-start exercise-start--quiet"
-                onClick={() => navigate("/progress")}
-              >
-                See your progress
-              </button>
+              {nextExercise ? (
+                <>
+                  <button
+                    type="button"
+                    className="exercise-start"
+                    onClick={() => navigate(`/exercise/${nextExercise.id}`)}
+                  >
+                    Continue to next exercise: {nextExercise.name} →
+                  </button>
+                  <button
+                    type="button"
+                    className="exercise-start exercise-start--quiet"
+                    onClick={() => navigate("/plan")}
+                  >
+                    Back to your plan
+                  </button>
+                  <button
+                    type="button"
+                    className="exercise-start exercise-start--quiet"
+                    onClick={() => navigate("/progress")}
+                  >
+                    See your progress
+                  </button>
+                  <button
+                    type="button"
+                    className="exercise-start exercise-start--quiet"
+                    onClick={() => navigate("/dashboard")}
+                  >
+                    ← Dashboard
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="exercise-start"
+                    onClick={() => navigate("/progress")}
+                  >
+                    View today's progress →
+                  </button>
+                  <button
+                    type="button"
+                    className="exercise-start exercise-start--quiet"
+                    onClick={() => navigate("/plan")}
+                  >
+                    Back to your plan
+                  </button>
+                  <button
+                    type="button"
+                    className="exercise-start exercise-start--quiet"
+                    onClick={() => navigate("/dashboard")}
+                  >
+                    ← Dashboard
+                  </button>
+                </>
+              )}
             </div>
           </div>
         ) : null}

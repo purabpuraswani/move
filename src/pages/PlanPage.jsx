@@ -28,18 +28,26 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 
 import { getToken } from "../services/auth";
+import { fetchLatestAssessment } from "../services/assessments";
 import {
   PLAN_STATES,
   fetchLatestWorkflow,
   planState,
   runWorkflow,
 } from "../services/workflow";
+import {
+  toArray,
+  safeDisplayValue,
+  normalizeRecommendation,
+  normalizeEvidence,
+} from "../services/specialistData.js";
 import FoodLogPanel from "../components/FoodLogPanel.jsx";
 import SpecialistPanel from "../components/SpecialistPanel.jsx";
 import BehaviourActionPanel from "../components/BehaviourActionPanel.jsx";
+import AppNavigation from "../components/AppNavigation.jsx";
 
 import "./PlanPage.css";
 
@@ -65,38 +73,44 @@ function formatDate(value) {
  * through.
  */
 function PlanSection({ title, blurb, plan, emptyHint, onOpenExercise = null }) {
+  const safeTitle = safeDisplayValue(title);
+  const safeBlurb = safeDisplayValue(blurb);
+
   if (!plan?.available) {
     return (
       <section className="plan-section plan-section--empty">
-        <h2 className="plan-section-title">{title}</h2>
-        <p className="plan-empty">{plan?.message || emptyHint}</p>
+        <h2 className="plan-section-title">{safeTitle}</h2>
+        <p className="plan-empty">{safeDisplayValue(plan?.message) || safeDisplayValue(emptyHint)}</p>
       </section>
     );
   }
 
-  const items = plan.exercises || plan.goals || [];
+  const items = toArray(plan.exercises || plan.goals);
+  const exerciseItems = toArray(plan.exercise_items);
   const created = formatDate(plan.created_at);
+  const safeGoal = safeDisplayValue(plan.goal);
+  const safeAdaptation = safeDisplayValue(plan.adaptation_reason);
 
   return (
     <section className="plan-section">
-      <h2 className="plan-section-title">{title}</h2>
-      {blurb ? <p className="plan-section-blurb">{blurb}</p> : null}
+      <h2 className="plan-section-title">{safeTitle}</h2>
+      {safeBlurb ? <p className="plan-section-blurb">{safeBlurb}</p> : null}
 
-      {plan.goal ? <p className="plan-goal">{plan.goal}</p> : null}
+      {safeGoal ? <p className="plan-goal">{safeGoal}</p> : null}
 
       {/* Exercises are actionable: each one opens the page that performs it
           with the camera. Nutrition and habit goals are not -- they are things
           to do rather than things to run, so they stay as plain text instead
           of pretending to be buttons. */}
-      {onOpenExercise && plan.exercise_items?.length ? (
+      {onOpenExercise && exerciseItems.length ? (
         <ul className="plan-items">
-          {plan.exercise_items.map((exercise) => (
-            <li key={exercise.id} className="plan-item plan-item--action">
-              <span>{exercise.name}</span>
+          {exerciseItems.map((exercise, idx) => (
+            <li key={exercise?.id || idx} className="plan-item plan-item--action">
+              <span>{safeDisplayValue(exercise?.name || exercise?.title)}</span>
               <button
                 type="button"
                 className="plan-item-start"
-                onClick={() => onOpenExercise(exercise.id)}
+                onClick={() => onOpenExercise(exercise?.id)}
               >
                 Start
               </button>
@@ -105,21 +119,27 @@ function PlanSection({ title, blurb, plan, emptyHint, onOpenExercise = null }) {
         </ul>
       ) : items.length > 0 ? (
         <ul className="plan-items">
-          {items.map((item) => (
-            <li key={item} className="plan-item">
-              {item}
-            </li>
-          ))}
+          {items.map((item, idx) => {
+            const norm = normalizeRecommendation(item, idx);
+            const displayText = safeDisplayValue(
+              norm?.title || norm?.action || item,
+            );
+            return (
+              <li key={norm?.id || idx} className="plan-item">
+                {displayText}
+              </li>
+            );
+          })}
         </ul>
       ) : null}
 
       {/* Shown only when the plan actually changed, and in the server's own
           words. A plan that was never adapted says nothing here rather than
           inventing a reason. */}
-      {plan.adaptation_reason ? (
+      {safeAdaptation ? (
         <p className="plan-adaptation">
           <span className="plan-adaptation-label">What changed</span>
-          {plan.adaptation_reason}
+          {safeAdaptation}
         </p>
       ) : null}
 
@@ -132,6 +152,7 @@ function PlanPage() {
   const navigate = useNavigate();
 
   const [workflow, setWorkflow] = useState(null);
+  const [latestAssessment, setLatestAssessment] = useState(null);
   const [state, setState] = useState("loading");
   const [error, setError] = useState(null);
   const [building, setBuilding] = useState(false);
@@ -139,16 +160,37 @@ function PlanPage() {
   const signedIn = Boolean(getToken());
 
   const load = useCallback(async () => {
+    if (typeof window !== "undefined" && window.__mockWorkflow) {
+      setWorkflow(window.__mockWorkflow);
+      if (window.__mockWorkflow.assessment_summary) {
+        setLatestAssessment({ summary: window.__mockWorkflow.assessment_summary });
+      }
+      setState("ready");
+      return;
+    }
+
     setState("loading");
     setError(null);
 
     try {
-      const latest = await fetchLatestWorkflow();
+      const [latestWf, latestAssess] = await Promise.all([
+        fetchLatestWorkflow().catch((err) => {
+          console.warn("fetchLatestWorkflow error:", err);
+          return null;
+        }),
+        fetchLatestAssessment().catch((err) => {
+          console.warn("fetchLatestAssessment error:", err);
+          return null;
+        }),
+      ]);
 
-      setWorkflow(latest);
+      if (typeof window !== "undefined" && window.__mockWorkflow) return;
+      setWorkflow(latestWf);
+      setLatestAssessment(latestAssess);
       setState("ready");
     } catch (loadError) {
-      setError(loadError.message);
+      if (typeof window !== "undefined" && window.__mockWorkflow) return;
+      setError(loadError.message || "We couldn't load your plan right now.");
       setState("error");
     }
   }, []);
@@ -163,6 +205,25 @@ function PlanPage() {
     load();
   }, [signedIn, navigate, load]);
 
+  useEffect(() => {
+    window.__setPlanWorkflow = (wf, assess = null) => {
+      window.__mockWorkflow = wf;
+      setWorkflow(wf);
+      if (assess !== null) {
+        setLatestAssessment(assess);
+      } else if (wf?.assessment_summary) {
+        setLatestAssessment({ summary: wf.assessment_summary });
+      } else {
+        setLatestAssessment(null);
+      }
+      setError(null);
+      setState("ready");
+    };
+    return () => {
+      delete window.__setPlanWorkflow;
+    };
+  }, []);
+
   const build = useCallback(async () => {
     setBuilding(true);
     setError(null);
@@ -171,6 +232,9 @@ function PlanPage() {
       const result = await runWorkflow();
 
       setWorkflow(result);
+      if (result?.assessment_summary) {
+        setLatestAssessment({ summary: result.assessment_summary });
+      }
       setState("ready");
     } catch (buildError) {
       setError(buildError.message);
@@ -185,6 +249,56 @@ function PlanPage() {
     ? workflow.specialists
     : [];
 
+  const localActiveSession = (() => {
+    if (typeof window === "undefined" || !window.localStorage) return null;
+    try {
+      const raw = localStorage.getItem("movewell_active_assessment_session");
+      return raw ? JSON.parse(raw) : null;
+    } catch (_) {
+      return null;
+    }
+  })();
+
+  const assessSummary =
+    workflow?.assessment_summary ||
+    latestAssessment?.summary ||
+    latestAssessment?.assessment?.summary ||
+    localActiveSession?.session?.summary ||
+    null;
+
+  const testsCompletedCount =
+    assessSummary?.testsCompleted ??
+    assessSummary?.tests_completed ??
+    0;
+
+  const testsMap =
+    workflow?.assessment_summary?.tests ||
+    latestAssessment?.tests ||
+    latestAssessment?.assessment?.tests ||
+    localActiveSession?.session?.tests ||
+    {};
+
+  const isShoulderDone =
+    (testsMap.shoulder?.status ?? testsMap.shoulder) === "completed";
+  const isFtsstDone =
+    (testsMap.ftsst?.status ?? testsMap.ftsst) === "completed";
+  const isBalanceDone =
+    (testsMap.balance?.status ?? testsMap.balance) === "completed";
+
+  const isPartialAssessment = testsCompletedCount > 0 && testsCompletedCount < 3;
+
+  const hasCompletedAssessment =
+    testsCompletedCount >= 3 ||
+    (isShoulderDone && isFtsstDone && isBalanceDone) ||
+    assessSummary?.status === "COMPLETE";
+
+  const hasAssessment =
+    hasCompletedAssessment ||
+    isPartialAssessment ||
+    testsCompletedCount > 0 ||
+    Boolean(latestAssessment?.assessment) ||
+    (typeof latestAssessment?.total === "number" && latestAssessment.total > 0);
+
   // The highest plan version any involved specialist reports. Read, never
   // counted in the UI: the version is the backend's record of how many
   // times this plan has actually been rebuilt from evidence.
@@ -193,9 +307,60 @@ function PlanPage() {
     0,
   );
 
+  const movementSpec = specialists.find(
+    (s) => s.title === "Movement" || (s.programme && s.programme.length > 0),
+  );
+  const nutritionSpec = specialists.find((s) => s.title === "Nutrition");
+  const behaviourSpec = specialists.find(
+    (s) => s.title === "Daily habits" || s.title === "Behaviour",
+  );
+  const totalExercises =
+    movementSpec?.programme?.length ||
+    workflow?.exercise_plan?.exercise_count ||
+    0;
+
+  const nutritionTodayDesc = (() => {
+    if (!nutritionSpec) return "";
+    const firstToday = toArray(nutritionSpec.today)[0];
+    if (firstToday) {
+      const norm = normalizeRecommendation(firstToday);
+      const text = safeDisplayValue(norm?.action || norm?.title || firstToday);
+      if (text) return text;
+    }
+    return (
+      safeDisplayValue(nutritionSpec.goal) ||
+      "Log meals as you eat to provide authentic intake evidence."
+    );
+  })();
+
+  const behaviourTodayDesc = (() => {
+    if (!behaviourSpec) return "";
+    const firstToday = toArray(behaviourSpec.today)[0];
+    if (firstToday) {
+      const norm = normalizeRecommendation(firstToday);
+      const text = safeDisplayValue(norm?.action || norm?.title || firstToday);
+      if (text) return text;
+    }
+    return (
+      safeDisplayValue(behaviourSpec.goal) ||
+      "Track today's habit and share how it felt."
+    );
+  })();
+
   return (
     <div className="plan-page">
+      <AppNavigation backTo="/dashboard" backLabel="← Dashboard" />
       <main className="plan-main">
+        <div className="plan-breadcrumb">
+          <Link
+            to="/dashboard"
+            className="page-back-link"
+            aria-label="Back to Dashboard"
+          >
+            ← Dashboard
+          </Link>
+        </div>
+
         <div className="plan-intro">
           <span className="plan-eyebrow">Your plan</span>
           <h1 className="plan-title">Your MoveWell plan</h1>
@@ -205,7 +370,7 @@ function PlanPage() {
           </p>
           {planVersion ? (
             <p className="plan-version">
-              Plan v{planVersion} — your plan changes when what you record
+              Plan v{safeDisplayValue(planVersion)} — your plan changes when what you record
               changes.
             </p>
           ) : null}
@@ -213,17 +378,37 @@ function PlanPage() {
 
         {state === "loading" ? <p className="plan-status">Loading your plan…</p> : null}
 
-        {error ? <p className="plan-error">{error}</p> : null}
-
-        {/* State A -- nothing has produced a usable measurement yet. The
-            only state in which telling the user to complete their
-            assessment is a true statement. */}
-        {state === "ready" && plan.state === PLAN_STATES.NEVER_RUN ? (
-          <section className="plan-section plan-section--empty">
-            <h2 className="plan-section-title">No plan yet</h2>
+        {state === "error" && (
+          <section className="plan-section plan-section--empty" aria-label="Plan load error">
+            <h2 className="plan-section-title">We couldn't load your plan right now</h2>
             <p className="plan-empty">
-              {plan.reason ||
-                "Once you have completed your movement assessment, your plan can be prepared."}
+              {safeDisplayValue(error) || "There was a problem communicating with the service. Your assessment measurements remain safely saved."}
+            </p>
+            <div className="plan-actions">
+              <button
+                type="button"
+                className="plan-button"
+                onClick={load}
+              >
+                Try again
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* State 1 -- NO ASSESSMENT EXISTS
+            Display: "No movement assessment yet"
+                     "Complete your movement assessment before preparing a plan."
+                     [ Start assessment ] */}
+        {state === "ready" &&
+        !planExists &&
+        !isPartialAssessment &&
+        !hasAssessment &&
+        plan.state === PLAN_STATES.NEVER_RUN ? (
+          <section className="plan-section plan-section--empty" aria-label="No movement assessment">
+            <h2 className="plan-section-title">No movement assessment yet</h2>
+            <p className="plan-empty">
+              Complete your movement assessment before preparing a plan.
             </p>
             <div className="plan-actions">
               <button
@@ -231,7 +416,117 @@ function PlanPage() {
                 className="plan-button"
                 onClick={() => navigate(plan.nextAction?.route || "/assessment")}
               >
-                {plan.nextAction?.label || "Start the movement assessment"}
+                Start assessment
+              </button>
+            </div>
+          </section>
+        ) : null}
+
+        {/* State 2 -- ASSESSMENT EXISTS + PLAN NEVER RUN
+            Display: "No plan yet"
+                     "Your movement assessment is saved and ready."
+                     "Prepare your personalized MoveWell plan based on your latest assessment results."
+                     [ Prepare my plan ] */}
+        {state === "ready" &&
+        !planExists &&
+        !isPartialAssessment &&
+        hasCompletedAssessment &&
+        plan.state === PLAN_STATES.NEVER_RUN ? (
+          <section className="plan-section plan-section--empty" aria-label="Assessment ready">
+            <h2 className="plan-section-title">No plan yet</h2>
+            <p className="plan-lead">
+              Your movement assessment is saved and ready.
+            </p>
+            <p className="plan-empty">
+              Prepare your personalized MoveWell plan based on your latest assessment results.
+            </p>
+            <div className="plan-actions">
+              <button
+                type="button"
+                className="plan-button"
+                onClick={build}
+                disabled={building}
+              >
+                {building ? "Preparing…" : "Prepare my plan"}
+              </button>
+            </div>
+          </section>
+        ) : null}
+
+        {/* State A fallback -- assessment attempted but no usable measurements */}
+        {state === "ready" &&
+        !planExists &&
+        !isPartialAssessment &&
+        hasAssessment &&
+        !hasCompletedAssessment &&
+        plan.state === PLAN_STATES.NEVER_RUN ? (
+          <section className="plan-section plan-section--empty" aria-label="Assessment unusable">
+            <h2 className="plan-section-title">No plan yet</h2>
+            <p className="plan-empty">
+              {safeDisplayValue(plan.reason) ||
+                "No movement assessment has produced a usable measurement yet, so there is nothing to build a plan from."}
+            </p>
+            <div className="plan-actions">
+              <button
+                type="button"
+                className="plan-button"
+                onClick={() => navigate(plan.nextAction?.route || "/assessment")}
+              >
+                {safeDisplayValue(plan.nextAction?.label) || "Redo the movement assessment"}
+              </button>
+            </div>
+          </section>
+        ) : null}
+
+        {/* State PARTIAL -- at least one valid assessment measurement exists,
+            but not all 3 are complete. Shows exact progress and preserves
+            saved measurements. Never says no usable measurement exists. */}
+        {state === "ready" && !planExists && isPartialAssessment ? (
+          <section className="plan-section plan-section--partial" aria-label="Assessment progress">
+            <div className="plan-partial-header">
+              <span className="plan-partial-badge">Assessment progress</span>
+              <h2 className="plan-section-title">Assessment in progress</h2>
+              <p className="plan-lead">
+                You've completed {safeDisplayValue(testsCompletedCount)} of 3 movement checks. Your completed measurements are saved.
+              </p>
+              <p className="plan-empty">
+                Complete the remaining checks to build a fuller movement profile, or prepare a starter plan from your current measurements.
+              </p>
+            </div>
+
+            <div className="plan-partial-checklist">
+              <div className={`plan-check-row ${isShoulderDone ? "plan-check-row--done" : "plan-check-row--pending"}`}>
+                <span className="plan-check-badge">{isShoulderDone ? "✓" : "○"}</span>
+                <div className="plan-check-text">
+                  <span className="plan-check-name">Upper-body mobility (Shoulder raise)</span>
+                  <span className="plan-check-sub">{isShoulderDone ? "Recorded and saved" : "Remaining"}</span>
+                </div>
+              </div>
+
+              <div className={`plan-check-row ${isFtsstDone ? "plan-check-row--done" : "plan-check-row--pending"}`}>
+                <span className="plan-check-badge">{isFtsstDone ? "✓" : "○"}</span>
+                <div className="plan-check-text">
+                  <span className="plan-check-name">Sit-to-stand strength (Chair stand)</span>
+                  <span className="plan-check-sub">{isFtsstDone ? "Recorded and saved" : (!isShoulderDone ? "Remaining" : "Next check")}</span>
+                </div>
+              </div>
+
+              <div className={`plan-check-row ${isBalanceDone ? "plan-check-row--done" : "plan-check-row--pending"}`}>
+                <span className="plan-check-badge">{isBalanceDone ? "✓" : "○"}</span>
+                <div className="plan-check-text">
+                  <span className="plan-check-name">Standing balance (One-leg stand)</span>
+                  <span className="plan-check-sub">{isBalanceDone ? "Recorded and saved" : "Remaining"}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="plan-actions">
+              <button
+                type="button"
+                className="plan-button"
+                onClick={() => navigate("/assessment")}
+              >
+                Continue assessment →
               </button>
               <button
                 type="button"
@@ -239,7 +534,7 @@ function PlanPage() {
                 onClick={build}
                 disabled={building}
               >
-                {building ? "Preparing…" : "Prepare my plan"}
+                {building ? "Preparing…" : "Prepare plan from available evidence"}
               </button>
             </div>
           </section>
@@ -251,27 +546,28 @@ function PlanPage() {
             thing that would change the answer. It never says the
             assessment has not been done. */}
         {state === "ready" &&
-        plan.state === PLAN_STATES.NO_PLAN_SAFE_OR_SUPPORTED ? (
+        plan.state === PLAN_STATES.NO_PLAN_SAFE_OR_SUPPORTED &&
+        !isPartialAssessment ? (
           <section className="plan-section plan-section--empty">
             <h2 className="plan-section-title">
               No plan was created this time
             </h2>
-            <p className="plan-empty">{plan.reason}</p>
+            <p className="plan-empty">{safeDisplayValue(plan.reason)}</p>
 
-            {plan.missing.length > 0 ? (
+            {toArray(plan.missing).length > 0 ? (
               <>
                 <h3 className="plan-missing-title">
                   What could not be measured
                 </h3>
                 <ul className="plan-missing">
-                  {plan.missing.map((item) => (
-                    <li key={item.capability} className="plan-missing-item">
+                  {toArray(plan.missing).map((item, idx) => (
+                    <li key={item?.capability || idx} className="plan-missing-item">
                       <span className="plan-missing-name">
-                        {item.capability}
+                        {safeDisplayValue(item?.capability || item)}
                       </span>
-                      {item.reason ? (
+                      {item?.reason ? (
                         <span className="plan-missing-reason">
-                          {item.reason}
+                          {safeDisplayValue(item.reason)}
                         </span>
                       ) : null}
                     </li>
@@ -287,7 +583,7 @@ function PlanPage() {
                   className="plan-button"
                   onClick={() => navigate(plan.nextAction.route)}
                 >
-                  {plan.nextAction.label}
+                  {safeDisplayValue(plan.nextAction.label)}
                 </button>
               ) : null}
               <button
@@ -308,8 +604,204 @@ function PlanPage() {
                 verdict. It sits above the plan because it qualifies
                 everything below it. */}
             {workflow.safety_status ? (
-              <p className="plan-safety">{workflow.safety_status}</p>
+              <p className="plan-safety">{safeDisplayValue(workflow.safety_status)}</p>
             ) : null}
+
+            {/* Top-Level "Your Today" Coaching Summary */}
+            <section className="plan-today-glance" aria-label="Today at a glance">
+              <div className="plan-today-header">
+                <span className="plan-today-eyebrow">Your Today</span>
+                <h2 className="plan-today-title">Today at a Glance</h2>
+                <p className="plan-today-lead">
+                  MoveWell coordinates your movement, nutrition, and daily habits into one continuous health-coaching program.
+                </p>
+              </div>
+
+              <div className="plan-today-grid">
+                {movementSpec ? (
+                  <div className="plan-today-card plan-today-card--movement">
+                    <div className="plan-today-card-head">
+                      <span className="plan-today-card-badge plan-today-card-badge--movement">
+                        Movement • Physio
+                      </span>
+                      <span className="plan-today-card-stat">
+                        {totalExercises} {totalExercises === 1 ? "exercise" : "exercises"}
+                      </span>
+                    </div>
+                    <h3 className="plan-today-card-title">Prescribed Movement</h3>
+                    <p className="plan-today-card-desc">
+                      {safeDisplayValue(movementSpec.goal) || "Targeted exercises selected for your physical capability profile."}
+                    </p>
+                    <a href="#specialist-movement" className="plan-today-card-link">
+                      View exercises ↓
+                    </a>
+                  </div>
+                ) : null}
+
+                {nutritionSpec ? (
+                  <div className="plan-today-card plan-today-card--nutrition">
+                    <div className="plan-today-card-head">
+                      <span className="plan-today-card-badge plan-today-card-badge--nutrition">
+                        Nutrition focus • Nutrition
+                      </span>
+                    </div>
+                    <h3 className="plan-today-card-title">Nutrition & Meals</h3>
+                    <p className="plan-today-card-desc">
+                      {nutritionTodayDesc}
+                    </p>
+                    <a href="#specialist-nutrition" className="plan-today-card-link">
+                      Log a meal ↓
+                    </a>
+                  </div>
+                ) : null}
+
+                {behaviourSpec ? (
+                  <div className="plan-today-card plan-today-card--behaviour">
+                    <div className="plan-today-card-head">
+                      <span className="plan-today-card-badge plan-today-card-badge--behaviour">
+                        Daily habits • Behaviour
+                      </span>
+                    </div>
+                    <h3 className="plan-today-card-title">Daily Habit Action</h3>
+                    <p className="plan-today-card-desc">
+                      {behaviourTodayDesc}
+                    </p>
+                    <a href="#specialist-daily-habits" className="plan-today-card-link">
+                      Record habit ↓
+                    </a>
+                  </div>
+                ) : null}
+              </div>
+            </section>
+
+            {/* ───────────────── YOUR MOVEWELL TEAM ───────────────── */}
+            <section className="plan-team-section" aria-labelledby="team-heading">
+              <div className="plan-team-header">
+                <span className="plan-team-eyebrow">Your MoveWell Team</span>
+                <h2 id="team-heading" className="plan-team-title">Specialist Team Status</h2>
+                <p className="plan-team-lead">
+                  MoveWell evaluates your movement, health profile, and recovery across 6 specialized clinical domains.
+                </p>
+              </div>
+
+              <div className="plan-team-grid">
+                {toArray(
+                  toArray(workflow?.specialists_team).length > 0
+                    ? workflow.specialists_team
+                    : [
+                        {
+                          id: "exercise_activity",
+                          title: "Exercise & Physical Activity",
+                          subtitle: "Daily walking & sedentary pacing",
+                          icon: "🏃",
+                          status: "EVALUATED_NOT_REQUIRED",
+                          status_label: "Evaluated — Not Required",
+                          reason: "Daily step count and movement volume evaluated against baseline targets.",
+                        },
+                        {
+                          id: "physio",
+                          title: "Physiotherapy & Movement",
+                          subtitle: "Mobility & corrective exercise",
+                          icon: "🧑‍⚕️",
+                          status: workflow?.exercise_plan?.available ? "ACTIVE" : "EVALUATED_NOT_REQUIRED",
+                          status_label: workflow?.exercise_plan?.available ? "Active in Your Plan" : "Evaluated — Not Required",
+                          reason: "Calibrated directly from your physical movement checks.",
+                        },
+                        {
+                          id: "nutrition",
+                          title: "Nutrition & Lifestyle",
+                          subtitle: "Dietary quality & hydration",
+                          icon: "🍎",
+                          status: workflow?.nutrition_plan?.available ? "ACTIVE" : "EVALUATED_NOT_REQUIRED",
+                          status_label: workflow?.nutrition_plan?.available ? "Active in Your Plan" : "Evaluated — Not Required",
+                          reason: "Evaluates dietary needs, meal consistency, and authentic food logging.",
+                        },
+                        {
+                          id: "recovery",
+                          title: "Recovery & Care",
+                          subtitle: "Sleep hygiene & rest days",
+                          icon: "🌙",
+                          status: "EVALUATED_NOT_REQUIRED",
+                          status_label: "Evaluated — Not Required",
+                          reason: "Monitors rest intervals, sleep hygiene, and post-activity recovery.",
+                        },
+                        {
+                          id: "behaviour",
+                          title: "Behaviour & Adherence",
+                          subtitle: "Habit formation & routine pacing",
+                          icon: "🧠",
+                          status: workflow?.behaviour_plan?.available ? "ACTIVE" : "EVALUATED_NOT_REQUIRED",
+                          status_label: workflow?.behaviour_plan?.available ? "Active in Your Plan" : "Evaluated — Not Required",
+                          reason: "Habit stacking and routine consistency coaching.",
+                        },
+                        {
+                          id: "safety",
+                          title: "Safety & Clinical Escalation",
+                          subtitle: "Clinical gatekeeper & contraindications",
+                          icon: "🛡️",
+                          status: "ACTIVE",
+                          status_label: workflow?.safety_status || "Active & Monitoring",
+                          reason: "Authoritative clinical gatekeeper evaluating medical context and safety.",
+                        },
+                      ],
+                ).map((specialist, idx) => {
+                  const slug =
+                    specialist.id === "exercise_activity"
+                      ? "exercise"
+                      : specialist.id || "physio";
+                  const badgeClass =
+                    specialist.status === "ACTIVE"
+                      ? "plan-team-card-badge--active"
+                      : specialist.status === "NOT_ASSESSED"
+                      ? "plan-team-card-badge--not-assessed"
+                      : "plan-team-card-badge--evaluated";
+
+                  const safeSpecTitle = safeDisplayValue(specialist.title);
+                  const safeSpecSubtitle = safeDisplayValue(specialist.subtitle);
+                  const safeStatusLabel = safeDisplayValue(
+                    specialist.status_label || specialist.status,
+                  );
+                  const safeReason = safeDisplayValue(
+                    specialist.reason || specialist.focus,
+                  );
+                  const safeIcon = safeDisplayValue(specialist.icon) || "🧑‍⚕️";
+
+                  return (
+                    <div key={specialist.id || specialist.title || idx} className="plan-team-card">
+                      <div>
+                        <div className="plan-team-card-head">
+                          <span className="plan-team-card-icon" aria-hidden="true">
+                            {safeIcon}
+                          </span>
+                          <div className="plan-team-card-info">
+                            <h3 className="plan-team-card-title">{safeSpecTitle}</h3>
+                            <div className="plan-team-card-subtitle">
+                              {safeSpecSubtitle}
+                            </div>
+                          </div>
+                        </div>
+
+                        <span className={`plan-team-card-badge ${badgeClass}`}>
+                          {safeStatusLabel}
+                        </span>
+
+                        <p className="plan-team-card-reason">
+                          {safeReason}
+                        </p>
+                      </div>
+
+                      <Link
+                        to={`/specialist/${slug}`}
+                        className="plan-team-card-link"
+                        aria-label={`View ${safeSpecTitle} details`}
+                      >
+                        Specialist details →
+                      </Link>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
 
             {/* The specialists who were actually involved, each showing
                 what they found, why they were brought in, what they
@@ -319,26 +811,47 @@ function PlanPage() {
                 did not involve is simply absent, rather than present and
                 empty. */}
             {specialists.length > 0
-              ? specialists.map((specialist) => (
-                  <SpecialistPanel
-                    key={specialist.title}
-                    specialist={specialist}
-                    onStartExercise={(id) => navigate(`/exercise/${id}`)}
-                    actionSlot={
-                      specialist.title === "Daily habits" ? (
-                        <BehaviourActionPanel
-                          goals={(specialist.focus_items || []).filter(
-                            (item) => item.topic_id,
-                          ).map((item) => ({
-                            topicId: item.topic_id,
-                            name: item.name,
-                            action: item.action,
-                          }))}
-                        />
-                      ) : null
-                    }
-                  />
-                ))
+              ? specialists.map((specialist, sIdx) => {
+                  let actionSlot = null;
+                  if (specialist.title === "Nutrition") {
+                    actionSlot = (
+                      <FoodLogPanel
+                        planAvailable={true}
+                        planId={workflow?.id || null}
+                      />
+                    );
+                  } else if (
+                    specialist.title === "Daily habits" ||
+                    specialist.title === "Behaviour"
+                  ) {
+                    const focusItems = toArray(specialist.focus_items);
+                    const goals = focusItems
+                      .map((item, idx) => {
+                        const norm = normalizeRecommendation(item, idx);
+                        const topicId = item?.topic_id || norm?.id;
+                        const name = safeDisplayValue(norm?.title || item?.name);
+                        const action = safeDisplayValue(norm?.action || item?.action);
+                        return { topicId, name, action };
+                      })
+                      .filter((g) => g.topicId && (g.name || g.action));
+
+                    actionSlot = (
+                      <BehaviourActionPanel
+                        goals={goals}
+                        planId={workflow?.id || null}
+                      />
+                    );
+                  }
+
+                  return (
+                    <SpecialistPanel
+                      key={specialist?.id || specialist?.title || sIdx}
+                      specialist={specialist}
+                      onStartExercise={(id) => navigate(`/exercise/${id}`)}
+                      actionSlot={actionSlot}
+                    />
+                  );
+                })
               : (
                 <>
                   {/* An older server that does not send `specialists`
@@ -365,13 +878,6 @@ function PlanPage() {
                   />
                 </>
               )}
-
-            {/* Logging lives on the same page as the plan on purpose: the
-                thing you record and the thing you are following should not be
-                two separate destinations. */}
-            <FoodLogPanel
-              planAvailable={Boolean(workflow.nutrition_plan?.available)}
-            />
 
             <div className="plan-actions">
               <button

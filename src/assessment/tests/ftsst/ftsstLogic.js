@@ -72,6 +72,7 @@ export class FiveTimesSitToStandTest {
 
     this.quality = new QualityTracker({
       trackedKeypoints: [...REQUIRED_KEYPOINTS.ftsstLeft, ...REQUIRED_KEYPOINTS.ftsstRight],
+      maxRecoveryMs: this.config.maxRecoveryMs,
     });
 
     this.sideScores = { left: 0, right: 0 };
@@ -225,26 +226,27 @@ export class FiveTimesSitToStandTest {
     // Leaving the seated band starts the clock.
     if (this.startTimestamp === null) {
       if (smoothed > this.config.seatedAngleDeg) {
-        this.startTimestamp = frame.timestamp;
+        this.startTimestamp = this.quality.activeTimestamp(frame.timestamp);
         this.phase = FTSST_PHASE.RISING;
       }
 
       return this.#status(true, []);
     }
 
-    const outcome = this.detector.push(smoothed, frame.timestamp);
+    const activeTimestamp = this.quality.activeTimestamp(frame.timestamp);
+    const outcome = this.detector.push(smoothed, activeTimestamp);
 
     if (outcome.event === REP_EVENT.ENTERED) {
       // Provisionally counted the instant the angle crosses standAngleDeg;
       // see the detector construction above for why REJECTED (below) must
       // retract this rather than the floor being enforced here.
-      this.standTimestamps.push(frame.timestamp);
+      this.standTimestamps.push(activeTimestamp);
 
       if (
         this.standTimestamps.length >= this.config.requiredRepetitions &&
         this.completionTimeMs === null
       ) {
-        this.completionTimeMs = frame.timestamp - this.startTimestamp;
+        this.completionTimeMs = activeTimestamp - this.startTimestamp;
       }
     } else if (outcome.event === REP_EVENT.REJECTED) {
       // The excursion that started with the last ENTERED turned out too
@@ -261,7 +263,7 @@ export class FiveTimesSitToStandTest {
 
     if (
       this.completionTimeMs === null &&
-      frame.timestamp - this.startTimestamp > this.config.maxTestDurationMs
+      activeTimestamp - this.startTimestamp > this.config.maxTestDurationMs
     ) {
       this.timedOut = true;
     }
@@ -282,7 +284,7 @@ export class FiveTimesSitToStandTest {
   }
 
   #recordUnusable(frame, reasons) {
-    const { poseLostFor } = this.quality.record(frame, false, reasons);
+    const { poseLostFor, trackingState, trackingWarning } = this.quality.record(frame, false, reasons);
 
     this.lastReasons = reasons;
 
@@ -295,6 +297,8 @@ export class FiveTimesSitToStandTest {
       repetitions: this.standTimestamps.length,
       elapsedMs: this.elapsedMs(),
       poseLostFor,
+      trackingState,
+      trackingWarning,
     };
   }
 
@@ -310,6 +314,8 @@ export class FiveTimesSitToStandTest {
       repetitions: this.standTimestamps.length,
       elapsedMs: this.elapsedMs(),
       poseLostFor: 0,
+      trackingState: this.quality.getTrackingState(),
+      trackingWarning: this.quality.isTrackingWarning(),
     };
   }
 
@@ -323,7 +329,10 @@ export class FiveTimesSitToStandTest {
 
     if (this.completionTimeMs !== null) return this.completionTimeMs;
 
-    return Math.max(0, (this.lastTimestamp ?? this.startTimestamp) - this.startTimestamp);
+    return Math.max(
+      0,
+      this.quality.activeTimestamp(this.lastTimestamp ?? this.startTimestamp) - this.startTimestamp
+    );
   }
 
   /** True once the required number of stands has been reached. */
@@ -333,6 +342,10 @@ export class FiveTimesSitToStandTest {
 
   isTimedOut() {
     return this.timedOut;
+  }
+
+  isTrackingFailed() {
+    return this.quality.isTrackingFailed();
   }
 
   finish({ attempts = 1, aborted = false } = {}) {

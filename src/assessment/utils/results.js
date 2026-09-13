@@ -73,8 +73,19 @@ export function measuredResult(testId, { valid, measurements, quality, invalidRe
 }
 
 /** True only for a genuinely completed test. */
+/** True only for a genuinely completed test or valid assessment attempt. */
 export function isUsableResult(result) {
   return Boolean(result) && result.status === TEST_STATUS.COMPLETED;
+  if (!result) return false;
+  if (result.status === TEST_STATUS.COMPLETED) return true;
+  if (
+    result.status === TEST_STATUS.INVALID ||
+    result.status === TEST_STATUS.SKIPPED ||
+    result.status === TEST_STATUS.NOT_STARTED
+  ) {
+    return false;
+  }
+  return Boolean(result.valid) && (!result.invalidReasons || result.invalidReasons.length === 0);
 }
 
 /** Generate a session id without needing a dependency. */
@@ -86,8 +97,54 @@ export function createSessionId() {
   return `session-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+export const ASSESSMENT_SUMMARY_STATUS = {
+  NONE_COMPLETED: "NONE_COMPLETED",
+  PARTIAL: "PARTIAL",
+  COMPLETE: "COMPLETE",
+  INSUFFICIENT_DATA: "INSUFFICIENT_DATA",
+};
+
+export function computeSummaryStatus(statuses) {
+  const completedCount = statuses.filter((status) => status === TEST_STATUS.COMPLETED).length;
+  const invalidCount = statuses.filter((status) => status === TEST_STATUS.INVALID).length;
+
+  if (completedCount === TEST_IDS.length) {
+    return ASSESSMENT_SUMMARY_STATUS.COMPLETE;
+  }
+  if (completedCount > 0) {
+    return ASSESSMENT_SUMMARY_STATUS.PARTIAL;
+  }
+  if (invalidCount > 0) {
+    return ASSESSMENT_SUMMARY_STATUS.INSUFFICIENT_DATA;
+  }
+  return ASSESSMENT_SUMMARY_STATUS.NONE_COMPLETED;
+}
+
+export function buildSessionSummary(tests = {}) {
+  const statuses = TEST_IDS.map((testId) => tests[testId]?.status ?? TEST_STATUS.NOT_STARTED);
+  const testsCompleted = statuses.filter((status) => status === TEST_STATUS.COMPLETED).length;
+  const testsInvalid = statuses.filter((status) => status === TEST_STATUS.INVALID).length;
+  const testsSkipped = statuses.filter((status) => status === TEST_STATUS.SKIPPED).length;
+  const testsNotStarted = statuses.filter((status) => status === TEST_STATUS.NOT_STARTED).length;
+
+  return {
+    testsCompleted,
+    testsInvalid,
+    testsSkipped,
+    testsNotStarted,
+    hasAnyUsableResult: testsCompleted > 0,
+    status: computeSummaryStatus(statuses),
+  };
+}
+
 /** A fresh session with all three tests marked not started. */
 export function createSession({ sessionId = createSessionId(), startedAt = new Date().toISOString() } = {}) {
+  const tests = {
+    shoulder: notStartedResult("shoulder"),
+    ftsst: notStartedResult("ftsst"),
+    balance: notStartedResult("balance"),
+  };
+
   return {
     sessionId,
     protocolVersion: PROTOCOL_VERSION,
@@ -98,6 +155,8 @@ export function createSession({ sessionId = createSessionId(), startedAt = new D
       ftsst: notStartedResult("ftsst"),
       balance: notStartedResult("balance"),
     },
+    summary: buildSessionSummary(tests),
+    tests,
   };
 }
 
@@ -107,9 +166,16 @@ export function withTestResult(session, testId, result) {
     throw new Error(`Unknown test id: ${testId}`);
   }
 
+  const updatedTests = {
+    ...session.tests,
+    [testId]: result,
+  };
+
   return {
     ...session,
     tests: { ...session.tests, [testId]: result },
+    summary: buildSessionSummary(updatedTests),
+    tests: updatedTests,
   };
 }
 
@@ -132,6 +198,7 @@ export function finaliseSession(session, { completedAt = new Date().toISOString(
       testsNotStarted: statuses.filter((status) => status === TEST_STATUS.NOT_STARTED).length,
       hasAnyUsableResult: statuses.includes(TEST_STATUS.COMPLETED),
     },
+    summary: buildSessionSummary(session.tests),
   };
 }
 

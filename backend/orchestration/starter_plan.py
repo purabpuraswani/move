@@ -14,10 +14,10 @@ from user_state.schema import validate_user_state
 
 
 STARTER_EXERCISE_IDS = (
-    # Functional movement: sit-to-stand baseline
-    "chair-sit-to-stand",
-    # Mobility: shoulder & upper body range of motion
-    "standing-shoulder-raise",
+    # Functional movement & strength: gentle seated marching
+    "seated-marching",
+    # Mobility: shoulder & upper body reach
+    "standing-overhead-reach",
     # Stability: single-leg balance & postural stability
     "supported-single-leg-stand",
 )

@@ -272,3 +272,126 @@ def decide_progress_required(progress_trigger) -> dict:
         "reason": f"progress trigger: {progress_trigger['reason']}",
         "trigger": progress_trigger,
     }
+
+
+# ---------------------------------------------------------------------------
+# Exercise & Physical Activity selection
+# Evaluates general daily activity, walking volume, and sedentary habits
+# distinct from clinical/physiotherapy movement deficits.
+# ---------------------------------------------------------------------------
+
+
+def decide_exercise_activity_required(user_state: dict, need_profile: dict = None) -> dict:
+    """Return {"exercise_activity_required": bool, "reason": str, "evidence": list, "evaluated": bool}."""
+    q_data = ((user_state or {}).get("questionnaire") or {}).get("data") or {}
+    steps = q_data.get("daily_steps")
+    sitting_hours = q_data.get("daily_sitting_hours")
+    exercise_days = q_data.get("exercise_days")
+    exercise_need_level = ((need_profile or {}).get("exercise_need") or {}).get("level")
+
+    evidence = []
+    if steps is not None:
+        evidence.append(f"Daily steps: {steps}")
+    if sitting_hours is not None:
+        evidence.append(f"Daily sitting: {sitting_hours} hours")
+    if exercise_days is not None:
+        evidence.append(f"Exercise frequency: {exercise_days} days/week")
+
+    if not evidence and not exercise_need_level:
+        return {
+            "exercise_activity_required": False,
+            "reason": "No daily activity or step evidence available to evaluate general physical activity needs.",
+            "evidence": [],
+            "evaluated": False,
+        }
+
+    if steps is not None and steps < 5000:
+        return {
+            "exercise_activity_required": True,
+            "reason": f"Daily step count ({steps}) is below the active baseline threshold (5,000 steps/day).",
+            "evidence": evidence,
+            "evaluated": True,
+        }
+
+    if sitting_hours is not None and sitting_hours >= 8:
+        return {
+            "exercise_activity_required": True,
+            "reason": f"Daily sitting time ({sitting_hours} hours) indicates prolonged sedentary routine requiring active movement pacing.",
+            "evidence": evidence,
+            "evaluated": True,
+        }
+
+    if exercise_days is not None and exercise_days <= 1:
+        return {
+            "exercise_activity_required": True,
+            "reason": f"Exercise frequency ({exercise_days} days/week) indicates low structured physical activity.",
+            "evidence": evidence,
+            "evaluated": True,
+        }
+
+    if exercise_need_level in ("MEDIUM", "HIGH"):
+        return {
+            "exercise_activity_required": True,
+            "reason": f"Overall exercise need was assessed at {exercise_need_level}.",
+            "evidence": evidence,
+            "evaluated": True,
+        }
+
+    return {
+        "exercise_activity_required": False,
+        "reason": "Daily physical activity and movement volume meet current baseline recommendations.",
+        "evidence": evidence,
+        "evaluated": True,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Recovery & Care selection
+# Evaluates rest, sleep duration, sleep quality, and post-activity recovery.
+# ---------------------------------------------------------------------------
+
+
+def decide_recovery_required(user_state: dict) -> dict:
+    """Return {"recovery_required": bool, "reason": str, "evidence": list, "evaluated": bool}."""
+    q_data = ((user_state or {}).get("questionnaire") or {}).get("data") or {}
+    sleep_hours = q_data.get("sleep_hours")
+    if sleep_hours is None:
+        sleep_hours = q_data.get("sleep_duration_hours")
+    sleep_quality = q_data.get("sleep_quality")
+
+    evidence = []
+    if sleep_hours is not None:
+        evidence.append(f"Sleep duration: {sleep_hours} hours/night")
+    if sleep_quality:
+        evidence.append(f"Sleep quality: {sleep_quality}")
+
+    if not evidence:
+        return {
+            "recovery_required": False,
+            "reason": "No sleep or recovery data recorded yet.",
+            "evidence": [],
+            "evaluated": False,
+        }
+
+    if sleep_hours is not None and sleep_hours < 6.0:
+        return {
+            "recovery_required": True,
+            "reason": f"Sleep duration ({sleep_hours} hours/night) is below the recommended 7-9 hours for musculoskeletal recovery.",
+            "evidence": evidence,
+            "evaluated": True,
+        }
+
+    if sleep_quality and str(sleep_quality).lower() in ("poor", "fair", "restless"):
+        return {
+            "recovery_required": True,
+            "reason": f"Self-reported sleep quality is '{sleep_quality}', indicating opportunity for restorative rest routines.",
+            "evidence": evidence,
+            "evaluated": True,
+        }
+
+    return {
+        "recovery_required": False,
+        "reason": f"Sleep duration ({sleep_hours} hours) and rest patterns are adequate for current activity demands.",
+        "evidence": evidence,
+        "evaluated": True,
+    }

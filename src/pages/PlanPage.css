@@ -24,6 +24,36 @@
   padding: 38px 24px 90px;
 }
 
+.plan-breadcrumb {
+  margin-bottom: 20px;
+}
+
+.page-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm, 10px);
+  background: var(--green-light);
+  text-decoration: none;
+  transition:
+    background 0.2s ease,
+    transform 0.2s ease;
+}
+
+.page-back-link:hover {
+  background: #cce2d3;
+  transform: translateX(-2px);
+}
+
+.page-back-link:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
 .plan-intro {
   margin-bottom: 26px;
 }
@@ -76,6 +106,146 @@
   color: var(--dark);
 
   font-size: 14px;
+}
+
+/* Top-level Today at a Glance summary */
+.plan-today-glance {
+  margin-bottom: 28px;
+  padding: 24px;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: var(--radius-md, 12px);
+  box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.04);
+}
+
+.plan-today-header {
+  margin-bottom: 18px;
+}
+
+.plan-today-eyebrow {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--green, #10b981);
+  margin-bottom: 4px;
+}
+
+.plan-today-title {
+  margin: 0 0 6px;
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.plan-today-lead {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: #475569;
+}
+
+.plan-today-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 16px;
+}
+
+.plan-today-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 16px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.plan-today-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.plan-today-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.plan-today-card-badge {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.plan-today-card-badge--movement {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.plan-today-card-badge--nutrition {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.plan-today-card-badge--behaviour {
+  background: #e0e7ff;
+  color: #4338ca;
+}
+
+.plan-today-card-stat {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.plan-today-card-title {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.plan-today-card-desc {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #475569;
+  flex: 1;
+}
+
+.plan-today-card-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #2563eb;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.plan-today-card-link:hover {
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+
+@media (max-width: 640px) {
+  .plan-today-glance {
+    padding: 16px;
+  }
+
+  .plan-today-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
 }
 
 .plan-section {
@@ -336,3 +506,247 @@
   font-weight: 600;
   color: #46536b;
 }
+
+/* --------------------------------------------------------------------
+   Assessment in Progress (Partial State)
+   -------------------------------------------------------------------- */
+
+.plan-section--partial {
+  background: linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%);
+  border: 1px solid #bbf7d0;
+  border-radius: var(--radius-md, 12px);
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 16px -2px rgba(16, 185, 129, 0.08);
+}
+
+.plan-partial-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: #059669;
+  background: #dcfce7;
+  padding: 3px 10px;
+  border-radius: 999px;
+  margin-bottom: 10px;
+}
+
+.plan-partial-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 18px 0;
+}
+
+.plan-check-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  transition: all 0.15s ease;
+}
+
+.plan-check-row--done {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+
+.plan-check-row--pending {
+  border-color: #e2e8f0;
+  opacity: 0.88;
+}
+
+.plan-check-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.plan-check-row--done .plan-check-badge {
+  background: #10b981;
+  color: #ffffff;
+}
+
+.plan-check-row--pending .plan-check-badge {
+  background: #e2e8f0;
+  color: #64748b;
+}
+
+.plan-check-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.plan-check-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.plan-check-sub {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.plan-check-row--done .plan-check-sub {
+  color: #059669;
+  font-weight: 500;
+}
+
+/* Your MoveWell Team Overview */
+.plan-team-section {
+  margin-top: 36px;
+  margin-bottom: 36px;
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  padding: 28px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.plan-team-header {
+  margin-bottom: 20px;
+}
+
+.plan-team-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #0284c7;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.plan-team-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 6px;
+}
+
+.plan-team-lead {
+  font-size: 14px;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.plan-team-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.plan-team-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: all 0.15s ease;
+}
+
+.plan-team-card:hover {
+  border-color: #0284c7;
+  background: #ffffff;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.07);
+}
+
+.plan-team-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.plan-team-card-icon {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.plan-team-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.plan-team-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0;
+}
+
+.plan-team-card-subtitle {
+  font-size: 12px;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.plan-team-card-badge {
+  display: inline-block;
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  margin-bottom: 8px;
+}
+
+.plan-team-card-badge--active {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.plan-team-card-badge--evaluated {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}
+
+.plan-team-card-badge--not-assessed {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.plan-team-card-reason {
+  font-size: 12px;
+  color: #475569;
+  line-height: 1.4;
+  margin: 0 0 14px;
+  flex: 1;
+}
+
+.plan-team-card-link {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0284c7;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.plan-team-card-link:hover {
+  text-decoration: underline;
+}
+

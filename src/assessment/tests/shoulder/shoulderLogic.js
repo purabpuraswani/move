@@ -48,6 +48,7 @@ export class ShoulderAbductionTest {
 
     this.quality = new QualityTracker({
       trackedKeypoints: REQUIRED_KEYPOINTS.shoulder,
+      maxRecoveryMs: this.config.maxRecoveryMs,
     });
 
     this.calibrationHipX = [];
@@ -205,14 +206,14 @@ export class ShoulderAbductionTest {
 
       this.live[side] = smoothed;
 
-      this.detectors[side].push(smoothed, frame.timestamp);
+      this.detectors[side].push(smoothed, this.quality.activeTimestamp(frame.timestamp));
     }
 
     return this.#status(frame, true, []);
   }
 
   #recordUnusable(frame, reasons) {
-    const { poseLostFor } = this.quality.record(frame, false, reasons);
+    const { poseLostFor, trackingState, trackingWarning } = this.quality.record(frame, false, reasons);
 
     this.lastReasons = reasons;
 
@@ -223,6 +224,8 @@ export class ShoulderAbductionTest {
       live: { ...this.live },
       repetitions: this.repetitionCounts(),
       poseLostFor,
+      trackingState,
+      trackingWarning,
     };
   }
 
@@ -236,6 +239,8 @@ export class ShoulderAbductionTest {
       live: { ...this.live },
       repetitions: this.repetitionCounts(),
       poseLostFor: 0,
+      trackingState: this.quality.getTrackingState(),
+      trackingWarning: this.quality.isTrackingWarning(),
     };
   }
 
@@ -254,6 +259,10 @@ export class ShoulderAbductionTest {
       counts.left >= this.config.requiredRepetitions &&
       counts.right >= this.config.requiredRepetitions
     );
+  }
+
+  isTrackingFailed() {
+    return this.quality.isTrackingFailed();
   }
 
   /**

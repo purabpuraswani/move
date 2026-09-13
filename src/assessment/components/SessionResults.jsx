@@ -266,6 +266,7 @@ function TestResultCard({ testId, result }) {
 
 /** A one-line summary of how many checks recorded something. */
 export function SessionSummaryLine({ summary }) {
+  if (!summary) return null;
   return (
     <p className="assess-card__lead">
       {summary.testsCompleted} of 3 checks recorded a usable measurement

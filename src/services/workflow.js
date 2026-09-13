@@ -14,8 +14,8 @@
  */
 
 import { authHeader, clearSession } from "./auth";
+import { apiFetch, getApiUrl, WORKFLOW_RUN_TIMEOUT_MS } from "./api";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 async function readResponse(response, fallbackMessage) {
   if (response.status === 401) {
@@ -56,11 +56,17 @@ async function readResponse(response, fallbackMessage) {
 export async function runWorkflow({ progressTrigger = null } = {}) {
   const body = progressTrigger ? { progress_trigger: progressTrigger } : {};
 
-  const response = await fetch(`${API_URL}/api/workflow/run`, {
-    method: "POST",
-    headers: { ...authHeader(), "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  // Long timeout: this runs the specialists, so it is an AI-latency
+  // request, not a database read.
+  const response = await apiFetch(
+    `${getApiUrl()}/api/workflow/run`,
+    {
+      method: "POST",
+      headers: { ...authHeader(), "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+    WORKFLOW_RUN_TIMEOUT_MS,
+  );
 
   return readResponse(
     response,
@@ -76,7 +82,7 @@ export async function runWorkflow({ progressTrigger = null } = {}) {
  * error it has to catch.
  */
 export async function fetchLatestWorkflow() {
-  const response = await fetch(`${API_URL}/api/workflow/latest`, {
+  const response = await apiFetch(`${getApiUrl()}/api/workflow/latest`, {
     headers: authHeader(),
   });
 

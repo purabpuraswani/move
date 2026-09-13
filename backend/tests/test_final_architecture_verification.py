@@ -92,9 +92,11 @@ class PersonalizedPlanAndNeedPriorityTests(unittest.TestCase):
         plans = updated_state["exercise_history"]["data"]["plans"]
         self.assertGreaterEqual(len(plans), 1)
         # Specialist-generated exercise plan targeting mobility deficit
+        # Specialist-generated exercise plan targeting mobility deficit with genuine interventions
         self.assertEqual(plans[0]["source"], "physio_agent")
-        self.assertIn("standing-shoulder-raise", plans[0]["exercise_ids"])
+        self.assertIn("standing-shoulder-rolls", plans[0]["exercise_ids"])
         self.assertIn("standing-overhead-reach", plans[0]["exercise_ids"])
+        self.assertNotIn("standing-shoulder-raise", plans[0]["exercise_ids"])
         self.assertNotEqual(plans[0]["exercise_ids"], list(STARTER_EXERCISE_IDS))
 
     def test_C_safety_constraints_block_or_modify_exercises(self):

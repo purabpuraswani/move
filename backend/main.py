@@ -24,6 +24,14 @@ from routes.auth import router as auth_router
 from user_state.store import ensure_indexes as ensure_user_state_indexes
 
 
+LOCAL_CORS_ORIGINS = (
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:5174",
+)
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     """Prepare the database on startup.
@@ -63,17 +71,14 @@ app = FastAPI(
 
 
 # Cross-origin access is limited to the origins named in CORS_ORIGINS, which
-# defaults to the Vite dev server and is set explicitly when deploying. Requests
-# are authenticated with a bearer token in the Authorization header rather than
-# with a cookie, so credentialed cross-origin requests are not enabled: a token
-# is only ever sent by code this application serves, and allowing credentials
-# here would widen what a browser will do on another site's behalf for no gain.
+# includes the local Vite development ports. The broad method and header
+# settings allow browser preflight requests for authenticated API calls.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
-    allow_credentials=False,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_origins=sorted(set(CORS_ORIGINS).union(LOCAL_CORS_ORIGINS)),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 

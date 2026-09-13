@@ -23,6 +23,7 @@ import PlanPage from "./pages/PlanPage";
 import ProgressPage from "./pages/ProgressPage";
 import ExercisePage from "./pages/ExercisePage";
 import DashboardInternalPage from "./pages/DashboardInternalPage";
+import SpecialistDetailPage from "./pages/SpecialistDetailPage";
 
 // DEPRECATED. The legacy guidance path (Wellness Guide / Care Navigator,
 // backend/agents/ + /api/guidance). It is kept reachable so an existing
@@ -158,6 +159,26 @@ function App() {
           element={
             <RequireAuth>
               <ExercisePage />
+            </RequireAuth>
+          }
+        />
+
+        {/* Dedicated Specialist screens for the 6 specialist agents:
+            exercise, physio, nutrition, recovery, behaviour, safety */}
+        <Route
+          path="/specialist/:specialistType"
+          element={
+            <RequireAuth>
+              <SpecialistDetailPage />
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="/specialists"
+          element={
+            <RequireAuth>
+              <SpecialistDetailPage />
             </RequireAuth>
           }
         />

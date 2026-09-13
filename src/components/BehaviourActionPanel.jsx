@@ -31,13 +31,19 @@ import {
 
 import "./BehaviourActionPanel.css";
 
-function BehaviourActionPanel({ goals = [], planId = null }) {
+function BehaviourActionPanel({ goals = [], planId = null, onActionRecorded = null }) {
   const [actions, setActions] = useState([]);
   const [state, setState] = useState("loading");
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(null);
 
   const load = useCallback(async () => {
+    if (typeof window !== "undefined" && window.__mockBehaviourActions) {
+      setActions(window.__mockBehaviourActions);
+      setState("ready");
+      return;
+    }
+
     setState("loading");
     setError(null);
 
@@ -56,6 +62,17 @@ function BehaviourActionPanel({ goals = [], planId = null }) {
     load();
   }, [load]);
 
+  useEffect(() => {
+    window.__setMockBehaviourActions = (mockList) => {
+      window.__mockBehaviourActions = mockList;
+      setActions(mockList);
+      setState("ready");
+    };
+    return () => {
+      delete window.__setMockBehaviourActions;
+    };
+  }, []);
+
   const record = useCallback(
     async (topicId, status, difficulty) => {
       setSaving(`${topicId}:${status}`);
@@ -63,6 +80,10 @@ function BehaviourActionPanel({ goals = [], planId = null }) {
 
       try {
         await recordBehaviourAction({ topicId, status, difficulty, planId });
+
+        if (typeof onActionRecorded === "function") {
+          onActionRecorded({ topicId, status, difficulty });
+        }
 
         // Re-read rather than pushing the new record into local state: the
         // server is the source of truth for what was recorded, and this is
@@ -98,9 +119,13 @@ function BehaviourActionPanel({ goals = [], planId = null }) {
 
           return (
             <li key={goal.topicId} className="behaviour-action">
-              <span className="behaviour-action-name">{goal.name}</span>
+              <span className="behaviour-action-name">
+                {typeof goal.name === "string" ? goal.name : String(goal.name || "")}
+              </span>
               {goal.action ? (
-                <span className="behaviour-action-text">{goal.action}</span>
+                <span className="behaviour-action-text">
+                  {typeof goal.action === "string" ? goal.action : String(goal.action || "")}
+                </span>
               ) : null}
 
               {recorded ? (
@@ -116,7 +141,7 @@ function BehaviourActionPanel({ goals = [], planId = null }) {
                       ? "Recorded as done today"
                       : "Recorded as skipped today"}
                     {recorded.difficulty
-                      ? ` — ${DIFFICULTY_LABELS[recorded.difficulty]}`
+                      ? ` — ${DIFFICULTY_LABELS[recorded.difficulty] || recorded.difficulty}`
                       : null}
                   </span>
 

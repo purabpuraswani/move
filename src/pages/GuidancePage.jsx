@@ -29,6 +29,12 @@ import {
   fetchLatestGuidance,
   runGuidance,
 } from "../services/guidance";
+import {
+  toArray,
+  safeDisplayValue,
+  normalizeRecommendation,
+  normalizeEvidence,
+} from "../services/specialistData.js";
 
 import "./AssessmentPage.css";
 import "./GuidancePage.css";
@@ -62,13 +68,19 @@ const TEST_STATUS_LABELS = {
 function formatWhen(value) {
   if (!value) return "an unknown time";
 
-  return new Date(value).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  try {
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "an unknown time";
+    return d.toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch (_) {
+    return "an unknown time";
+  }
 }
 
 /**
@@ -81,7 +93,7 @@ function formatWhen(value) {
 function Basis({ context }) {
   if (!context) return null;
 
-  const tests = context.movementTests ?? [];
+  const tests = toArray(context.movementTests);
 
   return (
     <div className="guide-basis">
@@ -90,7 +102,7 @@ function Basis({ context }) {
       <ul>
         <li>
           {context.profileAvailable
-            ? `Your setup answers (${context.profileFieldCount} answered).`
+            ? `Your setup answers (${safeDisplayValue(context.profileFieldCount)} answered).`
             : "Your setup answers were not available."}
         </li>
 
@@ -100,9 +112,9 @@ function Basis({ context }) {
             : "No usable movement observations."}
           {tests.length > 0 && (
             <span className="guide-basis__tests">
-              {tests.map((test) => (
-                <span className="guide-basis__test" key={test.id}>
-                  {test.name}: {TEST_STATUS_LABELS[test.status] ?? test.status}
+              {tests.map((test, idx) => (
+                <span className="guide-basis__test" key={test?.id || idx}>
+                  {safeDisplayValue(test?.name)}: {safeDisplayValue(TEST_STATUS_LABELS[test?.status] ?? test?.status)}
                 </span>
               ))}
             </span>
@@ -111,14 +123,14 @@ function Basis({ context }) {
 
         <li>
           {context.confirmedReportCount > 0
-            ? `${context.confirmedReportCount} confirmed report${
+            ? `${safeDisplayValue(context.confirmedReportCount)} confirmed report${
                 context.confirmedReportCount === 1 ? "" : "s"
               }.`
             : "No confirmed report values."}
           {context.unconfirmedReportCount > 0 && (
             <>
               {" "}
-              {context.unconfirmedReportCount} report
+              {safeDisplayValue(context.unconfirmedReportCount)} report
               {context.unconfirmedReportCount === 1 ? " is" : "s are"} still
               waiting for you to confirm, and nothing from{" "}
               {context.unconfirmedReportCount === 1 ? "it" : "them"} was used.
@@ -132,42 +144,53 @@ function Basis({ context }) {
 
 /** The wellness agent's output, as written. */
 function WellnessOutput({ output }) {
+  if (!output) return null;
+
+  const opening = safeDisplayValue(output.opening);
+  const closing = safeDisplayValue(output.closing);
+  const observations = toArray(output.observations);
+  const focusAreas = toArray(output.focusAreas);
+  const habits = toArray(output.habits);
+  const missingInformation = toArray(output.missingInformation);
+
   return (
     <>
-      {output.opening && <p className="guide-lede">{output.opening}</p>}
+      {opening && <p className="guide-lede">{opening}</p>}
 
-      {output.observations.length > 0 && (
+      {observations.length > 0 && (
         <section className="guide-block">
           <h3>What was observed</h3>
 
           <dl className="guide-observations">
-            {output.observations.map((item) => (
-              <div className="guide-observation" key={item.heading}>
-                <dt>{item.heading}</dt>
-                <dd>{item.detail}</dd>
+            {observations.map((item, idx) => (
+              <div className="guide-observation" key={item?.heading || idx}>
+                <dt>{safeDisplayValue(item?.heading || item?.title || item)}</dt>
+                <dd>{safeDisplayValue(item?.detail || item?.description || item?.why)}</dd>
               </div>
             ))}
           </dl>
         </section>
       )}
 
-      {output.focusAreas.length > 0 && (
+      {focusAreas.length > 0 && (
         <section className="guide-block">
           <h3>Worth some attention</h3>
 
           <div className="guide-areas">
-            {output.focusAreas.map((area) => (
-              <article className="guide-area" key={area.title}>
-                <h4>{area.title}</h4>
+            {focusAreas.map((area, idx) => (
+              <article className="guide-area" key={area?.title || idx}>
+                <h4>{safeDisplayValue(area?.title || area?.name)}</h4>
 
-                {area.whyThisCameUp && (
-                  <p className="guide-area__why">{area.whyThisCameUp}</p>
+                {area?.whyThisCameUp && (
+                  <p className="guide-area__why">{safeDisplayValue(area.whyThisCameUp)}</p>
                 )}
 
                 <ul>
-                  {area.suggestions.map((suggestion) => (
-                    <li key={suggestion}>{suggestion}</li>
-                  ))}
+                  {toArray(area?.suggestions).map((suggestion, sIdx) => {
+                    const norm = normalizeRecommendation(suggestion, sIdx);
+                    const text = safeDisplayValue(norm?.title || norm?.action || suggestion);
+                    return <li key={norm?.id || sIdx}>{text}</li>;
+                  })}
                 </ul>
               </article>
             ))}
@@ -175,80 +198,93 @@ function WellnessOutput({ output }) {
         </section>
       )}
 
-      {output.habits.length > 0 && (
+      {habits.length > 0 && (
         <section className="guide-block">
           <h3>General habits</h3>
 
           <ul className="guide-list">
-            {output.habits.map((habit) => (
-              <li key={habit}>{habit}</li>
-            ))}
+            {habits.map((habit, idx) => {
+              const norm = normalizeRecommendation(habit, idx);
+              const text = safeDisplayValue(norm?.title || norm?.action || habit);
+              return <li key={norm?.id || idx}>{text}</li>;
+            })}
           </ul>
         </section>
       )}
 
-      {output.missingInformation.length > 0 && (
+      {missingInformation.length > 0 && (
         <section className="guide-block guide-block--gaps">
           <h3>What was missing</h3>
 
           <ul className="guide-list">
-            {output.missingInformation.map((gap) => (
-              <li key={gap}>{gap}</li>
+            {missingInformation.map((gap, idx) => (
+              <li key={idx}>{safeDisplayValue(gap?.reason || gap?.capability || gap)}</li>
             ))}
           </ul>
         </section>
       )}
 
-      {output.closing && <p className="guide-closing">{output.closing}</p>}
+      {closing && <p className="guide-closing">{closing}</p>}
     </>
   );
 }
 
 /** The care navigation agent's output. Roles are labelled by the server. */
 function NavigationOutput({ output }) {
+  if (!output) return null;
+
+  const opening = safeDisplayValue(output.opening);
+  const considerations = toArray(output.considerations);
+  const questionsToAsk = toArray(output.questionsToAsk);
+  const limitations = toArray(output.limitations);
+
   return (
     <>
-      {output.opening && <p className="guide-lede">{output.opening}</p>}
+      {opening && <p className="guide-lede">{opening}</p>}
 
-      {output.considerations.length > 0 && (
+      {considerations.length > 0 && (
         <section className="guide-block">
           <h3>People you might talk to</h3>
 
           <div className="guide-people">
-            {output.considerations.map((item) => (
-              <article className="guide-person" key={item.professionalType}>
-                <h4>{item.label}</h4>
-                <p className="guide-person__note">{item.note}</p>
-                <p>{item.whatTheyCouldLookAt}</p>
+            {considerations.map((item, idx) => (
+              <article className="guide-person" key={item?.professionalType || idx}>
+                <h4>{safeDisplayValue(item?.label || item?.professionalType)}</h4>
+                {item?.note ? (
+                  <p className="guide-person__note">{safeDisplayValue(item.note)}</p>
+                ) : null}
+                {item?.whatTheyCouldLookAt ? (
+                  <p>{safeDisplayValue(item.whatTheyCouldLookAt)}</p>
+                ) : null}
 
-                {item.whyItCameUp && (
-                  <p className="guide-person__why">{item.whyItCameUp}</p>
-                )}
+                {item?.whyItCameUp ? (
+                  <p className="guide-person__why">{safeDisplayValue(item.whyItCameUp)}</p>
+                ) : null}
               </article>
             ))}
           </div>
         </section>
       )}
 
-      {output.questionsToAsk.length > 0 && (
+      {questionsToAsk.length > 0 && (
         <section className="guide-block">
           <h3>Questions you could take with you</h3>
 
           <ul className="guide-list guide-list--questions">
-            {output.questionsToAsk.map((question) => (
-              <li key={question}>{question}</li>
+            {questionsToAsk.map((question, idx) => (
+              <li key={idx}>{safeDisplayValue(question?.question || question?.text || question)}</li>
             ))}
           </ul>
         </section>
       )}
 
-      {output.limitations.length > 0 && (
+      {limitations.length > 0 && (
         <section className="guide-block guide-block--gaps">
           <h3>What this tool could not tell you</h3>
 
           <ul className="guide-list">
-            {output.limitations.map((limit) => (
-              <li key={limit}>{limit}</li>
+            {limitations.map((limit, idx) => (
+              <li key={idx}>{safeDisplayValue(limit?.reason || limit?.limitation || limit)}</li>
             ))}
           </ul>
         </section>
@@ -271,8 +307,8 @@ function AgentResult({ title, subtitle, result, children }) {
     <section className={`guide-panel guide-panel--${state}`}>
       <header className="guide-panel__head">
         <div>
-          <h2>{title}</h2>
-          <p>{subtitle}</p>
+          <h2>{safeDisplayValue(title)}</h2>
+          <p>{safeDisplayValue(subtitle)}</p>
         </div>
 
         {result?.retriedAfterRuleBreak && state === "ok" && (
@@ -284,12 +320,12 @@ function AgentResult({ title, subtitle, result, children }) {
 
       {state === "withheld_by_safety_rules" && (
         <div className="guide-withheld">
-          <p>{result.message}</p>
+          <p>{safeDisplayValue(result?.message)}</p>
 
-          {result.brokenRules?.length > 0 && (
+          {toArray(result?.brokenRules).length > 0 && (
             <ul className="guide-list">
-              {result.brokenRules.map((rule) => (
-                <li key={rule}>It {rule}.</li>
+              {toArray(result.brokenRules).map((rule, idx) => (
+                <li key={idx}>It {safeDisplayValue(rule?.rule || rule?.message || rule)}.</li>
               ))}
             </ul>
           )}
@@ -302,10 +338,10 @@ function AgentResult({ title, subtitle, result, children }) {
       )}
 
       {state === "failed" && (
-        <p className="guide-note guide-note--bad">{result.message}</p>
+        <p className="guide-note guide-note--bad">{safeDisplayValue(result?.message)}</p>
       )}
 
-      {state === "not_run" && <p className="guide-note">{result?.message}</p>}
+      {state === "not_run" && <p className="guide-note">{safeDisplayValue(result?.message)}</p>}
     </section>
   );
 }
@@ -313,8 +349,9 @@ function AgentResult({ title, subtitle, result, children }) {
 /** What each agent may and may not do, from the server's own list. */
 function AgentLimits({ agents }) {
   const [open, setOpen] = useState(false);
+  const agentList = toArray(agents);
 
-  if (agents.length === 0) return null;
+  if (agentList.length === 0) return null;
 
   return (
     <section className="guide-limits">
@@ -329,21 +366,21 @@ function AgentLimits({ agents }) {
 
       {open && (
         <div className="guide-limits__body">
-          {agents.map((agent) => (
-            <article className="guide-limit" key={agent.id}>
+          {agentList.map((agent, idx) => (
+            <article className="guide-limit" key={agent?.id || idx}>
               <h3>
-                <span className="guide-limit__stage">{agent.stage}</span>
-                {agent.name}
+                <span className="guide-limit__stage">{safeDisplayValue(agent?.stage)}</span>
+                {safeDisplayValue(agent?.name)}
               </h3>
 
-              <p className="guide-limit__role">{agent.role}</p>
+              <p className="guide-limit__role">{safeDisplayValue(agent?.role)}</p>
 
               <div className="guide-limit__columns">
                 <div>
                   <h4>It can</h4>
                   <ul>
-                    {agent.canDo.map((item) => (
-                      <li key={item}>{item}</li>
+                    {toArray(agent?.canDo).map((item, cIdx) => (
+                      <li key={cIdx}>{safeDisplayValue(item?.description || item?.action || item)}</li>
                     ))}
                   </ul>
                 </div>
@@ -351,14 +388,14 @@ function AgentLimits({ agents }) {
                 <div>
                   <h4>It cannot</h4>
                   <ul className="guide-limit__cannot">
-                    {agent.cannotDo.map((item) => (
-                      <li key={item}>{item}</li>
+                    {toArray(agent?.cannotDo).map((item, cIdx) => (
+                      <li key={cIdx}>{safeDisplayValue(item?.description || item?.action || item)}</li>
                     ))}
                   </ul>
                 </div>
               </div>
 
-              <p className="guide-limit__note">{agent.note}</p>
+              {agent?.note && <p className="guide-limit__note">{safeDisplayValue(agent.note)}</p>}
             </article>
           ))}
         </div>
@@ -522,7 +559,7 @@ function GuidancePage() {
 
         {pageState === "error" && (
           <div className="guide-empty">
-            <p>This page could not be loaded. {pageError}</p>
+            <p>This page could not be loaded. {safeDisplayValue(pageError)}</p>
             <button
               type="button"
               className="assess-btn assess-btn--ghost"
@@ -539,51 +576,53 @@ function GuidancePage() {
               <h2>Where things stand</h2>
 
               <ol className="guide-stages">
-                {plan.stages.map((stage) => {
-                  const shape = STAGE_STATES[stage.state] ?? {
-                    label: stage.state,
+                {toArray(plan?.stages).map((stage, idx) => {
+                  const stageState = typeof stage?.state === "string" ? stage.state : stage?.state?.status || "";
+                  const shape = STAGE_STATES[stageState] ?? {
+                    label: safeDisplayValue(stageState || stage?.state),
                     tone: "off",
                   };
 
                   return (
-                    <li className="guide-stage" key={stage.id}>
-                      <span className="guide-stage__number">{stage.stage}</span>
+                    <li className="guide-stage" key={stage?.id || idx}>
+                      <span className="guide-stage__number">{safeDisplayValue(stage?.stage)}</span>
 
                       <span className="guide-stage__body">
-                        <span className="guide-stage__name">{stage.name}</span>
-                        {stage.note && (
-                          <span className="guide-stage__note">{stage.note}</span>
+                        <span className="guide-stage__name">{safeDisplayValue(stage?.name)}</span>
+                        {stage?.note && (
+                          <span className="guide-stage__note">{safeDisplayValue(stage.note)}</span>
                         )}
                       </span>
 
                       <span className={`guide-pill guide-pill--${shape.tone}`}>
-                        {shape.label}
+                        {safeDisplayValue(shape.label)}
                       </span>
                     </li>
                   );
                 })}
               </ol>
 
-              {plan.blockers.length > 0 && (
+              {toArray(plan?.blockers).length > 0 && (
                 <div className="guide-blockers">
-                  {plan.blockers.map((blocker) => (
-                    <p key={blocker}>{blocker}</p>
+                  {toArray(plan.blockers).map((blocker, bIdx) => (
+                    <p key={bIdx}>{safeDisplayValue(blocker?.message || blocker?.reason || blocker)}</p>
                   ))}
                 </div>
               )}
 
-              {plan.notes.length > 0 && (
+              {toArray(plan?.notes).length > 0 && (
                 <ul className="guide-list guide-list--notes">
-                  {plan.notes.map((note) => (
-                    <li key={note}>{note}</li>
+                  {toArray(plan.notes).map((note, nIdx) => (
+                    <li key={nIdx}>{safeDisplayValue(note?.message || note?.note || note)}</li>
                   ))}
                 </ul>
               )}
 
-              {plan.suggestedActions.length > 0 && (
+              {toArray(plan?.suggestedActions).length > 0 && (
                 <div className="guide-actions">
-                  {plan.suggestedActions.map((action) => {
-                    const shape = ACTIONS[action];
+                  {toArray(plan.suggestedActions).map((action, aIdx) => {
+                    const actionKey = typeof action === "string" ? action : action?.type || action?.action || action?.id;
+                    const shape = ACTIONS[actionKey];
 
                     if (!shape) return null;
 
@@ -591,10 +630,10 @@ function GuidancePage() {
                       <button
                         type="button"
                         className="assess-btn assess-btn--ghost"
-                        key={action}
+                        key={actionKey || aIdx}
                         onClick={() => navigate(shape.to)}
                       >
-                        {shape.label}
+                        {safeDisplayValue(shape.label)}
                       </button>
                     );
                   })}
@@ -629,12 +668,12 @@ function GuidancePage() {
                 )}
 
                 {runError && (
-                  <p className="guide-note guide-note--bad">{runError}</p>
+                  <p className="guide-note guide-note--bad">{safeDisplayValue(runError)}</p>
                 )}
               </div>
             </section>
 
-            {notice && <p className="guide-note guide-note--bad">{notice}</p>}
+            {notice && <p className="guide-note guide-note--bad">{safeDisplayValue(notice)}</p>}
 
             {!run && (
               <p className="guide-empty">
@@ -647,8 +686,8 @@ function GuidancePage() {
               <>
                 <div className="guide-meta">
                   <p>
-                    Written {formatWhen(run.generatedAt)}
-                    {run.model ? ` by ${run.model}` : ""}.
+                    Written {safeDisplayValue(formatWhen(run?.generatedAt))}
+                    {run?.model ? ` by ${safeDisplayValue(run.model)}` : ""}.
                   </p>
 
                   {run.isStale === true && (
@@ -681,11 +720,11 @@ function GuidancePage() {
               </>
             )}
 
-            <AgentLimits agents={status.agents ?? []} />
+            <AgentLimits agents={status?.agents ?? []} />
 
             <footer className="guide-footer">
-              {safetyNote && <p className="guide-safety">{safetyNote}</p>}
-              {disclaimer && <p className="guide-disclaimer">{disclaimer}</p>}
+              {safetyNote && <p className="guide-safety">{safeDisplayValue(safetyNote)}</p>}
+              {disclaimer && <p className="guide-disclaimer">{safeDisplayValue(disclaimer)}</p>}
             </footer>
           </>
         )}

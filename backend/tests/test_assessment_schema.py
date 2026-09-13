@@ -461,6 +461,49 @@ class SummaryTests(unittest.TestCase):
 
         self.assertEqual(document["summary"]["tests_completed"], 2)
 
+    def test_summary_status_distinguishes_partial_complete_insufficient_none(self):
+        # Case 1: Partial (2 completed)
+        doc_partial = validate_assessment_payload(valid_payload())
+        self.assertEqual(doc_partial["summary"]["status"], "PARTIAL")
+
+        # Case 2: Complete (all 3 completed)
+        payload_complete = valid_payload()
+        payload_complete["tests"]["balance"] = {
+            "status": "completed",
+            "measurements": {"left": {"holdDurationMs": 15000, "attempted": True}, "right": {"holdDurationMs": 14000, "attempted": True}},
+            "quality": {"fps": 28.5, "usableFrameRatio": 0.95},
+            "invalidReasons": [],
+            "attempts": 1,
+        }
+        doc_complete = validate_assessment_payload(payload_complete)
+        self.assertEqual(doc_complete["summary"]["status"], "COMPLETE")
+
+        # Case 3: Insufficient data (0 completed, at least 1 invalid)
+        payload_insufficient = valid_payload()
+        for t in ("shoulder", "ftsst", "balance"):
+            payload_insufficient["tests"][t] = {
+                "status": "invalid",
+                "measurements": None,
+                "quality": None,
+                "invalidReasons": ["low_confidence"],
+                "attempts": 1,
+            }
+        doc_insufficient = validate_assessment_payload(payload_insufficient)
+        self.assertEqual(doc_insufficient["summary"]["status"], "INSUFFICIENT_DATA")
+
+        # Case 4: None completed (all skipped/not started, none invalid)
+        payload_none = valid_payload()
+        for t in ("shoulder", "ftsst", "balance"):
+            payload_none["tests"][t] = {
+                "status": "skipped",
+                "measurements": None,
+                "quality": None,
+                "invalidReasons": [],
+                "attempts": 0,
+            }
+        doc_none = validate_assessment_payload(payload_none)
+        self.assertEqual(doc_none["summary"]["status"], "NONE_COMPLETED")
+
 
 if __name__ == "__main__":
     unittest.main()

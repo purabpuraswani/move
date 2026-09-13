@@ -213,10 +213,14 @@ def validate_exercise_result(raw) -> dict:
         measurements = {}
 
     else:
-        if not isinstance(measurements, dict) or not measurements:
-            _fail(f"a {status} result must carry at least one measurement")
-
-        measurements = _validate_measurements(measurements, exercise)
+        if not exercise.get("measurable_metrics"):
+            if measurements not in (None, {}):
+                _fail(f"{exercise['name']} is not measured by camera and must not carry metrics")
+            measurements = {}
+        else:
+            if not isinstance(measurements, dict) or not measurements:
+                _fail(f"a {status} result must carry at least one measurement")
+            measurements = _validate_measurements(measurements, exercise)
 
     for label in ("startedAt", "completedAt"):
         value = raw.get(label)

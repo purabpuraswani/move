@@ -28,8 +28,6 @@ export const REQUIRED_KEYPOINTS = {
     "right_shoulder",
     "left_hip",
     "right_hip",
-    "left_knee",
-    "right_knee",
     "left_ankle",
     "right_ankle",
   ],
@@ -178,8 +176,14 @@ export const RECOVERY_CONFIRMATION_FRAMES = 3;
  * say how good the recording was, without storing the recording.
  */
 export class QualityTracker {
-  constructor({ trackedKeypoints = [] } = {}) {
+  constructor({
+    trackedKeypoints = [],
+    maxRecoveryMs = POSE.maxPoseLossMs,
+    trackingWarningMs = POSE.trackingWarningMs,
+  } = {}) {
     this.trackedKeypoints = trackedKeypoints;
+    this.maxRecoveryMs = maxRecoveryMs;
+    this.trackingWarningMs = trackingWarningMs;
     this.reset();
   }
 
@@ -193,6 +197,7 @@ export class QualityTracker {
     this.consecutiveUnusableMs = 0;
     this.lastUnusableTimestamp = null;
     this.longestPoseLossMs = 0;
+    this.pausedDurationMs = 0;
     this.trackingState = TRACKING_STATE.TRACKING;
     this.consecutiveUsableFrames = 0;
     this.recentWindow = [];
@@ -219,6 +224,10 @@ export class QualityTracker {
     }
 
     if (usable) {
+      if (this.lastUnusableTimestamp !== null) {
+        this.pausedDurationMs += frame.timestamp - this.lastUnusableTimestamp;
+      }
+
       this.framesUsable += 1;
       this.consecutiveUnusableMs = 0;
       this.lastUnusableTimestamp = null;
@@ -252,7 +261,7 @@ export class QualityTracker {
 
       this.longestPoseLossMs = Math.max(this.longestPoseLossMs, this.consecutiveUnusableMs);
 
-      if (this.consecutiveUnusableMs > POSE.maxPoseLossMs) {
+      if (this.consecutiveUnusableMs > this.maxRecoveryMs) {
         this.trackingState = TRACKING_STATE.FAILED;
       } else {
         this.trackingState = TRACKING_STATE.TEMPORARY_LOSS;
@@ -262,6 +271,7 @@ export class QualityTracker {
     return {
       poseLostFor: this.consecutiveUnusableMs,
       trackingState: this.trackingState,
+      trackingWarning: this.consecutiveUnusableMs >= this.trackingWarningMs,
       recentUsableRatio: this.recentUsableRatio(),
     };
   }
@@ -276,10 +286,23 @@ export class QualityTracker {
     return this.trackingState;
   }
 
+  isTrackingWarning() {
+    return this.trackingState === TRACKING_STATE.TEMPORARY_LOSS ||
+      this.trackingState === TRACKING_STATE.RECOVERING;
+  }
+
+  isTrackingFailed() {
+    return this.trackingState === TRACKING_STATE.FAILED;
+  }
+
   durationMs() {
     if (this.firstTimestamp === null || this.lastTimestamp === null) return 0;
 
     return this.lastTimestamp - this.firstTimestamp;
+  }
+
+  activeTimestamp(timestamp) {
+    return timestamp - this.pausedDurationMs;
   }
 
   fps() {
@@ -329,7 +352,7 @@ export class QualityTracker {
       reasons.push(REASON.TOO_FEW_USABLE_FRAMES);
     }
 
-    if (this.longestPoseLossMs > POSE.maxPoseLossMs) {
+    if (this.longestPoseLossMs > this.maxRecoveryMs) {
       reasons.push(REASON.POSE_LOST);
     }
 
