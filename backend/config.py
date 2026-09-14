@@ -278,3 +278,72 @@ def ai_provider_available() -> bool:
 
     return bool(OPENROUTER_API_KEY) or bool(GEMINI_API_KEY)
 
+
+
+# ---------------------------------------------------------------------------
+# Password reset email
+#
+# Reset instructions are sent over SMTP with the standard library, so any mail
+# service that offers SMTP works (Gmail app passwords, SendGrid, Mailgun,
+# Amazon SES, a company relay). Nothing is sent until SMTP_HOST and SMTP_FROM
+# are set; until then POST /api/auth/forgot-password still answers normally
+# but the server logs that no email could be sent.
+#
+# FRONTEND_URL is where the link in the email points: <FRONTEND_URL>/reset-password?token=...
+#
+# PASSWORD_RESET_LOG_LINKS is for local development only. When "true" and SMTP
+# is not configured, the reset link is printed to the server log instead of
+# being emailed. Never enable it on a shared or deployed server: anyone who can
+# read the log could reset any account.
+# ---------------------------------------------------------------------------
+
+def _port(name, default):
+    raw = _first_env(name)
+
+    if raw is None:
+        return default
+
+    try:
+        value = int(raw)
+    except ValueError:
+        raise ConfigError(f"{name} must be a port number, got {raw!r}.") from None
+
+    if not 0 < value < 65536:
+        raise ConfigError(f"{name} must be between 1 and 65535, got {value}.")
+
+    return value
+
+
+def _flag(name, default):
+    raw = _first_env(name)
+
+    if raw is None:
+        return default
+
+    return raw.lower() in ("1", "true", "yes", "on")
+
+
+SMTP_HOST = _first_env("SMTP_HOST")
+SMTP_PORT = _port("SMTP_PORT", 587)
+SMTP_USERNAME = _first_env("SMTP_USERNAME")
+SMTP_PASSWORD = _first_env("SMTP_PASSWORD")
+SMTP_FROM = _first_env("SMTP_FROM")
+# "starttls" (port 587), "ssl" (port 465) or "none" (a local relay only).
+SMTP_SECURITY = (_first_env("SMTP_SECURITY") or "starttls").lower()
+
+if SMTP_SECURITY not in ("starttls", "ssl", "none"):
+    raise ConfigError(
+        f"SMTP_SECURITY must be starttls, ssl or none, got {SMTP_SECURITY!r}."
+    )
+
+FRONTEND_URL = (_first_env("FRONTEND_URL") or "http://localhost:5173").rstrip("/")
+
+PASSWORD_RESET_TOKEN_MINUTES = _positive_int("PASSWORD_RESET_TOKEN_MINUTES", 30)
+
+PASSWORD_RESET_LOG_LINKS = _flag("PASSWORD_RESET_LOG_LINKS", False)
+
+
+def smtp_configured() -> bool:
+    """Whether password reset emails can actually be sent."""
+
+    return bool(SMTP_HOST and SMTP_FROM)

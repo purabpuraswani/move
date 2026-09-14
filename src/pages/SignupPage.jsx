@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
+import PasswordInput from "../components/PasswordInput";
 import { signup } from "../services/auth";
 
 import "./SignupPage.css";
@@ -224,11 +225,11 @@ function SignupPage() {
                 Password
               </label>
 
-              <input
+              <PasswordInput
                 id="password"
-                type="password"
                 name="password"
                 placeholder="Create a password"
+                autoComplete="new-password"
                 value={form.password}
                 onChange={handleChange}
                 required

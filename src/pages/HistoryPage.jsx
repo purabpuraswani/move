@@ -13,7 +13,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { StatusPill } from "../assessment/components/Feedback.jsx";
 import SessionResults, {
@@ -46,6 +46,10 @@ function formatDate(value) {
 
 function HistoryPage() {
   const navigate = useNavigate();
+
+  // /history?session=<id> (the dashboard's "View details") opens that session.
+  const [searchParams] = useSearchParams();
+  const requestedSessionId = searchParams.get("session");
 
   const signedIn = Boolean(getToken());
 
@@ -93,6 +97,17 @@ function HistoryPage() {
           setSessions(page.assessments);
           setTotal(page.total);
           setListState("ready");
+
+          if (
+            requestedSessionId &&
+            page.assessments.some((entry) => entry.id === requestedSessionId)
+          ) {
+            openSessionDetail(requestedSessionId).then(() => {
+              document
+                .getElementById(`session-${requestedSessionId}`)
+                ?.scrollIntoView({ block: "start", behavior: "instant" });
+            });
+          }
         }
       })
       .catch((error) => {
@@ -105,6 +120,9 @@ function HistoryPage() {
     return () => {
       ignore = true;
     };
+    // The first page loads once. A ?session= request is read at that moment;
+    // openSessionDetail is recreated every render, so listing it would refetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signedIn]);
 
   async function openSessionDetail(assessmentId) {
@@ -227,7 +245,7 @@ function HistoryPage() {
                 const open = openId === entry.id;
 
                 return (
-                  <li className="history-item" key={entry.id}>
+                  <li className="history-item" key={entry.id} id={`session-${entry.id}`}>
                     <button
                       type="button"
                       className="history-item__head"

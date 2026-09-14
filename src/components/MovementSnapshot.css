@@ -1,0 +1,303 @@
+/* "Your latest results" on the dashboard. The card shell (.score-card),
+   heading, pill and buttons come from Dashboard.css / index.css; this file
+   only lays out the snapshot inside it, in the same greens. */
+
+.snapshot-badge {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.snapshot-badge--recorded {
+  background: #e4f0e5;
+  color: #2f6b4f;
+}
+
+.snapshot-message {
+  margin: 24px 0 0;
+  color: #7d8982;
+  font-size: 12px;
+}
+
+.snapshot-empty,
+.snapshot-intro {
+  margin-top: 24px;
+}
+
+.movement-snapshot h3 {
+  margin: 0 0 6px;
+  color: #294936;
+  font-size: 17px;
+}
+
+.snapshot-count {
+  margin: 0 0 8px;
+  color: #2f6b4f;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.snapshot-text {
+  max-width: 620px;
+  margin: 0;
+  color: #7d8982;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.snapshot-text strong {
+  color: #46574d;
+}
+
+.snapshot-disclaimer {
+  margin: 10px 0 0;
+  color: #93a098;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.snapshot-cta {
+  margin-top: 18px;
+  font-size: 12px;
+  padding: 12px 18px;
+}
+
+
+/* Progress: three connected steps */
+
+.snapshot-progress {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 22px 0 0;
+  padding: 18px 12px;
+  list-style: none;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #f4f8f4, #edf5ed);
+}
+
+.snapshot-step {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  text-align: center;
+}
+
+/* Connector to the previous step. */
+.snapshot-step + .snapshot-step::before {
+  content: "";
+  position: absolute;
+  top: 14px;
+  right: calc(50% + 20px);
+  left: calc(-50% + 20px);
+  height: 2px;
+  background: #d5e3d7;
+}
+
+.snapshot-step--done + .snapshot-step--done::before {
+  background: #77b58e;
+}
+
+.snapshot-step__mark {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 2px solid #c9d8cc;
+  border-radius: 50%;
+  background: white;
+  color: #8b9890;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.snapshot-step--done .snapshot-step__mark {
+  border-color: #2f6b4f;
+  background: #2f6b4f;
+  color: white;
+}
+
+.snapshot-step__name {
+  margin-top: 2px;
+  color: #294936;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.snapshot-step__status {
+  color: #7d8982;
+  font-size: 11px;
+}
+
+
+/* Result cards */
+
+.snapshot-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.snapshot-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid #edf1ed;
+  border-radius: 14px;
+  background: rgba(250, 252, 249, 0.7);
+}
+
+/* Not completed is stated plainly, never styled as a failure. */
+.snapshot-card--open {
+  border-style: dashed;
+  border-color: #d5e3d7;
+  background: transparent;
+}
+
+.snapshot-card__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.snapshot-card__icon {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  background: #edf5ee;
+  font-size: 18px;
+}
+
+.snapshot-card h4 {
+  margin: 0;
+  color: #1d3a2b;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.snapshot-card__area {
+  color: #8b9890;
+  font-size: 10px;
+}
+
+.snapshot-card__status {
+  margin: 2px 0 0;
+  color: #8b9890;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.snapshot-card__status--completed {
+  color: #2f6b4f;
+}
+
+.snapshot-card__value {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  color: #244535;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.snapshot-card__label {
+  color: #8b9890;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.snapshot-card__details {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: #5f6f66;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.snapshot-card__note,
+.snapshot-card__previous {
+  margin: 0;
+  color: #7d8982;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.snapshot-card__previous {
+  padding-top: 8px;
+  border-top: 1px solid #edf1ed;
+}
+
+.snapshot-card__action {
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+.snapshot-card__action .text-button {
+  padding: 0;
+}
+
+
+/* Footer */
+
+.snapshot-footer {
+  margin-top: 18px;
+}
+
+.snapshot-updated {
+  margin: 0;
+  color: #7d8982;
+  font-size: 11px;
+}
+
+.snapshot-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+/* Both buttons share the row's height. */
+.snapshot-actions > button {
+  margin-top: 0;
+}
+
+.snapshot-actions .snapshot-secondary {
+  padding: 12px 16px;
+  font-size: 12px;
+}
+
+
+@media (max-width: 900px) {
+  .snapshot-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .snapshot-progress {
+    padding: 14px 6px;
+  }
+
+  .snapshot-step__name {
+    font-size: 11px;
+  }
+
+  .snapshot-step__status {
+    font-size: 10px;
+  }
+
+  .snapshot-actions > button {
+    width: 100%;
+    justify-content: center;
+  }
+}

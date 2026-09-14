@@ -1,104 +1,21 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { fetchLatestAssessment } from "../services/assessments";
+import MovementSnapshot from "../components/MovementSnapshot";
+import {
+  buildMovementSnapshot,
+  previousCompletedSessions,
+} from "../assessment/utils/movementSnapshot";
+import {
+  fetchAssessment,
+  fetchAssessmentHistory,
+  fetchLatestAssessment,
+} from "../services/assessments";
 import { clearSession, fetchMe, getToken } from "../services/auth";
 import { fetchProfileSummary } from "../services/profile";
 import { fetchReports } from "../services/reports";
 
 import "./Dashboard.css";
-
-
-const TEST_TITLES = {
-  shoulder: "Shoulder movement",
-  ftsst: "Sit to stand",
-  balance: "Standing on one leg"
-};
-
-
-/**
- * One line describing what a test recorded.
- *
- * A skipped or unusable check says so. Nothing here turns a missing
- * measurement into a number, and nothing here says whether a measurement is
- * good or bad, because that judgement cannot be made from this data.
- */
-function describeTest(testId, test) {
-
-  if (!test) {
-    return "Not recorded";
-  }
-
-
-  if (test.status === "skipped") {
-    return "Skipped";
-  }
-
-  if (test.status === "not_started") {
-    return "Not reached";
-  }
-
-  if (test.status === "invalid") {
-    return "We couldn't reliably assess this movement.";
-  }
-
-
-  const measurements = test.measurements;
-
-  if (!measurements) {
-    return "Recorded";
-  }
-
-
-  if (testId === "shoulder") {
-
-    const left = measurements.left?.finalElevationDeg;
-    const right = measurements.right?.finalElevationDeg;
-
-    if (
-      typeof left === "number" &&
-      typeof right === "number"
-    ) {
-      return `${Math.round(left)}° left · ${Math.round(right)}° right`;
-    }
-
-    return "Recorded";
-  }
-
-
-  if (testId === "ftsst") {
-
-    const seconds = measurements.completionTimeSeconds;
-
-    if (typeof seconds === "number") {
-      return `${seconds.toFixed(1)} s for five stands`;
-    }
-
-    return "Recorded";
-  }
-
-
-  if (testId === "balance") {
-
-    const left = measurements.left;
-    const right = measurements.right;
-
-    const parts = [];
-
-    if (left?.attempted && typeof left.holdDurationMs === "number") {
-      parts.push(`${(left.holdDurationMs / 1000).toFixed(1)} s left`);
-    }
-
-    if (right?.attempted && typeof right.holdDurationMs === "number") {
-      parts.push(`${(right.holdDurationMs / 1000).toFixed(1)} s right`);
-    }
-
-    return parts.length ? parts.join(" · ") : "Recorded";
-  }
-
-
-  return "Recorded";
-}
 
 
 function Dashboard() {
@@ -134,6 +51,15 @@ function Dashboard() {
   const [assessmentState, setAssessmentState] = useState("loading");
 
   const [assessmentError, setAssessmentError] = useState(null);
+
+  // The most recent earlier completed result of each check, for the neutral
+  // "Previous result" line. Empty when there is no earlier session.
+  // Stored with the id of the latest session they were loaded for, so a
+  // result from an older load is never shown against a newer session.
+  const [previousResults, setPreviousResults] = useState({
+    forSessionId: null,
+    byTest: {}
+  });
 
   // The lifestyle answers from onboarding. Self-reported, not measured.
   const [profile, setProfile] = useState(null);
@@ -307,6 +233,83 @@ function Dashboard() {
   }[timeOfDay];
 
 
+  useEffect(() => {
+
+    if (!latest?.id || assessmentCount < 2) {
+      return undefined;
+    }
+
+    let ignore = false;
+
+    async function loadPreviousResults() {
+
+      try {
+
+        const { assessments } = await fetchAssessmentHistory({ limit: 20 });
+
+        const picked = previousCompletedSessions(assessments, latest.id);
+
+        const ids = [
+          ...new Set(
+            Object.values(picked).filter(Boolean).map((entry) => entry.id)
+          )
+        ];
+
+        const sessions = Object.fromEntries(
+          await Promise.all(
+            ids.map(async (id) => [id, await fetchAssessment(id)])
+          )
+        );
+
+        if (ignore) return;
+
+        setPreviousResults({
+          forSessionId: latest.id,
+          byTest: Object.fromEntries(
+            Object.entries(picked)
+              .filter(([, entry]) => entry && sessions[entry.id])
+              .map(([testId, entry]) => [
+                testId,
+                {
+                  startedAt: sessions[entry.id].startedAt,
+                  test: sessions[entry.id].tests?.[testId]
+                }
+              ])
+          )
+        });
+
+      } catch {
+
+        // Earlier results are supplementary. If they cannot be loaded the
+        // latest results still show, just without a previous value.
+        if (!ignore) {
+          setPreviousResults({ forSessionId: latest.id, byTest: {} });
+        }
+
+      }
+    }
+
+    loadPreviousResults();
+
+    return () => {
+      ignore = true;
+    };
+
+  }, [latest?.id, assessmentCount]);
+
+
+  const movementSnapshot = useMemo(
+    () =>
+      buildMovementSnapshot(
+        latest,
+        latest && previousResults.forSessionId === latest.id
+          ? previousResults.byTest
+          : {}
+      ),
+    [latest, previousResults]
+  );
+
+
   // How many of the three checks recorded a usable measurement. This is a
   // count of completed checks, not a rating of how well anything was done.
   const checksRecorded =
@@ -341,6 +344,17 @@ function Dashboard() {
   function openHistory() {
 
     navigate("/history");
+
+  }
+
+
+  function openSession(assessmentId) {
+
+    navigate(
+      assessmentId
+        ? `/history?session=${encodeURIComponent(assessmentId)}`
+        : "/history"
+    );
 
   }
 
@@ -872,120 +886,16 @@ function Dashboard() {
         <section className="lower-grid">
 
 
-          {/* Latest results */}
+          {/* Latest results: each baseline check shown separately. */}
 
-          <div className="score-card">
-
-            <div className="section-heading">
-
-              <div>
-
-                <span className="section-eyebrow">
-                  MOVEMENT INSIGHT
-                </span>
-
-                <h2>
-                  Your latest results
-                </h2>
-
-              </div>
-
-              <span className="coming-pill">
-                NO SCORE YET
-              </span>
-
-            </div>
-
-
-            <div className="score-content">
-
-              <div className="score-number">
-                —
-              </div>
-
-              <div className="score-info">
-
-                <h3>
-                  {latest
-                    ? "There is no single score."
-                    : "Your results are waiting."}
-                </h3>
-
-                <p>
-                  {latest
-                    ? `Your three checks are shown separately below.
-                       They are not combined into one number, and they are not
-                       compared to any reference population, because the
-                       thresholds that would make either meaningful have not
-                       been established for this application.`
-                    : `Complete your first movement check to see what it
-                       recorded. You will see the three checks separately,
-                       exactly as they were measured.`}
-                </p>
-
-                <button
-                  className="outline-button"
-                  onClick={startAssessment}
-                >
-                  {latest
-                    ? "Take another check"
-                    : "Take assessment"}
-                  <span>→</span>
-                </button>
-
-              </div>
-
-            </div>
-
-
-            {latest && (
-
-              <div className="latest-checks">
-
-                {["shoulder", "ftsst", "balance"].map(
-                  (testId) => (
-
-                    <div
-                      className="latest-check"
-                      key={testId}
-                    >
-
-                      <span className="latest-check__name">
-                        {TEST_TITLES[testId]}
-                      </span>
-
-                      <span
-                        className={
-                          latest.tests?.[testId]
-                            ?.status === "completed"
-                            ? "latest-check__value"
-                            : "latest-check__value latest-check__value--none"
-                        }
-                      >
-                        {describeTest(
-                          testId,
-                          latest.tests?.[testId]
-                        )}
-                      </span>
-
-                    </div>
-
-                  )
-                )}
-
-
-                <button
-                  className="text-button"
-                  onClick={openHistory}
-                >
-                  See all sessions →
-                </button>
-
-              </div>
-
-            )}
-
-          </div>
+          <MovementSnapshot
+            loadState={assessmentState}
+            error={assessmentError}
+            snapshot={movementSnapshot}
+            onStartAssessment={startAssessment}
+            onOpenSession={openSession}
+            onOpenHistory={openHistory}
+          />
 
 
           {/* Medical reports.
@@ -1052,7 +962,7 @@ function Dashboard() {
 
           {/* Specialists */}
 
-          <div className="specialist-card">
+          <div id="specialists" className="specialist-card">
 
             <div className="section-heading">
 
@@ -1085,10 +995,6 @@ function Dashboard() {
                   is deprecated and is no longer part of the journey. */}
 
               <Specialist
-                emoji="📄"
-                title="Report reader"
-                text="Transcribes your report for you to check"
-                onClick={() => navigate("/reports")}
                 emoji="🏃"
                 title="Exercise & Physical Activity"
                 text="Daily walking volume, steps & sedentary pacing"
@@ -1103,10 +1009,6 @@ function Dashboard() {
               />
 
               <Specialist
-                emoji="🏃"
-                title="Movement"
-                text="Exercises matched to your assessment"
-                onClick={() => navigate("/plan")}
                 emoji="🍎"
                 title="Nutrition & Lifestyle"
                 text="Balanced dietary quality, hydration & authentic meal logging"
@@ -1121,10 +1023,6 @@ function Dashboard() {
               />
 
               <Specialist
-                emoji="🥗"
-                title="Nutrition & habits"
-                text="Everyday changes, where they are needed"
-                onClick={() => navigate("/plan")}
                 emoji="🧠"
                 title="Behaviour & Adherence"
                 text="Micro-habits, routine pacing & consistency"

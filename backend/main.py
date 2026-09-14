@@ -22,6 +22,7 @@ from routes.workflow import router as workflow_router
 from routes.dashboard import router as dashboard_router
 from routes.auth import router as auth_router
 from user_state.store import ensure_indexes as ensure_user_state_indexes
+from password_reset.store import ensure_indexes as ensure_password_reset_indexes
 
 
 LOCAL_CORS_ORIGINS = (
@@ -50,6 +51,7 @@ async def lifespan(_app: FastAPI):
         ensure_food_log_indexes()
         ensure_behaviour_log_indexes()
         ensure_user_state_indexes()
+        ensure_password_reset_indexes()
 
     except PyMongoError as error:
         print(

@@ -66,3 +66,8 @@ behaviour_log_collection = db["behaviour_log"]
 # has", upserted in place, read back by GET /api/workflow/latest
 # (routes/workflow.py, user_state/store.py).
 user_state_collection = db["user_state"]
+
+# Password reset tokens. Only a SHA-256 hash of each token is stored, so a copy
+# of this collection cannot be used to reset anyone's password. A TTL index
+# (password_reset/store.py) deletes each document once it has expired.
+password_reset_tokens_collection = db["password_reset_tokens"]

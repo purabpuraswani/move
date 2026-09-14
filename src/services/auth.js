@@ -41,6 +41,21 @@ export function authHeader() {
 }
 
 
+// FastAPI returns `detail` as a string for errors the routes raise, and as a
+// list of {msg, ...} objects when request validation fails (for example a
+// malformed email). Either way the user should see a sentence.
+function errorDetail(detail) {
+  if (typeof detail === "string") return detail;
+
+  if (Array.isArray(detail) && detail.length > 0) {
+    const message = detail[0]?.msg;
+    return typeof message === "string" ? message.replace(/^Value error, /, "") : "";
+  }
+
+  return "";
+}
+
+
 async function postJson(path, userData, fallbackError) {
   const response = await apiFetch(
     `${getApiUrl()}${path}`,
@@ -55,10 +70,10 @@ async function postJson(path, userData, fallbackError) {
     }
   );
 
-  const data = await response.json();
+  const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(data.detail || fallbackError);
+    throw new Error(errorDetail(data.detail) || fallbackError);
   }
 
   if (data.token) {
@@ -83,6 +98,33 @@ export async function signin(userData) {
     "/api/auth/signin",
     userData,
     "Signin failed"
+  );
+}
+
+
+/**
+ * Ask for password reset instructions to be emailed.
+ *
+ * The backend answers the same way whether or not the address has an account,
+ * so the message returned here is shown as-is and never implies either.
+ */
+export async function requestPasswordReset(email) {
+  return postJson(
+    "/api/auth/forgot-password",
+    { email },
+    "We could not send reset instructions just now. Please try again."
+  );
+}
+
+
+/**
+ * Set a new password with the single-use token from a reset email.
+ */
+export async function resetPassword(token, newPassword) {
+  return postJson(
+    "/api/auth/reset-password",
+    { token, new_password: newPassword },
+    "We could not reset your password. Please try again."
   );
 }
 

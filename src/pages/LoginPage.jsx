@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
+import PasswordInput from "../components/PasswordInput";
 import { signin } from "../services/auth";
 
 import "./LoginPage.css";
@@ -29,6 +30,9 @@ function LoginPage() {
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Set by ResetPasswordPage when it sends the user here after a reset.
+  const passwordWasReset = location.state?.passwordReset === true;
 
 
   function handleChange(e) {
@@ -107,13 +111,22 @@ function LoginPage() {
           onSubmit={handleSubmit}
         >
 
+          {passwordWasReset && !error && (
+            <div className="form-success" role="status">
+              Your password has been reset. Sign in with your new password.
+            </div>
+          )}
+
+
           <div className="input-group">
 
-            <label>Email</label>
+            <label htmlFor="login-email">Email</label>
 
             <input
+              id="login-email"
               type="email"
               name="email"
+              autoComplete="email"
               placeholder="you@example.com"
               value={form.email}
               onChange={handleChange}
@@ -125,12 +138,21 @@ function LoginPage() {
 
           <div className="input-group">
 
-            <label>Password</label>
+            <div className="login-password-label">
 
-            <input
-              type="password"
+              <label htmlFor="login-password">Password</label>
+
+              <Link to="/forgot-password" className="forgot-password-link">
+                Forgot password?
+              </Link>
+
+            </div>
+
+            <PasswordInput
+              id="login-password"
               name="password"
               placeholder="Your password"
+              autoComplete="current-password"
               value={form.password}
               onChange={handleChange}
               required

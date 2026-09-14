@@ -8,10 +8,13 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import "./movementDemos/content.js";
 
 import RequireAuth from "./components/RequireAuth";
+import ScrollToTop from "./components/ScrollToTop";
 
 import LandingPage from "./pages/LandingPage";
 import SignupPage from "./pages/SignupPage";
 import LoginPage from "./pages/LoginPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 
 import OnboardingPage from "./pages/OnboardingPage";
 import Dashboard from "./pages/Dashboard";
@@ -37,6 +40,8 @@ function App() {
   return (
     <BrowserRouter>
 
+      <ScrollToTop />
+
       <Routes>
 
         {/* Open to anyone. */}
@@ -54,6 +59,16 @@ function App() {
         <Route
           path="/login"
           element={<LoginPage />}
+        />
+
+        <Route
+          path="/forgot-password"
+          element={<ForgotPasswordPage />}
+        />
+
+        <Route
+          path="/reset-password"
+          element={<ResetPasswordPage />}
         />
 
         {/* Everything below needs an account. RequireAuth sends a signed-out
