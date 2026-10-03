@@ -223,23 +223,32 @@
 }
 
 .progress-button {
-  padding: 11px 20px;
-
-  border: none;
-
-  border-radius: 999px;
-
-  background: var(--green);
-
-  color: #fff;
-
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 10px 18px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  background: linear-gradient(135deg, var(--green-bright), var(--green));
+  box-shadow: 0 8px 18px rgba(53, 209, 139, 0.16);
+  color: #062117;
   font-family: inherit;
-
-  font-size: 14px;
-
-  font-weight: 600;
-
+  font-size: 13px;
+  font-weight: 800;
   cursor: pointer;
+  transition: transform .2s ease, box-shadow .2s ease, filter .2s ease;
+}
+
+.progress-button:hover:not(:disabled) {
+  filter: brightness(1.08);
+  box-shadow: 0 10px 22px rgba(53, 209, 139, 0.24);
+  transform: translateY(-1px);
+}
+
+.progress-button:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 3px;
 }
 
 .progress-button:disabled {
@@ -254,6 +263,13 @@
   border: 1px solid var(--border);
 
   color: var(--dark);
+}
+
+.progress-button--quiet:hover:not(:disabled) {
+  border-color: rgba(101, 232, 237, 0.35);
+  background: rgba(101, 232, 237, 0.11);
+  color: var(--mint);
+  box-shadow: none;
 }
 
 .progress-counts {

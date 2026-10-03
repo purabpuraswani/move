@@ -74,18 +74,35 @@ function LoginPage() {
 
 
   return (
-    <div className="login-page">
+    <div className="auth-page login-auth-page">
 
-      <div className="login-container">
-
-        <Link to="/" className="login-brand">
-          <div className="brand-icon">
-            M
-          </div>
-
-          Move<span>Well</span> AI
+      <section className="login-visual">
+        <Link to="/" className="auth-brand">
+          <div className="brand-icon">M</div>
+          <span>Move<span>Well</span> AI</span>
         </Link>
 
+        <div className="login-visual-content">
+          <span className="section-tag">WELCOME BACK</span>
+          <h1>Keep building your <span>better routine.</span></h1>
+          <p>
+            Return to your personalized movement plan, progress history and
+            guidance from your MoveWell specialist team.
+          </p>
+
+          <div className="login-trust-list">
+            <span><b>✓</b> Personalized movement guidance</span>
+            <span><b>✓</b> Progress you can understand</span>
+            <span><b>✓</b> Safety-aware recommendations</span>
+          </div>
+        </div>
+
+        <div className="auth-decoration decoration-one"></div>
+        <div className="auth-decoration decoration-two"></div>
+      </section>
+
+      <section className="auth-form-area login-form-area">
+        <div className="login-container">
 
         <div className="login-heading">
 
@@ -188,7 +205,8 @@ function LoginPage() {
           </Link>
         </p>
 
-      </div>
+        </div>
+      </section>
 
     </div>
   );

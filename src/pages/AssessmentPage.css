@@ -533,16 +533,15 @@
 
 .assess-btn--primary {
   background: var(--green);
-  color: #fff;
+  color: #062117;
   font-weight: 700;
-  box-shadow: 0 2px 8px rgba(47, 107, 79, 0.25);
+  box-shadow: 0 8px 20px rgba(53, 209, 139, 0.16);
 }
 
 .assess-btn--primary:hover:not(:disabled) {
-  background: #275a42;
-  background: #24553f;
+  background: var(--green-bright);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(47, 107, 79, 0.35);
+  box-shadow: 0 12px 26px rgba(53, 209, 139, 0.24);
 }
 
 .assess-btn--ghost {

@@ -375,13 +375,6 @@ function SpecialistDetailPageInner() {
   const statusFor = (live) =>
     live?.status || (workflow?.available ? "EVALUATED_NOT_REQUIRED" : "NOT_ASSESSED");
 
-  const badgeModifierFor = (statusValue) =>
-    statusValue === "ACTIVE"
-      ? "active"
-      : statusValue === "NOT_ASSESSED"
-      ? "not-assessed"
-      : "evaluated";
-
   const liveSpecialist = findLiveSpecialist(normalizedKey, config);
 
   const status = statusFor(liveSpecialist);
@@ -721,65 +714,6 @@ function SpecialistDetailPageInner() {
           </button>
         </div>
 
-        {/* Team Peers Footer */}
-        <section className="specialist-peers-section" aria-labelledby="peers-heading">
-          <div className="specialist-peers-header">
-            <h2 id="peers-heading" className="specialist-peers-title">
-              Your MoveWell Specialists Team
-            </h2>
-            <p className="specialist-peers-subtitle">
-              Personalized care across your health journey
-            </p>
-          </div>
-          <div className="specialist-peers-grid">
-            {Object.entries(SPECIALIST_CONFIGS).map(([key, item]) => {
-              const isCurrent = key === normalizedKey;
-              const peerLive = findLiveSpecialist(key, item);
-              const peerStatus = statusFor(peerLive);
-              const peerStatusLabel =
-                safeDisplayValue(peerLive?.status_label) ||
-                (peerStatus === "ACTIVE"
-                  ? "Active in Your Plan"
-                  : peerStatus === "NOT_ASSESSED"
-                  ? "Not Assessed"
-                  : "Evaluated");
-              return (
-                <Link
-                  key={key}
-                  to={`/specialist/${key}`}
-                  className={`specialist-peer-card ${
-                    isCurrent ? "specialist-peer-card--current" : ""
-                  }`}
-                  aria-label={`${item.title} specialist${
-                    isCurrent ? " (currently viewing)" : ""
-                  }`}
-                >
-                  <div className="specialist-peer-top">
-                    <span className="specialist-peer-avatar" aria-hidden="true">
-                      {item.icon}
-                    </span>
-                    <h3 className="specialist-peer-name">{item.title}</h3>
-                  </div>
-                  <p className="specialist-peer-desc">{item.subtitle}</p>
-                  <span
-                    className={`specialist-badge specialist-badge--${badgeModifierFor(
-                      peerStatus
-                    )}`}
-                  >
-                    {peerStatusLabel}
-                  </span>
-                  <span
-                    className={`specialist-peer-action ${
-                      isCurrent ? "specialist-peer-action--current" : ""
-                    }`}
-                  >
-                    {isCurrent ? "Currently viewing ✓" : "View specialist →"}
-                  </span>
-                </Link>
-              );
-            })}
-          </div>
-        </section>
       </main>
     </div>
   );

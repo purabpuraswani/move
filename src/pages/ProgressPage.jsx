@@ -18,7 +18,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 import { getToken } from "../services/auth";
 import { fetchExerciseResults } from "../services/exerciseResults";
@@ -176,18 +176,8 @@ function ProgressPage() {
 
   return (
     <div className="progress-page">
-      <AppNavigation backTo="/dashboard" backLabel="← Dashboard" />
+      <AppNavigation showBack={false} />
       <main className="progress-main">
-        <div className="progress-breadcrumb">
-          <Link
-            to="/dashboard"
-            className="page-back-link"
-            aria-label="Back to Dashboard"
-          >
-            ← Dashboard
-          </Link>
-        </div>
-
         <div className="progress-intro">
           <span className="progress-eyebrow">Progress</span>
           <h1 className="progress-title">How things are going</h1>

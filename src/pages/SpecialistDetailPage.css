@@ -627,3 +627,314 @@
     margin: 0 0 10px;
   }
 }
+
+/* MoveWell dark product theme ----------------------------------------- */
+.specialist-detail-page {
+  background:
+    radial-gradient(circle at 12% 4%, rgba(31, 124, 83, 0.16), transparent 28rem),
+    radial-gradient(circle at 92% 18%, rgba(26, 113, 127, 0.1), transparent 26rem),
+    var(--bg);
+  color: var(--dark);
+}
+
+.specialist-detail-main {
+  padding-top: 30px;
+}
+
+.specialist-breadcrumb {
+  color: var(--muted);
+}
+
+.specialist-breadcrumb a {
+  color: var(--muted);
+}
+
+.specialist-breadcrumb a:hover {
+  color: var(--cyan);
+}
+
+.specialist-breadcrumb-sep {
+  color: rgba(120, 150, 138, 0.6);
+}
+
+.specialist-header-card,
+.specialist-card-panel,
+.specialist-peer-card {
+  background: linear-gradient(145deg, rgba(15, 43, 34, 0.96), rgba(9, 28, 23, 0.9));
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-soft);
+}
+
+.specialist-header-card {
+  border-radius: 20px;
+}
+
+.specialist-hero-avatar,
+.specialist-peer-avatar {
+  background: rgba(101, 232, 237, 0.09);
+  box-shadow: inset 0 1px 0 rgba(168, 243, 207, 0.08);
+}
+
+.specialist-hero-role {
+  color: var(--cyan);
+}
+
+.specialist-badge--active {
+  background: rgba(53, 209, 139, 0.12);
+  color: var(--green-bright);
+  border-color: rgba(53, 209, 139, 0.26);
+}
+
+.specialist-badge--active::before {
+  color: var(--green-bright);
+}
+
+.specialist-badge--evaluated {
+  background: rgba(101, 232, 237, 0.1);
+  color: var(--cyan);
+  border-color: rgba(101, 232, 237, 0.24);
+}
+
+.specialist-badge--not-assessed {
+  background: rgba(245, 195, 107, 0.12);
+  color: var(--amber);
+  border-color: rgba(245, 195, 107, 0.28);
+}
+
+.specialist-hero-title,
+.specialist-panel-title,
+.specialist-peers-title {
+  color: var(--dark);
+}
+
+.specialist-hero-desc,
+.specialist-reason-text,
+.specialist-peer-desc,
+.specialist-peers-subtitle {
+  color: var(--dark-soft);
+}
+
+.specialist-focus-box {
+  background: rgba(7, 24, 19, 0.56);
+  border-left-color: var(--cyan);
+  color: var(--dark-soft);
+}
+
+.specialist-focus-box strong,
+.specialist-rec-action strong,
+.specialist-rec-why strong {
+  color: var(--dark);
+}
+
+.specialist-evidence-item,
+.specialist-rec-item {
+  background: rgba(7, 24, 19, 0.5);
+  border-color: var(--border);
+  color: var(--dark-soft);
+}
+
+.specialist-evidence-icon,
+.specialist-rec-dosage {
+  color: var(--cyan);
+}
+
+.specialist-rec-item strong,
+.specialist-rec-title,
+.specialist-peer-name {
+  color: var(--mint);
+}
+
+.specialist-rec-item:hover,
+.specialist-peer-card:hover {
+  border-color: rgba(101, 232, 237, 0.38);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.2);
+}
+
+.specialist-rec-target-badge {
+  background: rgba(101, 232, 237, 0.1);
+  color: var(--cyan);
+}
+
+.specialist-rec-diff-badge {
+  background: rgba(168, 243, 207, 0.08);
+  color: var(--dark-soft);
+  border-color: var(--border);
+}
+
+.specialist-rec-action {
+  color: var(--dark-soft);
+}
+
+.specialist-rec-why {
+  background: rgba(101, 232, 237, 0.07);
+  color: var(--muted);
+}
+
+.specialist-rec-adherence {
+  color: var(--green-bright);
+}
+
+.specialist-rec-safety {
+  color: var(--amber);
+  background: rgba(245, 195, 107, 0.1);
+  border-color: rgba(245, 195, 107, 0.24);
+}
+
+.specialist-action-btn,
+.specialist-peer-action {
+  background: linear-gradient(135deg, var(--green-bright), var(--green));
+  color: #062117;
+  border: 1px solid transparent;
+  box-shadow: 0 8px 18px rgba(53, 209, 139, 0.16);
+}
+
+.specialist-action-btn:hover,
+.specialist-peer-card:hover .specialist-peer-action {
+  background: var(--green-bright);
+}
+
+.specialist-secondary-btn,
+.specialist-peer-action--current {
+  background: rgba(101, 232, 237, 0.06);
+  color: var(--dark-soft);
+  border-color: var(--border);
+}
+
+.specialist-secondary-btn:hover {
+  background: rgba(101, 232, 237, 0.11);
+  border-color: rgba(101, 232, 237, 0.35);
+  color: var(--mint);
+}
+
+.specialist-nav-bar {
+  border-top-color: var(--border);
+}
+
+.specialist-peer-card--current {
+  border-color: rgba(101, 232, 237, 0.38);
+  background: linear-gradient(145deg, rgba(18, 54, 49, 0.96), rgba(9, 28, 23, 0.9));
+}
+
+.specialist-peer-card--current .specialist-peer-avatar {
+  background: rgba(101, 232, 237, 0.12);
+}
+
+.specialist-empty-state,
+.specialist-empty-text {
+  color: var(--muted);
+}
+
+.specialist-missing-block {
+  border-top-color: var(--border);
+}
+
+.specialist-missing-title {
+  color: var(--muted);
+}
+
+.specialist-rec-image {
+  background: var(--surface-soft);
+}
+
+.specialist-detail-page .foodlog,
+.specialist-detail-page .behaviour-actions {
+  background: rgba(7, 24, 19, 0.5);
+  border-color: var(--border);
+}
+
+.specialist-detail-page .foodlog-coaching-notice {
+  background: rgba(53, 209, 139, 0.1);
+  border-color: rgba(53, 209, 139, 0.24);
+  color: var(--dark-soft);
+}
+
+.specialist-detail-page .foodlog-notice-icon {
+  color: var(--green-bright);
+}
+
+.specialist-detail-page .foodlog-meal {
+  background: rgba(101, 232, 237, 0.06);
+  color: var(--dark-soft);
+}
+
+.specialist-detail-page .foodlog-meal--on {
+  background: rgba(53, 209, 139, 0.14);
+  border-color: rgba(53, 209, 139, 0.34);
+  color: var(--mint);
+}
+
+.specialist-detail-page .foodlog-input {
+  background: var(--bg);
+  border-color: var(--border);
+  color: var(--dark);
+}
+
+.specialist-detail-page .foodlog-input::placeholder {
+  color: var(--muted);
+}
+
+.specialist-detail-page .foodlog-submit,
+.specialist-detail-page .behaviour-action-complete {
+  background: linear-gradient(135deg, var(--green-bright), var(--green));
+  color: #062117;
+  box-shadow: 0 8px 18px rgba(53, 209, 139, 0.14);
+}
+
+.specialist-detail-page .foodlog-submit:hover:not(:disabled),
+.specialist-detail-page .behaviour-action-complete:hover:not(:disabled) {
+  background: var(--green-bright);
+}
+
+.specialist-detail-page .behaviour-actions-title {
+  color: var(--cyan);
+}
+
+.specialist-detail-page .behaviour-actions-status,
+.specialist-detail-page .behaviour-actions-note,
+.specialist-detail-page .behaviour-action-question {
+  color: var(--muted);
+}
+
+.specialist-detail-page .behaviour-action {
+  background: rgba(13, 33, 27, 0.72);
+  border-color: var(--border);
+}
+
+.specialist-detail-page .behaviour-action-name {
+  color: var(--mint);
+}
+
+.specialist-detail-page .behaviour-action-text {
+  color: var(--dark-soft);
+}
+
+.specialist-detail-page .behaviour-action-skip,
+.specialist-detail-page .behaviour-action-chip {
+  background: rgba(101, 232, 237, 0.06);
+  border-color: var(--border);
+  color: var(--dark-soft);
+}
+
+.specialist-detail-page .behaviour-action-skip:hover:not(:disabled),
+.specialist-detail-page .behaviour-action-chip:hover:not(:disabled) {
+  background: rgba(101, 232, 237, 0.12);
+  border-color: rgba(101, 232, 237, 0.3);
+  color: var(--mint);
+}
+
+.specialist-detail-page .behaviour-action-done {
+  color: var(--green-bright);
+  background: rgba(53, 209, 139, 0.12);
+}
+
+.specialist-detail-page .behaviour-action-done--skipped {
+  color: var(--amber);
+  background: rgba(245, 195, 107, 0.12);
+}
+
+.specialist-action-btn:focus-visible,
+.specialist-secondary-btn:focus-visible,
+.specialist-peer-card:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 3px;
+}

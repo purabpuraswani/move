@@ -128,7 +128,7 @@ _ADVICE_ONLY_MODES = {
 def _build_result(
     *, workflow_id, request_id, orchestrator_decision, selected_agents,
     agent_results, safety_result, final_recommendations, coordination_notes,
-    state_updates, updated_user_state, errors,
+    coordination_summary, state_updates, updated_user_state, errors,
 ):
     return {
         "workflow_id": workflow_id,
@@ -139,6 +139,7 @@ def _build_result(
         "safety_result": safety_result,
         "final_recommendations": final_recommendations,
         "coordination_notes": coordination_notes,
+        "coordination_summary": coordination_summary,
         "state_updates": state_updates,
         "updated_user_state": updated_user_state,
         "errors": errors,
@@ -274,10 +275,13 @@ def _filtered_plan(agent_id: str, plan: dict, removed_ids: set) -> dict:
 
 
 def _coordination_notes(agent_results: dict, need_profile) -> list:
-    """Identify the one concrete cross-agent conflict this project's rules
-    call out by name: Physio recommending more exercise while Behaviour's
-    own need level says baseline adherence is poor. Deterministic — reads
-    only the levels/plans already computed, invents nothing.
+    """Identify deterministic cross-agent coordination signals.
+
+    This function remains intentionally lightweight: it does not invent
+    unseen conversations, but it does capture the structured coordination
+    facts the orchestrator can already infer from the selected agents and
+    their outputs. The output is still a list of notes, but the real
+    collaboration logic is exposed in the richer coordination_summary below.
     """
 
     notes = []
@@ -324,6 +328,86 @@ def _coordination_notes(agent_results: dict, need_profile) -> list:
         )
 
     return notes
+
+
+def _coordination_summary(agent_results: dict, need_profile: dict | None) -> dict:
+    """Structured multi-agent coordination data for the selected agents.
+
+    This is the collaboration layer: selected specialists do not talk to each
+    other directly, but the orchestrator records the explicit shared context,
+    the dependency relationships between plan-producing agents, and the areas
+    where one agent should moderate or reinforce another. The result is a
+    machine-readable summary suitable for downstream coordination or UI
+    display without leaking internal trace IDs.
+    """
+
+    agents = sorted(agent_results)
+    summary = {
+        "active_agents": agents,
+        "shared_context": {
+            "behaviour_need_level": ((need_profile or {}).get("behaviour_need") or {}).get("level"),
+            "nutrition_need_level": ((need_profile or {}).get("nutrition_need") or {}).get("level"),
+            "mobility_need_level": ((need_profile or {}).get("mobility_need") or {}).get("level"),
+            "safety_status": ((need_profile or {}).get("safety_status") or {}).get("level"),
+        },
+        "dependencies": [],
+        "conflicts": [],
+        "recommendations": [],
+    }
+
+    physio_result = agent_results.get("physio")
+    behaviour_result = agent_results.get("behaviour")
+    recovery_result = agent_results.get("recovery")
+    activity_result = agent_results.get("exercise_activity")
+
+    if physio_result and physio_result.get("status") == "completed":
+        summary["dependencies"].append({
+            "agent": "physio",
+            "depends_on": ["current_needs", "exercise_history"],
+            "reason": "Exercise plan generation depends on the current need profile and prior plan history.",
+        })
+
+    if behaviour_result and behaviour_result.get("status") == "completed":
+        summary["dependencies"].append({
+            "agent": "behaviour",
+            "depends_on": ["current_needs", "behaviour_log"],
+            "reason": "Habit guidance depends on the user behaviour signal and recent adherence signals.",
+        })
+
+    if recovery_result and recovery_result.get("status") == "completed":
+        summary["dependencies"].append({
+            "agent": "recovery",
+            "depends_on": ["exercise_activity", "sleep_context"],
+            "reason": "Recovery guidance is informed by activity load and rest-related context.",
+        })
+
+    if physio_result and physio_result.get("status") == "completed" and (
+        ((need_profile or {}).get("behaviour_need") or {}).get("level") == "HIGH"
+    ):
+        summary["conflicts"].append({
+            "type": "exercise_volume_vs_behaviour_capacity",
+            "agents": ["physio", "behaviour"],
+            "issue": "Physio is recommending an exercise plan while behaviour_need indicates a weak adherence baseline.",
+            "resolution": "Introduce behaviour goals in parallel and keep the exercise plan conservative.",
+        })
+
+    if recovery_result and recovery_result.get("status") == "completed":
+        recovery_constraint = (recovery_result.get("findings") or {}).get("constraint") or {}
+        if recovery_constraint.get("limit_progression") and (activity_result or physio_result):
+            summary["recommendations"].append({
+                "agent": "recovery",
+                "applies_to": ["exercise_activity", "physio"],
+                "action": "Slow progression and preserve current session volume until recovery improves.",
+            })
+
+    if physio_result and behaviour_result and physio_result.get("status") == "completed" and behaviour_result.get("status") == "completed":
+        summary["recommendations"].append({
+            "agent": "orchestrator",
+            "applies_to": ["physio", "behaviour"],
+            "action": "Coordinate exercise and habit goals so the plan remains realistic and sustainable.",
+        })
+
+    return summary
 
 
 def run_workflow(
@@ -431,6 +515,13 @@ def run_workflow(
             safety_result=None,
             final_recommendations=[],
             coordination_notes=[],
+            coordination_summary={
+                "active_agents": [],
+                "shared_context": {},
+                "dependencies": [],
+                "conflicts": [],
+                "recommendations": [],
+            },
             state_updates=[],
             updated_user_state=None,
             errors=[f"invalid User State: {error}"],
@@ -543,6 +634,13 @@ def run_workflow(
             safety_result=None,
             final_recommendations=[],
             coordination_notes=[],
+            coordination_summary={
+                "active_agents": [],
+                "shared_context": {},
+                "dependencies": [],
+                "conflicts": [],
+                "recommendations": [],
+            },
             state_updates=[],
             updated_user_state=user_state,
             errors=[],
@@ -944,6 +1042,8 @@ def run_workflow(
                                 "triggered_by": "progress_agent",
                             }
 
+    coordination_summary = _coordination_summary(agent_results, need_profile)
+
     # The Safety Gate runs whenever at least one selected agent actually
     # produced an Agent Result — even if that result has an empty plan —
     # so a NOT_ASSESSED/ALLOW outcome is itself a real, recorded decision,
@@ -1067,6 +1167,8 @@ def run_workflow(
         except (ValueError, UserStateValidationError) as error:
             errors.append(f"could not apply {agent_id} plan to User State: {error}")
 
+    coordination_summary = _coordination_summary(agent_results, need_profile)
+
     return _build_result(
         workflow_id=workflow_id,
         request_id=request_id,
@@ -1076,6 +1178,7 @@ def run_workflow(
         safety_result=safety_result,
         final_recommendations=final_recommendations,
         coordination_notes=coordination_notes,
+        coordination_summary=coordination_summary,
         state_updates=state_updates,
         updated_user_state=updated_user_state,
         errors=errors,

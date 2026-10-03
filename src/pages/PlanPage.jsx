@@ -348,18 +348,8 @@ function PlanPage() {
 
   return (
     <div className="plan-page">
-      <AppNavigation backTo="/dashboard" backLabel="← Dashboard" />
+      <AppNavigation showBack={false} />
       <main className="plan-main">
-        <div className="plan-breadcrumb">
-          <Link
-            to="/dashboard"
-            className="page-back-link"
-            aria-label="Back to Dashboard"
-          >
-            ← Dashboard
-          </Link>
-        </div>
-
         <div className="plan-intro">
           <span className="plan-eyebrow">Your plan</span>
           <h1 className="plan-title">Your MoveWell plan</h1>

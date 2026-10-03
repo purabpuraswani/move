@@ -9,7 +9,9 @@
   display: grid;
   grid-template-columns: 45% 55%;
 
-  background: #f7f8f4;
+  background:
+    radial-gradient(circle at 82% 10%, rgba(119, 181, 142, 0.12), transparent 24rem),
+    var(--bg);
 }
 
 
@@ -26,7 +28,10 @@
 
   padding: 35px 55px;
 
-  background: #17231d;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(119, 181, 142, 0.22), transparent 20rem),
+    radial-gradient(circle at 82% 82%, rgba(93, 141, 110, 0.20), transparent 25rem),
+    linear-gradient(145deg, #17231d 0%, #20382b 100%);
   color: white;
 }
 
@@ -213,7 +218,9 @@
 
   padding: 50px 60px;
 
-  background: #f7f8f4;
+  background:
+    radial-gradient(circle at 80% 8%, rgba(53, 209, 139, 0.10), transparent 20rem),
+    var(--bg);
 }
 
 
@@ -237,7 +244,7 @@
 
   margin-bottom: 45px;
 
-  color: #17231d;
+  color: var(--dark);
 
   font-family: "Manrope", sans-serif;
 
@@ -247,12 +254,12 @@
 
 
 .mobile-brand > span {
-  color: #17231d;
+  color: var(--dark);
 }
 
 
 .mobile-brand > span > span {
-  color: #2f6b4f;
+  color: var(--green-bright);
 }
 
 
@@ -266,14 +273,14 @@
 
 
 .form-heading .section-tag {
-  color: #2f6b4f;
+  color: var(--green);
 }
 
 
 .form-heading h2 {
   margin-top: 12px;
 
-  color: #17231d;
+  color: var(--dark);
 
   font-family: "Manrope", sans-serif;
 
@@ -288,7 +295,7 @@
 .form-heading p {
   margin-top: 11px;
 
-  color: #78847d;
+  color: var(--muted);
 
   font-size: 14px;
 }
@@ -317,7 +324,7 @@
 
 
 .input-group label {
-  color: #17231d;
+  color: var(--dark-soft);
 
   font-size: 12px;
 
@@ -334,13 +341,12 @@
 
   outline: none;
 
-  border: 1px solid #e0e6e1;
+  border: 1px solid var(--border);
 
   border-radius: 10px;
 
-  background: white;
-
-  color: #17231d;
+  background: rgba(13, 33, 27, 0.86);
+  color: var(--dark);
 
   font-size: 13px;
 
@@ -351,15 +357,45 @@
 
 
 .input-group input:focus {
-  border-color: #2f6b4f;
-
+  border-color: var(--green);
+  background-color: #0d211b !important;
+  color: var(--dark) !important;
+  -webkit-text-fill-color: var(--dark) !important;
+  caret-color: var(--dark);
   box-shadow:
-    0 0 0 3px rgba(47, 107, 79, 0.08);
+    0 0 0 3px rgba(53, 209, 139, 0.12),
+    inset 0 0 0 1000px #0d211b !important;
+}
+
+.input-group input:autofill,
+.input-group input:focus:autofill {
+  background-color: #0d211b !important;
+  color: var(--dark) !important;
+  -webkit-text-fill-color: var(--dark) !important;
+  caret-color: var(--dark);
+  box-shadow:
+    0 0 0 3px rgba(53, 209, 139, 0.12),
+    inset 0 0 0 1000px #0d211b !important;
 }
 
 
 .input-group input::placeholder {
-  color: #a8b0ab;
+  color: #6f8e81;
+}
+
+.input-group input:-webkit-autofill,
+.input-group input:-webkit-autofill:hover,
+.input-group input:-webkit-autofill:focus,
+.input-group input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--dark) !important;
+  caret-color: var(--dark);
+  -webkit-box-shadow:
+    0 0 0 3px rgba(53, 209, 139, 0.12),
+    0 0 0 1000px #0d211b inset !important;
+  box-shadow:
+    0 0 0 3px rgba(53, 209, 139, 0.12),
+    0 0 0 1000px #0d211b inset !important;
+  transition: background-color 9999s ease-out 0s;
 }
 
 
@@ -393,7 +429,7 @@
 
   gap: 9px;
 
-  color: #78847d;
+  color: var(--muted);
 
   font-size: 10px;
 
@@ -409,7 +445,7 @@
 
   margin-top: 1px;
 
-  accent-color: #2f6b4f;
+  accent-color: var(--green);
 }
 
 
@@ -433,9 +469,8 @@
 
   border-radius: 10px;
 
-  background: #17231d;
-
-  color: white;
+  background: var(--green);
+  color: #062117;
 
   font-size: 13px;
 
@@ -450,7 +485,7 @@
 .signup-button:hover {
   transform: translateY(-2px);
 
-  background: #2f6b4f;
+  background: var(--green-bright);
 }
 
 
@@ -481,7 +516,7 @@
 
   margin: 22px 0;
 
-  color: #a2aaa5;
+  color: var(--muted);
 
   font-size: 9px;
 
@@ -497,7 +532,7 @@
 
   height: 1px;
 
-  background: #e1e6e2;
+  background: var(--border);
 }
 
 
@@ -517,13 +552,12 @@
 
   gap: 10px;
 
-  border: 1px solid #e0e6e1;
+  border: 1px solid var(--border);
 
   border-radius: 10px;
 
-  background: white;
-
-  color: #34443a;
+  background: rgba(13, 33, 27, 0.72);
+  color: var(--dark-soft);
 
   font-size: 12px;
 
@@ -536,7 +570,7 @@
 
 
 .google-button:hover {
-  border-color: #b8c5bc;
+  border-color: rgba(53, 209, 139, 0.45);
 
   transform: translateY(-1px);
 }
@@ -558,7 +592,7 @@
 .login-text {
   margin-top: 23px;
 
-  color: #78847d;
+  color: var(--muted);
 
   text-align: center;
 
@@ -567,7 +601,7 @@
 
 
 .login-text a {
-  color: #2f6b4f;
+  color: var(--green-bright);
 
   font-weight: 700;
 }
@@ -582,7 +616,7 @@
 
   margin: 27px auto 0;
 
-  color: #9ca59f;
+  color: var(--muted);
 
   text-align: center;
 

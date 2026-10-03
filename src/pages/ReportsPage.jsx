@@ -206,29 +206,7 @@ function ReportsPage() {
 
   return (
     <div className="reports-page">
-      <header className="assess-header">
-        <button
-          type="button"
-          className="assess-header__logo"
-          onClick={() => navigate("/dashboard")}
-        >
-          <span className="assess-header__mark">M</span>
-          <span>
-            MoveWell<small>AI</small>
-          </span>
-        </button>
       <AppNavigation backTo="/dashboard" backLabel="← Dashboard" />
-
-        <span className="assess-header__title">Medical reports</span>
-
-        <button
-          type="button"
-          className="assess-btn assess-btn--quiet"
-          onClick={() => navigate("/dashboard")}
-        >
-          Dashboard
-        </button>
-      </header>
 
       <main className="reports-main">
         <div className="reports-intro">
@@ -349,7 +327,7 @@ function ReportsPage() {
               </h2>
 
               {listState === "loading" && (
-                <p className="reports-empty">Loading your reports…</p>
+                <p className="reports-empty reports-loading">Loading your reports…</p>
               )}
 
               {listState === "error" && (

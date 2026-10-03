@@ -102,6 +102,57 @@
   margin-bottom: 0;
 }
 
+.history-page .assess-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 10px 18px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.2;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease,
+    border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.history-page .assess-btn--primary {
+  background: linear-gradient(135deg, var(--green-bright), var(--green));
+  box-shadow: 0 8px 18px rgba(53, 209, 139, 0.16);
+  color: #062117;
+}
+
+.history-page .assess-btn--primary:hover:not(:disabled) {
+  background: var(--green-bright);
+  box-shadow: 0 10px 22px rgba(53, 209, 139, 0.24);
+  transform: translateY(-1px);
+}
+
+.history-page .assess-btn--ghost {
+  border-color: var(--border);
+  background: rgba(101, 232, 237, 0.06);
+  color: var(--dark-soft);
+}
+
+.history-page .assess-btn--ghost:hover:not(:disabled) {
+  border-color: rgba(101, 232, 237, 0.35);
+  background: rgba(101, 232, 237, 0.11);
+  color: var(--mint);
+  transform: translateY(-1px);
+}
+
+.history-page .assess-btn:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 3px;
+}
+
+.history-page .assess-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .history-list {
   display: grid;
 

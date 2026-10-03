@@ -156,29 +156,7 @@ function HistoryPage() {
 
   return (
     <div className="history-page">
-      <header className="assess-header">
-        <button
-          type="button"
-          className="assess-header__logo"
-          onClick={() => navigate("/dashboard")}
-        >
-          <span className="assess-header__mark">M</span>
-          <span>
-            MoveWell<small>AI</small>
-          </span>
-        </button>
       <AppNavigation backTo="/dashboard" backLabel="← Dashboard" />
-
-        <span className="assess-header__title">Your sessions</span>
-
-        <button
-          type="button"
-          className="assess-btn assess-btn--quiet"
-          onClick={() => navigate("/dashboard")}
-        >
-          Dashboard
-        </button>
-      </header>
 
       <main className="history-main">
         <div className="history-intro">
@@ -199,7 +177,7 @@ function HistoryPage() {
         )}
 
         {listState === "loading" && (
-          <p className="history-empty">Loading your sessions…</p>
+          <p className="history-empty history-loading">Loading your sessions…</p>
         )}
 
         {listState === "error" && (

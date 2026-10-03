@@ -506,7 +506,7 @@ function Dashboard() {
           <div>
 
             <span className="eyebrow">
-              YOUR WELLNESS SPACE
+              YOUR WELLNESS SPACE · TODAY
             </span>
 
             <h1>
@@ -522,21 +522,22 @@ function Dashboard() {
           </div>
 
 
-          <div className="date-pill">
-
-            <span className="calendar-icon">
-              ◷
-            </span>
-
-            {new Date().toLocaleDateString(
-              "en-US",
-              {
-                weekday: "long",
-                month: "short",
-                day: "numeric"
-              }
-            )}
-
+          <div className="welcome-actions">
+            <div className="date-pill">
+              <span className="calendar-icon">◷</span>
+              {new Date().toLocaleDateString(
+                "en-US",
+                {
+                  weekday: "long",
+                  month: "short",
+                  day: "numeric"
+                }
+              )}
+            </div>
+            <button className="quick-action" onClick={startAssessment}>
+              <span>＋</span>
+              New check
+            </button>
           </div>
 
         </section>
@@ -550,9 +551,6 @@ function Dashboard() {
           {/* Assessment CTA */}
 
           <div className="assessment-hero">
-
-            <div className="hero-decoration decoration-one" />
-            <div className="hero-decoration decoration-two" />
 
             <div className="assessment-content">
 
@@ -585,28 +583,25 @@ function Dashboard() {
             </div>
 
 
-            <div className="hero-figure">
-
-              <div className="figure-circle">
-
-                <div className="figure-person">
-
-                  <div className="person-head" />
-
-                  <div className="person-body" />
-
-                  <div className="person-arm left" />
-
-                  <div className="person-arm right" />
-
-                  <div className="person-leg left" />
-
-                  <div className="person-leg right" />
-
-                </div>
-
+            <div className="assessment-visual" aria-hidden="true">
+              <div className="visual-ring visual-ring-outer"></div>
+              <div className="visual-ring visual-ring-middle"></div>
+              <svg className="pose-skeleton" viewBox="0 0 180 250" role="img" aria-label="AI pose tracking preview">
+                <g fill="none" stroke="var(--cyan)" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="90" cy="34" r="14" strokeWidth="3" />
+                  <path d="M90 48 L90 112 M90 63 L53 91 M90 63 L128 88 M90 112 L61 170 M90 112 L119 170 M61 170 L44 222 M119 170 L137 222" strokeWidth="4" />
+                  <circle cx="53" cy="91" r="4" fill="var(--mint)" /><circle cx="128" cy="88" r="4" fill="var(--mint)" />
+                  <circle cx="61" cy="170" r="4" fill="var(--mint)" /><circle cx="119" cy="170" r="4" fill="var(--mint)" />
+                  <circle cx="44" cy="222" r="4" fill="var(--mint)" /><circle cx="137" cy="222" r="4" fill="var(--mint)" />
+                </g>
+              </svg>
+              <div className="visual-core">
+                <span>MOVE</span>
+                <strong>01</strong>
               </div>
-
+              <span className="visual-marker marker-top">MOBILITY</span>
+              <span className="visual-marker marker-right">BALANCE</span>
+              <span className="visual-marker marker-bottom">CONTROL</span>
             </div>
 
           </div>

@@ -554,7 +554,7 @@ function GuidancePage() {
         )}
 
         {pageState === "loading" && (
-          <p className="guide-empty">Checking what your agents can work from…</p>
+          <p className="guide-empty guide-loading">Checking what your agents can work from…</p>
         )}
 
         {pageState === "error" && (

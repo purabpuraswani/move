@@ -1,206 +1,110 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap");
 
 :root {
-  --bg: #f7f8f4;
-  --surface: #ffffff;
-
-  --dark: #17231d;
-  --dark-soft: #34443a;
-
-  --green: #2f6b4f;
-  --green-light: #dfeee5;
-  --green-bright: #77b58e;
-
-  --muted: #78847d;
-  --border: #e4e9e4;
-
-  --danger: #a54e47;
-
+  --bg: #07110f;
+  --bg-deep: #050b0a;
+  --surface: #0d211b;
+  --surface-soft: #102a22;
+  --surface-raised: #14362a;
+  --dark: #effff8;
+  --dark-soft: #b3c9bf;
+  --green: #35d18b;
+  --green-light: #b6f5d5;
+  --green-bright: #5ee7a4;
+  --mint: #a8f3cf;
+  --cyan: #65e8ed;
+  --amber: #f5c36b;
+  --muted: #78968a;
+  --border: rgba(153, 232, 194, 0.14);
+  --shadow-soft: 0 18px 50px rgba(0, 0, 0, 0.18);
+  --shadow-card: 0 24px 70px rgba(0, 0, 0, 0.28);
+  --danger: #ff8e83;
   --radius-sm: 10px;
   --radius-md: 15px;
-  --radius-lg: 20px;
-
-  /* One content grid for the whole application.
-     Every authenticated page shell sizes itself from these, so the left
-     and right edges of Dashboard, My Plan, Progress, History, Reports and
-     the specialist pages line up instead of each page inventing its own
-     max-width (they previously ranged from 720px to 1280px, which is what
-     left wide blank margins on large screens).
-     --content-max-narrow is for reading columns only: assessment
-     instructions and other long prose, where a 1200px line length would
-     be worse, not better. */
+  --radius-lg: 22px;
   --content-max: 1200px;
   --content-max-narrow: 880px;
   --content-gutter: 24px;
-
   font-family: "DM Sans", sans-serif;
-
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 }
 
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+@keyframes move-well-page-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-html {
-  scroll-behavior: smooth;
+@keyframes move-well-loading-pulse {
+  0%, 100% { opacity: .52; }
+  50% { opacity: 1; }
 }
 
+.plan-main,
+.progress-main,
+.history-main,
+.reports-main,
+.guide-main,
+.assess-page,
+.specialist-detail-page {
+  animation: move-well-page-enter .55s ease both;
+}
+
+.plan-status,
+.progress-status,
+.history-loading,
+.reports-loading,
+.guide-loading {
+  animation: move-well-loading-pulse 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plan-main,
+  .progress-main,
+  .history-main,
+  .reports-main,
+  .guide-main,
+  .assess-page,
+  .specialist-detail-page,
+  .plan-status,
+  .progress-status,
+  .history-loading,
+  .reports-loading,
+  .guide-loading {
+    animation: none;
+  }
+}
+
+html { scroll-behavior: smooth; scrollbar-gutter: stable; }
 body {
-  margin: 0;
-  background: var(--bg);
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 10% 0%, rgba(35, 135, 92, .16), transparent 30rem),
+    radial-gradient(circle at 95% 18%, rgba(37, 118, 131, .10), transparent 26rem),
+    var(--bg);
   color: var(--dark);
 }
-
-body,
-button,
-input,
-textarea,
-select {
-  font-family: "DM Sans", sans-serif;
-}
-
-button,
-input,
-textarea,
-select {
-  font-size: inherit;
-}
-
-button {
-  cursor: pointer;
-}
-
-a {
-  color: inherit;
-  text-decoration: none;
-}
-
-img {
-  max-width: 100%;
-  display: block;
-}
-
-/* =========================
-   GLOBAL BUTTONS
-========================= */
-
+body, button, input, textarea, select { font-family: "DM Sans", sans-serif; }
+button, input, textarea, select { font-size: inherit; }
+button { cursor: pointer; }
+a { color: inherit; text-decoration: none; }
+img { max-width: 100%; display: block; }
 .primary-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 18px;
-
-  padding: 15px 20px;
-
-  border: none;
-  border-radius: 11px;
-
-  background: var(--dark);
-  color: white;
-
-  font-size: 14px;
-  font-weight: 700;
-
-  transition:
-    transform 0.25s ease,
-    background 0.25s ease;
+  display: inline-flex; align-items: center; justify-content: center; gap: 18px;
+  padding: 14px 20px; border: 0; border-radius: 12px;
+  background: var(--green); color: #062117; font-size: 13px; font-weight: 800;
+  box-shadow: 0 10px 28px rgba(53, 209, 139, .16); transition: .25s ease;
 }
-
-.primary-button:hover {
-  transform: translateY(-3px);
-  background: var(--green);
+.primary-button:hover { transform: translateY(-2px); background: var(--green-bright); box-shadow: 0 14px 32px rgba(53,209,139,.25); }
+.secondary-button, .outline-button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 13px 18px; border: 1px solid var(--border); border-radius: 11px;
+  background: rgba(13, 33, 27, .7); color: var(--dark); font-size: 13px; font-weight: 700;
 }
-
-.primary-button span {
-  font-size: 18px;
-}
-
-.secondary-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-
-  padding: 15px 20px;
-
-  border: 1px solid var(--border);
-  border-radius: 11px;
-
-  background: white;
-  color: var(--dark);
-
-  font-size: 14px;
-  font-weight: 600;
-
-  transition:
-    border-color 0.25s ease,
-    transform 0.25s ease;
-}
-
-.secondary-button:hover {
-  border-color: var(--green-bright);
-  transform: translateY(-2px);
-}
-
-/* =========================
-   SECTION TAG
-========================= */
-
-.section-tag {
-  color: var(--green);
-
-  font-size: 10px;
-  font-weight: 800;
-
-  letter-spacing: 1.5px;
-}
-
-/* =========================
-   BRAND
-========================= */
-
-.brand-icon {
-  width: 34px;
-  height: 34px;
-
-  display: grid;
-  place-items: center;
-
-  border-radius: 10px;
-
-  background: var(--dark);
-  color: white;
-
-  font-family: "Manrope", sans-serif;
-  font-size: 14px;
-  font-weight: 800;
-}
-
-/* =========================
-   RESPONSIVE
-========================= */
-
-@media (max-width: 600px) {
-  .primary-button,
-  .secondary-button {
-    width: 100%;
-  }
-}
-
-/* Shared content container. Pages that have their own shell class size it
-   from the tokens above rather than using this directly; this exists for
-   anything new, so a third set of widths never appears. */
-.mw-content {
-  width: min(100% - (var(--content-gutter) * 2), var(--content-max));
-  margin-inline: auto;
-}
-
-@media (max-width: 640px) {
-  :root {
-    --content-gutter: 16px;
-  }
-}
+.section-tag { color: var(--green); font-size: 10px; font-weight: 800; letter-spacing: 1.5px; }
+.brand-icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: var(--green); color: #062117; font: 800 14px Manrope, sans-serif; }
+.mw-content { width: min(100% - (var(--content-gutter) * 2), var(--content-max)); margin-inline: auto; }
+@media (max-width: 640px) { :root { --content-gutter: 16px; } }

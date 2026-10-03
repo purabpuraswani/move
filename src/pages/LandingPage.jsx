@@ -20,9 +20,9 @@ function LandingPage() {
             </div>
 
             <h1>
-              Move better.
+              Move smarter.
               <br />
-              <span>Live better.</span>
+              <span>Live stronger.</span>
             </h1>
 
             <p className="hero-description">
@@ -338,24 +338,53 @@ function LandingPage() {
           <div className="agent-content">
 
             <span className="section-tag">
-              YOUR PERSONAL AI TEAM
+              ABOUT MOVEWELL
             </span>
 
             <h2>
-              One platform.
+              A practical path to
               <br />
-              <span>Multiple specialists.</span>
+              <span>better everyday movement.</span>
             </h2>
 
             <p>
-              MoveWell AI can route your needs to specialized assistants
-              instead of relying on a single generic chatbot.
+              MoveWell is a wellness platform that brings movement
+              assessment, lifestyle signals and specialist guidance
+              together in one place. It helps you understand where to
+              start, choose achievable actions and learn from your
+              progress over time.
             </p>
 
             <Link to="/signup" className="primary-button">
-              Meet your AI team
+              Explore MoveWell
               <span>→</span>
             </Link>
+
+            <div className="project-pillars">
+              <div className="project-pillar">
+                <div className="pillar-icon">01</div>
+                <div>
+                  <strong>Understand first</strong>
+                  <span>Use movement and lifestyle context before suggesting change.</span>
+                </div>
+              </div>
+
+              <div className="project-pillar">
+                <div className="pillar-icon">02</div>
+                <div>
+                  <strong>Make it personal</strong>
+                  <span>Receive guidance shaped around your needs, pace and routine.</span>
+                </div>
+              </div>
+
+              <div className="project-pillar">
+                <div className="pillar-icon">03</div>
+                <div>
+                  <strong>Improve safely</strong>
+                  <span>Track what you do and adapt recommendations over time.</span>
+                </div>
+              </div>
+            </div>
 
           </div>
 
