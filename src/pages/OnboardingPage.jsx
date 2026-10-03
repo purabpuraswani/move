@@ -1,9 +1,62 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { completeProfile } from "../services/profile";
+import { createReport, extractReport } from "../services/reports";
 
 import "./OnboardingPage.css";
+
+
+// The health-background questions, with a hint about which documents are
+// worth attaching when the answer is yes.
+const HEALTH_CONDITIONS = [
+  ["diabetes", "Diabetes", "HbA1c or blood sugar reports"],
+  ["hypertension", "Hypertension", "BP readings or prescriptions"],
+  ["heart_condition", "Heart condition", "ECG, echo or cardiologist notes"],
+  ["previous_injury", "Previous injury", "X-ray, MRI or discharge summary"],
+  ["joint_pain", "Current joint pain", "Scans or physio notes"],
+  ["back_neck_pain", "Back / neck pain", "Scans or physio notes"]
+];
+
+const CONDITION_LABELS = Object.fromEntries(
+  HEALTH_CONDITIONS.map(([name, label]) => [name, label])
+);
+
+const MAX_FILES_PER_GROUP = 5;
+const MAX_FILE_MB = 10;
+const ALLOWED_EXTENSIONS = [".pdf", ".jpg", ".jpeg", ".png"];
+
+
+// Check newly picked files against the per-group limits. Returns the files
+// that can be kept and, if any were turned away, a sentence saying why.
+function acceptFiles(existing, picked) {
+
+  const accepted = [...existing];
+  const problems = [];
+
+  for (const file of picked) {
+
+    const name = file.name.toLowerCase();
+
+    if (!ALLOWED_EXTENSIONS.some((extension) => name.endsWith(extension))) {
+      problems.push(`${file.name} is not a PDF, JPG or PNG`);
+    } else if (file.size > MAX_FILE_MB * 1024 * 1024) {
+      problems.push(`${file.name} is larger than ${MAX_FILE_MB} MB`);
+    } else if (accepted.length >= MAX_FILES_PER_GROUP) {
+      problems.push(`only ${MAX_FILES_PER_GROUP} files can be added here`);
+      break;
+    } else {
+      accepted.push(file);
+    }
+
+  }
+
+  return {
+    files: accepted,
+    error: problems.length > 0 ? `Not added: ${problems.join("; ")}.` : ""
+  };
+
+}
 
 
 function OnboardingPage() {
@@ -45,27 +98,263 @@ function OnboardingPage() {
   });
 
 
+  // Step 4's general documents, not tied to one condition.
   const [documents, setDocuments] = useState([]);
+
+  // Files attached to a "yes" answer, keyed by condition name.
+  const [conditionFiles, setConditionFiles] = useState({});
+
+  // Messages for files that were turned away, keyed by condition name, or
+  // "other" for step 4.
+  const [fileErrors, setFileErrors] = useState({});
+
+  // Once the profile is saved, a retry only re-sends the uploads that failed.
+  const [profileSaved, setProfileSaved] = useState(false);
+
+  const [failedUploads, setFailedUploads] = useState([]);
 
   const [loading, setLoading] = useState(false);
 
   const [error, setError] = useState("");
 
+  const formRef = useRef(null);
+
+
+  // Which step asks for each field the backend requires. Only the current
+  // step's inputs are rendered, so the browser's `required` check can't see
+  // fields on earlier steps; this lets submit send the user back to them.
+  const REQUIRED_FIELDS = {
+    1: ["age", "sex", "height_cm", "weight_kg"],
+    2: [
+      "daily_sitting_hours",
+      "daily_screen_hours",
+      "sleep_hours",
+      "sleep_quality",
+      "daily_steps",
+      "exercise_days",
+      "exercise_minutes",
+      "work_type"
+    ],
+    3: [
+      "diabetes",
+      "hypertension",
+      "heart_condition",
+      "previous_injury",
+      "joint_pain",
+      "back_neck_pain"
+    ]
+  };
+
+
+  function firstIncompleteStep() {
+
+    for (const [stepNumber, fields] of Object.entries(REQUIRED_FIELDS)) {
+
+      if (fields.some((field) => String(form[field] ?? "").trim() === "")) {
+        return Number(stepNumber);
+      }
+
+    }
+
+    return null;
+
+  }
+
 
   function handleChange(e) {
 
+    const { name, value } = e.target;
+
+    const attached = conditionFiles[name] || [];
+
+    // Moving a condition off "yes" drops the files attached to it, so ask
+    // first rather than losing them silently.
+    if (value !== "yes" && attached.length > 0) {
+
+      const count = attached.length;
+
+      if (
+        !window.confirm(
+          `Remove ${count} attached file${count === 1 ? "" : "s"}?`
+        )
+      ) {
+        return;
+      }
+
+      setConditionFiles({ ...conditionFiles, [name]: [] });
+      setFileErrors({ ...fileErrors, [name]: "" });
+
+    }
+
     setForm({
       ...form,
-      [e.target.name]: e.target.value
+      [name]: value
     });
+
+  }
+
+
+  function handleConditionFiles(name, e) {
+
+    const { files, error } = acceptFiles(
+      conditionFiles[name] || [],
+      Array.from(e.target.files)
+    );
+
+    // Cleared so picking the same file again still fires onChange.
+    e.target.value = "";
+
+    setConditionFiles({ ...conditionFiles, [name]: files });
+    setFileErrors({ ...fileErrors, [name]: error });
+
+  }
+
+
+  function removeConditionFile(name, index) {
+
+    setConditionFiles({
+      ...conditionFiles,
+      [name]: conditionFiles[name].filter((_, i) => i !== index)
+    });
+
+    setFileErrors({ ...fileErrors, [name]: "" });
 
   }
 
 
   function handleDocuments(e) {
 
-    setDocuments(
+    const { files, error } = acceptFiles(
+      documents,
       Array.from(e.target.files)
+    );
+
+    e.target.value = "";
+
+    setDocuments(files);
+    setFileErrors({ ...fileErrors, other: error });
+
+  }
+
+
+  function removeDocument(index) {
+
+    setDocuments(documents.filter((_, i) => i !== index));
+
+    setFileErrors({ ...fileErrors, other: "" });
+
+  }
+
+
+  // Every file to send to the report pipeline, tagged with what it is about.
+  // Files on a condition no longer answered "yes" are removed in
+  // handleChange, but are filtered here as well so none can slip through.
+  function pendingUploads() {
+
+    const tagged = HEALTH_CONDITIONS.flatMap(([name]) =>
+      form[name] === "yes"
+        ? (conditionFiles[name] || []).map((file) => ({ file, condition: name }))
+        : []
+    );
+
+    return [
+      ...tagged,
+      ...documents.map((file) => ({ file, condition: "other" }))
+    ];
+
+  }
+
+
+  // Upload each file as its own report. Failures are returned rather than
+  // thrown, so one bad file does not undo the rest.
+  async function uploadReports(uploads) {
+
+    const results = await Promise.allSettled(
+      uploads.map(({ file, condition }) => {
+
+        const label = CONDITION_LABELS[condition] || "Other document";
+
+        return createReport({
+          file,
+          condition,
+          title: `${label}: ${file.name}`.slice(0, 160)
+        });
+
+      })
+    );
+
+    const uploaded = [];
+    const failed = [];
+
+    results.forEach((result, index) => {
+
+      if (result.status === "fulfilled") {
+        uploaded.push(result.value.report.id);
+      } else {
+        failed.push({ ...uploads[index], error: result.reason?.message });
+      }
+
+    });
+
+    // Reading starts in the background, one report at a time, and is not
+    // waited for: the user reviews the values later from the dashboard. If
+    // automatic reading is not set up the report stays "uploaded", which the
+    // reports page already explains.
+    uploaded.reduce(
+      (chain, reportId) =>
+        chain.then(() => extractReport(reportId).catch(() => {})),
+      Promise.resolve()
+    );
+
+    return failed;
+
+  }
+
+
+  function renderFileList(files, onRemove) {
+
+    if (files.length === 0) return null;
+
+    return (
+
+      <div className="selected-documents">
+
+        {files.map((file, index) => (
+
+          <div
+            className="selected-document"
+            key={`${file.name}-${index}`}
+          >
+
+            <span>📄</span>
+
+            <div>
+
+              <strong>
+                {file.name}
+              </strong>
+
+              <small>
+                {(file.size / 1024).toFixed(1)} KB
+              </small>
+
+            </div>
+
+            <button
+              type="button"
+              className="remove-document"
+              onClick={() => onRemove(index)}
+              aria-label={`Remove ${file.name}`}
+            >
+              ×
+            </button>
+
+          </div>
+
+        ))}
+
+      </div>
+
     );
 
   }
@@ -74,6 +363,11 @@ function OnboardingPage() {
   function nextStep() {
 
     setError("");
+
+    // Check the fields on this step (min/max, required) before moving on.
+    if (formRef.current && !formRef.current.reportValidity()) {
+      return;
+    }
 
     if (step < 4) {
       setStep(step + 1);
@@ -97,44 +391,62 @@ function OnboardingPage() {
 
     e.preventDefault();
 
-    setLoading(true);
     setError("");
+
+    const incompleteStep = firstIncompleteStep();
+
+    if (incompleteStep !== null) {
+      setStep(incompleteStep);
+      setError(
+        `Please complete all required fields in step ${incompleteStep} before finishing.`
+      );
+      return;
+    }
+
+    setLoading(true);
 
 
     try {
 
-      // The backend identifies the user from the auth token, so no user id
-      // is sent with the form.
-      const formData = new FormData();
+      if (!profileSaved) {
+
+        // The backend identifies the user from the auth token, so no user id
+        // is sent with the form. Documents go to the report pipeline below
+        // rather than with the profile.
+        const formData = new FormData();
 
 
-      Object.entries(form).forEach(
-        ([key, value]) => {
+        Object.entries(form).forEach(
+          ([key, value]) => {
 
-          formData.append(
-            key,
-            value
-          );
+            formData.append(
+              key,
+              value
+            );
 
-        }
+          }
+        );
+
+
+        await completeProfile(
+          formData
+        );
+
+        setProfileSaved(true);
+
+      }
+
+
+      const failed = await uploadReports(
+        profileSaved ? failedUploads : pendingUploads()
       );
 
+      setFailedUploads(failed);
 
-      documents.forEach(
-        (document) => {
-
-          formData.append(
-            "documents",
-            document
-          );
-
-        }
-      );
-
-
-      await completeProfile(
-        formData
-      );
+      if (failed.length > 0) {
+        setStep(4);
+        return;
+      }
 
 
       navigate("/dashboard");
@@ -237,6 +549,7 @@ function OnboardingPage() {
         {/* Form */}
 
         <form
+          ref={formRef}
           onSubmit={handleSubmit}
           className="onboarding-form"
         >
@@ -580,46 +893,85 @@ function OnboardingPage() {
 
               <div className="health-options">
 
-                {[
-                  ["diabetes", "Diabetes"],
-                  ["hypertension", "Hypertension"],
-                  ["heart_condition", "Heart condition"],
-                  ["previous_injury", "Previous injury"],
-                  ["joint_pain", "Current joint pain"],
-                  ["back_neck_pain", "Back / neck pain"]
-                ].map(([name, label]) => (
+                {HEALTH_CONDITIONS.map(([name, label, hint]) => (
 
                   <div
-                    className="health-option"
+                    className={
+                      form[name] === "yes"
+                        ? "health-option expanded"
+                        : "health-option"
+                    }
                     key={name}
                   >
 
-                    <span>{label}</span>
+                    <div className="health-option-row">
 
-                    <select
-                      name={name}
-                      value={form[name]}
-                      onChange={handleChange}
-                      required
-                    >
+                      <span>{label}</span>
 
-                      <option value="">
-                        Select
-                      </option>
+                      <select
+                        name={name}
+                        value={form[name]}
+                        onChange={handleChange}
+                        required
+                      >
 
-                      <option value="no">
-                        No
-                      </option>
+                        <option value="">
+                          Select
+                        </option>
 
-                      <option value="yes">
-                        Yes
-                      </option>
+                        <option value="no">
+                          No
+                        </option>
 
-                      <option value="prefer_not_to_say">
-                        Prefer not to say
-                      </option>
+                        <option value="yes">
+                          Yes
+                        </option>
 
-                    </select>
+                        <option value="prefer_not_to_say">
+                          Prefer not to say
+                        </option>
+
+                      </select>
+
+                    </div>
+
+
+                    {form[name] === "yes" && (
+
+                      <div className="condition-upload">
+
+                        <label className="condition-dropzone">
+
+                          <span className="condition-dropzone-title">
+                            + Add reports for {label}
+                          </span>
+
+                          <small>
+                            Optional. {hint}. PDF, JPG or PNG, up to{" "}
+                            {MAX_FILES_PER_GROUP} files.
+                          </small>
+
+                          <input
+                            type="file"
+                            multiple
+                            accept={ALLOWED_EXTENSIONS.join(",")}
+                            onChange={(e) => handleConditionFiles(name, e)}
+                          />
+
+                        </label>
+
+                        {fileErrors[name] && (
+                          <p className="file-error">{fileErrors[name]}</p>
+                        )}
+
+                        {renderFileList(
+                          conditionFiles[name] || [],
+                          (index) => removeConditionFile(name, index)
+                        )}
+
+                      </div>
+
+                    )}
 
                   </div>
 
@@ -657,73 +1009,76 @@ function OnboardingPage() {
 
             <div className="form-step">
 
-              <h2>Health documents</h2>
+              <h2>Other documents</h2>
 
               <p className="step-description">
-                Upload relevant reports if you have them.
-                These can later be used by our document
-                analysis and RAG system.
+                Anything that doesn't belong to one condition,
+                such as a full blood panel. Optional, up to
+                {` ${MAX_FILES_PER_GROUP}`} files.
               </p>
 
 
-              <label className="document-upload">
+              {failedUploads.length > 0 ? (
 
-                <div className="upload-icon">
-                  +
+                <div className="upload-failures">
+
+                  <strong>
+                    Your profile is saved, but{" "}
+                    {failedUploads.length === 1
+                      ? "1 file"
+                      : `${failedUploads.length} files`}{" "}
+                    could not be uploaded:
+                  </strong>
+
+                  <ul>
+                    {failedUploads.map(({ file, error: reason }, index) => (
+                      <li key={index}>
+                        {file.name}
+                        {reason ? ` (${reason})` : ""}
+                      </li>
+                    ))}
+                  </ul>
+
+                  <span>
+                    Try again, or skip and add them later from Reports.
+                  </span>
+
                 </div>
 
-                <strong>
-                  Upload health documents
-                </strong>
+              ) : (
 
-                <span>
-                  PDF, JPG or PNG
-                </span>
+                <>
 
-                <input
-                  type="file"
-                  multiple
-                  accept=".pdf,.jpg,.jpeg,.png"
-                  onChange={handleDocuments}
-                />
+                  <label className="document-upload">
 
-              </label>
+                    <div className="upload-icon">
+                      +
+                    </div>
 
+                    <strong>
+                      Upload other documents
+                    </strong>
 
-              {documents.length > 0 && (
+                    <span>
+                      PDF, JPG or PNG, up to {MAX_FILE_MB} MB each
+                    </span>
 
-                <div className="selected-documents">
+                    <input
+                      type="file"
+                      multiple
+                      accept={ALLOWED_EXTENSIONS.join(",")}
+                      onChange={handleDocuments}
+                    />
 
-                  {documents.map(
-                    (document, index) => (
+                  </label>
 
-                      <div
-                        className="selected-document"
-                        key={index}
-                      >
-
-                        <span>📄</span>
-
-                        <div>
-
-                          <strong>
-                            {document.name}
-                          </strong>
-
-                          <small>
-                            {(
-                              document.size / 1024
-                            ).toFixed(1)} KB
-                          </small>
-
-                        </div>
-
-                      </div>
-
-                    )
+                  {fileErrors.other && (
+                    <p className="file-error">{fileErrors.other}</p>
                   )}
 
-                </div>
+                  {renderFileList(documents, removeDocument)}
+
+                </>
 
               )}
 
@@ -747,7 +1102,7 @@ function OnboardingPage() {
 
           <div className="onboarding-actions">
 
-            {step > 1 && (
+            {step > 1 && !profileSaved && (
 
               <button
                 type="button"
@@ -755,6 +1110,19 @@ function OnboardingPage() {
                 onClick={previousStep}
               >
                 ← Back
+              </button>
+
+            )}
+
+
+            {failedUploads.length > 0 && (
+
+              <button
+                type="button"
+                className="back-button"
+                onClick={() => navigate("/dashboard")}
+              >
+                Skip for now
               </button>
 
             )}
@@ -782,7 +1150,9 @@ function OnboardingPage() {
               >
                 {loading
                   ? "Saving..."
-                  : "Complete profile →"}
+                  : failedUploads.length > 0
+                    ? "Retry upload →"
+                    : "Complete profile →"}
               </button>
 
             )}

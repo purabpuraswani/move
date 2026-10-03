@@ -39,6 +39,7 @@ LIST_PROJECTION = {
     "report_date": 1,
     "facility": 1,
     "source": 1,
+    "condition": 1,
     "status": 1,
     "created_at": 1,
     "updated_at": 1,
@@ -430,6 +431,7 @@ def serialise_report(document: dict) -> dict:
         "reportDate": _isoformat(document.get("report_date")),
         "facility": document.get("facility"),
         "source": document.get("source"),
+        "condition": document.get("condition"),
         "status": status,
         # Stated explicitly rather than left for the client to infer from the
         # status string, so every screen agrees on what is trusted.
@@ -469,6 +471,7 @@ def serialise_report_listing(document: dict) -> dict:
         "reportDate": _isoformat(document.get("report_date")),
         "facility": document.get("facility"),
         "source": document.get("source"),
+        "condition": document.get("condition"),
         "status": status,
         "isConfirmed": status in TRUSTED_STATUSES,
         "file": _serialise_file(document.get("file")),

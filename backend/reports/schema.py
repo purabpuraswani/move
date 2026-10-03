@@ -125,6 +125,19 @@ DECISIONS = (
 # Decisions that put a value on the trusted side of the boundary.
 INCLUDED_DECISIONS = (DECISION_ACCEPTED, DECISION_CORRECTED)
 
+# The onboarding health-background condition a report was uploaded against.
+# Only a label for what the user said the document is about: it says nothing
+# about what the document contains, and nothing is inferred from it.
+REPORT_CONDITIONS = (
+    "diabetes",
+    "hypertension",
+    "heart_condition",
+    "previous_injury",
+    "joint_pain",
+    "back_neck_pain",
+    "other",
+)
+
 
 # ---------------------------------------------------------------------------
 # Limits
@@ -667,11 +680,19 @@ def build_report_document(
     file_record,
     source: str,
     now: datetime,
+    condition=None,
 ) -> dict:
     """A newly created report, before anything has been extracted from it."""
 
     if source not in ("upload", "manual_entry"):
         raise ReportValidationError("source must be upload or manual_entry")
+
+    condition = (condition or "").strip() or None
+
+    if condition is not None and condition not in REPORT_CONDITIONS:
+        raise ReportValidationError(
+            f"condition must be one of {', '.join(REPORT_CONDITIONS)}"
+        )
 
     if source == "upload" and not file_record:
         raise ReportValidationError("an uploaded report needs a stored file")
@@ -683,6 +704,7 @@ def build_report_document(
         "report_date": _iso_datetime(report_date, label="report date"),
         "facility": _text(facility, label="facility", limit=MAX_LABEL_LENGTH),
         "source": source,
+        "condition": condition,
         "file": dict(file_record) if file_record else None,
         "status": STATUS_UPLOADED if source == "upload" else STATUS_NEEDS_REVIEW,
         "fields": [],

@@ -64,7 +64,13 @@ function jsonHeaders() {
  * Content-Type header is deliberately left off: the browser sets it with the
  * multipart boundary, and overriding it breaks the upload.
  */
-export async function createReport({ file = null, title = "", reportDate = "", facility = "" } = {}) {
+export async function createReport({
+  file = null,
+  title = "",
+  reportDate = "",
+  facility = "",
+  condition = "",
+} = {}) {
   const body = new FormData();
 
   body.append("source", file ? "upload" : "manual_entry");
@@ -73,6 +79,7 @@ export async function createReport({ file = null, title = "", reportDate = "", f
   if (title) body.append("title", title);
   if (reportDate) body.append("report_date", reportDate);
   if (facility) body.append("facility", facility);
+  if (condition) body.append("condition", condition);
 
   const response = await apiFetch(`${getApiUrl()}/api/reports`, {
     method: "POST",

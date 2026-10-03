@@ -227,14 +227,6 @@
 }
 
 .health-option {
-  display: flex;
-
-  align-items: center;
-
-  justify-content: space-between;
-
-  gap: 15px;
-
   padding: 15px;
 
   border: 1px solid #e5e9e6;
@@ -264,6 +256,139 @@
   color: #34443a;
 
   font-size: 10px;
+}
+
+
+/* A "yes" answer takes the full row so the upload area has room. */
+.health-option.expanded {
+  grid-column: 1 / -1;
+}
+
+.health-option-row {
+  display: flex;
+
+  align-items: center;
+
+  justify-content: space-between;
+
+  gap: 15px;
+}
+
+.condition-upload {
+  margin-top: 14px;
+}
+
+.condition-dropzone {
+  display: grid;
+
+  gap: 4px;
+
+  padding: 14px;
+
+  border: 1.5px dashed #b9c9bd;
+
+  border-radius: 9px;
+
+  background: white;
+
+  cursor: pointer;
+
+  transition: 0.2s ease;
+}
+
+.condition-dropzone:hover {
+  border-color: #2f6b4f;
+
+  background: #f5faf6;
+}
+
+.condition-dropzone input {
+  display: none;
+}
+
+.condition-dropzone .condition-dropzone-title {
+  color: #2f6b4f;
+
+  font-size: 11px;
+
+  font-weight: 600;
+}
+
+.condition-dropzone small {
+  color: #9aa39e;
+
+  font-size: 10px;
+}
+
+.condition-upload .selected-documents {
+  margin-top: 10px;
+}
+
+.condition-upload .selected-document {
+  background: white;
+}
+
+.file-error {
+  margin: 8px 0 0;
+
+  color: #b4442f;
+
+  font-size: 10px;
+}
+
+.remove-document {
+  margin-left: auto;
+
+  width: 24px;
+  height: 24px;
+
+  border: none;
+
+  border-radius: 50%;
+
+  background: transparent;
+
+  color: #9aa39e;
+
+  font-size: 16px;
+
+  line-height: 1;
+
+  cursor: pointer;
+}
+
+.remove-document:hover {
+  background: #eef1ee;
+
+  color: #34443a;
+}
+
+.upload-failures {
+  display: grid;
+
+  gap: 8px;
+
+  padding: 15px;
+
+  border: 1px solid #ecd3cc;
+
+  border-radius: 10px;
+
+  background: #fdf6f4;
+
+  color: #34443a;
+
+  font-size: 11px;
+}
+
+.upload-failures ul {
+  margin: 0;
+
+  padding-left: 18px;
+}
+
+.upload-failures span {
+  color: #6b766f;
 }
 
 
@@ -477,7 +602,7 @@
     grid-template-columns: 1fr;
   }
 
-  .health-option {
+  .health-option-row {
     align-items: flex-start;
 
     flex-direction: column;

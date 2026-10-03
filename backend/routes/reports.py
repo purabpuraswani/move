@@ -124,6 +124,10 @@ def upload_report(
     report_date: str | None = Form(None),
     facility: str | None = Form(None),
 
+    # Which onboarding health-background answer the file was attached to, if
+    # any. Validated against REPORT_CONDITIONS when the record is built.
+    condition: str | None = Form(None),
+
     # A report can also be created with no file, for someone holding a paper
     # copy who would rather type the values in. That path exists so the pipeline
     # can be used without an AI provider without anything being fabricated: the
@@ -171,6 +175,7 @@ def upload_report(
             file_record=stored_file.as_record() if stored_file else None,
             source=source,
             now=_now(),
+            condition=condition,
         )
 
     except ReportValidationError as error:

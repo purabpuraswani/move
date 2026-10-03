@@ -490,6 +490,47 @@ class DocumentTests(unittest.TestCase):
                 now=NOW,
             )
 
+    def test_a_report_keeps_the_condition_it_was_uploaded_against(self):
+        document = build_report_document(
+            user_id="a" * 24,
+            title=None,
+            report_date=None,
+            facility=None,
+            file_record=self.file_record(),
+            source="upload",
+            now=NOW,
+            condition="diabetes",
+        )
+
+        self.assertEqual(document["condition"], "diabetes")
+
+    def test_a_report_without_a_condition_stores_none(self):
+        document = build_report_document(
+            user_id="a" * 24,
+            title=None,
+            report_date=None,
+            facility=None,
+            file_record=self.file_record(),
+            source="upload",
+            now=NOW,
+            condition="  ",
+        )
+
+        self.assertIsNone(document["condition"])
+
+    def test_an_unknown_condition_is_refused(self):
+        with self.assertRaises(ReportValidationError):
+            build_report_document(
+                user_id="a" * 24,
+                title=None,
+                report_date=None,
+                facility=None,
+                file_record=self.file_record(),
+                source="upload",
+                now=NOW,
+                condition="cancer",
+            )
+
     def test_a_trailing_z_date_is_accepted(self):
         # What JavaScript's toISOString produces; Python 3.10 will not parse it
         # without help.
