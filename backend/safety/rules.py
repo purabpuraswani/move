@@ -158,6 +158,101 @@ def rule_confirmed_medical_context_modifies_with_disclaimer(confirmed_medical_co
     }
 
 
+# Self-reported health answers this project treats as "the user told us
+# something a professional should know about before harder work". These
+# are the user's own words from onboarding -- never an inference, never a
+# diagnosis, and never a red flag this system invented. A "no" answer is
+# not evidence of anything and triggers nothing.
+AFFIRMATIVE_HEALTH_ANSWERS = frozenset(
+    {"yes", "y", "true", "sometimes", "often", "occasionally"}
+)
+
+SELF_REPORTED_HEALTH_FIELDS = (
+    "heart_condition",
+    "previous_injury",
+    "joint_pain",
+    "back_neck_pain",
+    "diabetes",
+    "hypertension",
+)
+
+
+def self_reported_answers(self_reported_health) -> dict:
+    """The onboarding answers themselves, whichever shape they arrive in.
+
+    user_state/schema.py wraps them as {"source": ..., "values": {...}};
+    a caller that already unwrapped them passes the inner dict. Reading
+    only the outer shape silently found no answers at all, which read as
+    "nothing reported" -- the one misreading this function exists to
+    prevent.
+    """
+
+    if not isinstance(self_reported_health, dict):
+        return {}
+
+    values = self_reported_health.get("values")
+
+    return values if isinstance(values, dict) else self_reported_health
+
+
+def reported_health_concerns(self_reported_health) -> list:
+    """The health fields the user themselves answered affirmatively.
+
+    Returns field names only. This function never reads `other_conditions`
+    free text: interpreting a sentence a user typed is exactly the
+    clinical judgment this system does not make.
+    """
+
+    answers = self_reported_answers(self_reported_health)
+
+    if not answers:
+        return []
+
+    concerns = []
+
+    for field in SELF_REPORTED_HEALTH_FIELDS:
+        value = answers.get(field)
+
+        if isinstance(value, str) and value.strip().lower() in AFFIRMATIVE_HEALTH_ANSWERS:
+            concerns.append(field)
+
+    return concerns
+
+
+def rule_self_reported_health_modifies(self_reported_health, candidate_recommendations: list):
+    """MODIFY: the user reported a health condition at onboarding.
+
+    Deliberately the weakest response available that is not silence. A
+    self-reported condition is real evidence, so ignoring it would be
+    wrong; but this system cannot tell whether it bears on any particular
+    recommendation, so it annotates rather than blocks, and it never
+    escalates on its own. Escalation stays with a reviewed rule set that
+    does not exist yet (see rule_safety_status_high_refers).
+    """
+
+    concerns = reported_health_concerns(self_reported_health)
+
+    if not concerns or not candidate_recommendations:
+        return None
+
+    readable = ", ".join(concern.replace("_", " ") for concern in concerns)
+
+    return {
+        "status": "MODIFY",
+        "reason": (
+            f"This user reported the following at onboarding: {readable}. Every "
+            "recommendation is allowed through with a note to discuss it with a "
+            "healthcare professional. This is not an assessment of whether that "
+            "report affects any particular recommendation."
+        ),
+        "flags": ["self_reported_health_context_present"],
+        "actions": ["add_professional_discussion_note"],
+        "requires_referral": False,
+        "modified_recommendation_ids": [rec["id"] for rec in candidate_recommendations],
+        "blocked_recommendation_ids": [],
+    }
+
+
 def rule_default_allow(candidate_recommendations: list):
     """ALLOW: nothing above matched — no medical context, no HIGH safety
     status, no difficulty concern. The default, but only ever reached

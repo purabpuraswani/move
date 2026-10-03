@@ -56,6 +56,7 @@ export async function submitExerciseResult({
   measurements = null,
   errors = null,
   planId = null,
+  source = null,
 }) {
   const payload = {
     exerciseId,
@@ -63,6 +64,14 @@ export async function submitExerciseResult({
     startedAt,
     completedAt,
   };
+
+  // "camera" when MoveNet measured the session, "manual_confirmation" when
+  // the user ticked the box themselves. Omitted entirely by the camera
+  // flow, which the backend reads as "camera" — the two must stay
+  // distinguishable in the stored history.
+  if (source) {
+    payload.source = source;
+  }
 
   if (status !== "invalid" && measurements) {
     payload.measurements = measurements;
@@ -101,5 +110,48 @@ export async function fetchExerciseResults({ limit = 20 } = {}) {
   return readResponse(
     response,
     "Your exercise history could not be loaded just now.",
+  );
+}
+
+/**
+ * Record "I did this one" without a camera session.
+ *
+ * Deliberately separate from submitExerciseResult: a manual confirmation
+ * carries no measurements at all, and the backend refuses it if it does.
+ * It still becomes a real, persisted exercise result, so it counts towards
+ * adherence exactly like any other completed session — it is simply marked
+ * as self-reported rather than measured.
+ */
+export async function confirmExerciseManually({ exerciseId, planId = null }) {
+  const now = new Date().toISOString();
+
+  return submitExerciseResult({
+    exerciseId,
+    status: "completed",
+    startedAt: now,
+    completedAt: now,
+    planId,
+    source: "manual_confirmation",
+  });
+}
+
+/**
+ * Undo a manual confirmation (un-ticking the box).
+ *
+ * Only ever used for a result this user confirmed by hand; the endpoint
+ * refuses anything else, so a camera-recorded session cannot be erased
+ * from the history by a mis-click in the UI.
+ */
+export async function deleteManualExerciseResult(resultId) {
+  const response = await apiFetch(
+    `${getApiUrl()}/api/exercise-results/${encodeURIComponent(resultId)}`,
+    { method: "DELETE", headers: authHeader() },
+  );
+
+  if (response.status === 204) return { deleted: true };
+
+  return readResponse(
+    response,
+    "That completion could not be undone just now. Please try again.",
   );
 }

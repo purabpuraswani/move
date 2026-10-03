@@ -126,9 +126,17 @@ class MultiAgentEndToEndTests(unittest.TestCase):
 
         result = run_workflow(state, **_clients(workflow_id="wf_e2e4", request_id="req_e2e4"))
 
-        self.assertEqual(set(result["selected_agents"]), {"physio", "behaviour", "nutrition"})
+        # The three plan-producing specialists all run. Exercise & Physical
+        # Activity runs too, because this profile carries real activity
+        # answers (sitting hours, exercise frequency) -- its own evidence,
+        # independent of the three need levels above.
+        self.assertTrue(
+            {"physio", "behaviour", "nutrition"}.issubset(set(result["selected_agents"]))
+        )
+        self.assertIn("exercise_activity", result["selected_agents"])
         statuses = {r["agent"]: r["status"] for r in result["agent_results"]}
-        self.assertEqual(statuses, {"physio": "completed", "behaviour": "completed", "nutrition": "completed"})
+        for agent_id in ("physio", "behaviour", "nutrition"):
+            self.assertEqual(statuses[agent_id], "completed")
 
         self.assertIsNotNone(result["safety_result"])
         self.assertIn(result["safety_result"]["status"], ("ALLOW", "MODIFY", "PAUSE", "REFER", "NOT_ASSESSED"))

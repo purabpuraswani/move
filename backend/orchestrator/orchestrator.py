@@ -39,6 +39,7 @@ supplied is still the same distinct, non-crashing error it was in Phase 3.
 Behaviour and Nutrition are additive, not replacements.
 """
 
+from activity_agent.agent import run_activity_agent
 from behaviour_agent.agent import run_behaviour_agent
 from behaviour_agent.tool_client import BehaviourToolClient
 from nutrition_agent.agent import run_nutrition_agent
@@ -63,6 +64,7 @@ from physio_agent.agent import run_physio_agent
 from physio_agent.tool_client import ExerciseToolClient
 from progress_agent.agent import run_progress_agent
 from progress_agent.tool_client import ProgressToolClient
+from recovery_agent.agent import run_recovery_agent
 from safety.gate import SafetyEvaluationError, evaluate_safety
 from user_state.schema import UserStateValidationError, validate_user_state
 
@@ -106,6 +108,23 @@ _AGENT_PLAN_SHAPE = {
 }
 
 
+# Specialists that advise without producing a plan section. Their
+# recommendations are candidates for the Safety Gate, but nothing is
+# written to the User State for them: a volume target and a recovery
+# limit are not plans, and inventing a plan section for them would
+# make the plan history claim changes that never happened.
+_ADVICE_AGENT_TYPES = {
+    "exercise_activity": "activity_guidance",
+    "recovery": "recovery_guidance",
+}
+
+# Findings modes in which a normally plan-producing specialist contributes
+# advice instead of a plan, and the recommendation type that advice takes.
+_ADVICE_ONLY_MODES = {
+    "report_context_only": "nutrition_guidance",
+}
+
+
 def _build_result(
     *, workflow_id, request_id, orchestrator_decision, selected_agents,
     agent_results, safety_result, final_recommendations, coordination_notes,
@@ -141,6 +160,24 @@ def _confirmed_medical_context(user_state: dict):
     return {"source": "user_confirmed_medical_report", "reports": reports}
 
 
+def _self_reported_health(user_state: dict):
+    """The onboarding health checklist, for the Safety Gate only.
+
+    Safety is the one specialist allowed to read this. It is the
+    user's own answers, not an interpretation of them, and no other
+    agent receives it: an activity target or a habit goal must not
+    change because of a reported condition without Safety having
+    said so.
+    """
+
+    section = user_state.get("medical_context") or {}
+
+    if not section.get("available"):
+        return None
+
+    return (section.get("data") or {}).get("self_reported") or None
+
+
 def _candidate_recommendations(agent_results: dict) -> list:
     """Normalise every completed agent's plan entries into one flat list
     the Safety Gate can evaluate: [{"id", "agent", "type", "difficulty"}].
@@ -154,6 +191,24 @@ def _candidate_recommendations(agent_results: dict) -> list:
         if result is None or result.get("status") != "completed":
             continue
 
+        if agent_id in _ADVICE_AGENT_TYPES:
+            # Advice specialists produce no plan section, but what they
+            # recommend still reaches the user, so it still goes through
+            # the Safety Gate. A REFER blocks these exactly as it blocks
+            # an exercise: nothing from a referred run is handed over
+            # unreviewed.
+            for entry in result.get("recommendations") or []:
+                candidates.append(
+                    {
+                        "id": entry["id"],
+                        "agent": agent_id,
+                        "type": _ADVICE_AGENT_TYPES[agent_id],
+                        "difficulty": None,
+                    }
+                )
+
+            continue
+
         if agent_id not in _AGENT_PLAN_SHAPE:
             # Non-plan-producing agents (Progress) never contribute a
             # candidate recommendation of their own — they only ever
@@ -162,7 +217,27 @@ def _candidate_recommendations(agent_results: dict) -> list:
             continue
 
         shape = _AGENT_PLAN_SHAPE[agent_id]
-        plan = (result.get("findings") or {}).get("plan") or {}
+        findings = result.get("findings") or {}
+        plan = findings.get("plan") or {}
+
+        if not plan and findings.get("mode") in _ADVICE_ONLY_MODES:
+            # A plan-producing specialist that this time had evidence its
+            # domain is relevant but not enough to prescribe anything --
+            # see the nutrition agent's report_context_only path. What it
+            # advises still reaches the user, so it still goes through the
+            # Safety Gate rather than around it.
+            for entry in result.get("recommendations") or []:
+                candidates.append(
+                    {
+                        "id": entry["id"],
+                        "agent": agent_id,
+                        "type": _ADVICE_ONLY_MODES[findings["mode"]],
+                        "difficulty": None,
+                    }
+                )
+
+            continue
+
         entries = plan.get(shape["list_key"]) or []
 
         for entry in entries:
@@ -218,6 +293,25 @@ def _coordination_notes(agent_results: dict, need_profile) -> list:
     behaviour_level = (
         (need_profile or {}).get("behaviour_need") or {}
     ).get("level")
+
+    recovery_result = agent_results.get("recovery")
+    recovery_constraint = (
+        (recovery_result.get("findings") or {}).get("constraint") or {}
+        if recovery_result and recovery_result.get("status") == "completed"
+        else {}
+    )
+    activity_result = agent_results.get("exercise_activity")
+
+    if recovery_constraint.get("limit_progression") and (
+        activity_result or physio_has_plan
+    ):
+        notes.append(
+            "Recovery & Care reported a constraint this cycle ("
+            + (recovery_constraint.get("reason") or "rest evidence")
+            + "). Exercise & Physical Activity has already halved its step "
+            "increment and is holding session frequency; any exercise "
+            "progression should follow the same pace rather than a faster one."
+        )
 
     if physio_has_plan and behaviour_level == "HIGH":
         notes.append(
@@ -395,7 +489,7 @@ def run_workflow(
         need_profile, exercise_plan_exists=exercise_plan_exists
     )
     behaviour_decision = decide_behaviour_required(need_profile)
-    nutrition_decision = decide_nutrition_required(need_profile)
+    nutrition_decision = decide_nutrition_required(need_profile, user_state)
     progress_decision = decide_progress_required(progress_trigger)
     exercise_activity_decision = decide_exercise_activity_required(
         user_state, need_profile
@@ -417,12 +511,24 @@ def run_workflow(
         "recovery": recovery_decision,
     }
 
+    # Selection order is execution order, and it matters in one place:
+    # Recovery runs before Exercise & Physical Activity so its
+    # constraint is available to pace activity progression (see the
+    # Coordination note in activity_agent/agent.py). Every entry is
+    # independently decided from this user's own evidence -- there is
+    # no "run them all" branch, and a specialist whose evidence was
+    # never collected is not selected.
     selected_agents = [
         agent_id
         for agent_id, required in (
             ("physio", physio_decision["physio_required"]),
             ("behaviour", behaviour_decision["behaviour_required"]),
             ("nutrition", nutrition_decision["nutrition_required"]),
+            ("recovery", recovery_decision["recovery_required"]),
+            (
+                "exercise_activity",
+                exercise_activity_decision["exercise_activity_required"],
+            ),
         )
         if required
     ]
@@ -516,6 +622,42 @@ def run_workflow(
                 agent_results["nutrition"] = result
             except Exception as error:  # noqa: BLE001
                 errors.append(f"Nutrition Agent run failed: {error}")
+
+    # Recovery & Care, then Exercise & Physical Activity. Neither needs
+    # a tool client (both reason over the User State itself), and
+    # neither writes a plan section: an activity target is a volume and
+    # a recovery constraint is a limit, not a programme. Recovery's
+    # constraint is the one piece of cross-specialist input in this
+    # system, and it can only ever slow activity progression down.
+    recovery_constraint = None
+
+    if "recovery" in selected_agents:
+        try:
+            result = run_recovery_agent(
+                user_state,
+                parent_trace=parent_trace,
+                exercise_results=exercise_results,
+            )
+            validate_agent_result(result)
+            agent_results["recovery"] = result
+            recovery_constraint = (result.get("findings") or {}).get("constraint")
+        except Exception as error:  # noqa: BLE001
+            errors.append(f"Recovery Agent run failed: {error}")
+
+    if "exercise_activity" in selected_agents:
+        try:
+            result = run_activity_agent(
+                user_state,
+                parent_trace=parent_trace,
+                exercise_results=exercise_results,
+                recovery_constraint=recovery_constraint,
+            )
+            validate_agent_result(result)
+            agent_results["exercise_activity"] = result
+        except Exception as error:  # noqa: BLE001
+            errors.append(
+                f"Exercise & Physical Activity Agent run failed: {error}"
+            )
 
     # ------------------------------------------------------------------
     # Phase B (Phase 5): progress-triggered review + adaptation dispatch.
@@ -818,6 +960,7 @@ def run_workflow(
                 need_profile=need_profile,
                 confirmed_medical_context=_confirmed_medical_context(user_state),
                 candidate_recommendations=candidates,
+                self_reported_health=_self_reported_health(user_state),
             )
         except SafetyEvaluationError as error:
             errors.append(f"Safety Gate could not evaluate candidates: {error}")

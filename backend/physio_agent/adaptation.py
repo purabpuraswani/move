@@ -49,12 +49,25 @@ DECISION_REMOVE = "REMOVE"
 DECISION_ADD = "ADD"
 
 
+# A manual confirmation says the exercise was done. It does not say how it
+# went, so it cannot move a prescription up or down: progressing someone
+# because they ticked a box would be inventing a performance reading
+# nobody took. Those results still count as doing the exercise everywhere
+# that question is asked -- progress_agent/adherence.py counts them --
+# they are simply not performance evidence here.
+PERFORMANCE_SOURCES = ("camera",)
+
+
 def results_for_exercise(exercise_results, exercise_id: str) -> list:
-    """This user's recorded results for one exercise, oldest first.
+    """This user's recorded PERFORMANCE results for one exercise, oldest
+    first.
 
     `exercise_results` is the list `exercise_assessment.store.
     list_exercise_results()` returns (or None). Entries without a matching
-    `exerciseId` are ignored rather than guessed at.
+    `exerciseId` are ignored rather than guessed at, and manually
+    confirmed entries are excluded -- see PERFORMANCE_SOURCES above. A
+    result stored before `source` existed was a camera session and is
+    treated as one.
     """
 
     if not exercise_results:
@@ -63,7 +76,9 @@ def results_for_exercise(exercise_results, exercise_id: str) -> list:
     return [
         result
         for result in exercise_results
-        if isinstance(result, dict) and result.get("exerciseId") == exercise_id
+        if isinstance(result, dict)
+        and result.get("exerciseId") == exercise_id
+        and (result.get("source") or "camera") in PERFORMANCE_SOURCES
     ]
 
 

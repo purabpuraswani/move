@@ -1,6 +1,7 @@
 import React, { Component, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import AppNavigation from "../components/AppNavigation.jsx";
+import { getExerciseImage } from "../movementDemos/exerciseImages.js";
 import FoodLogPanel from "../components/FoodLogPanel.jsx";
 import BehaviourActionPanel from "../components/BehaviourActionPanel.jsx";
 import { fetchLatestWorkflow } from "../services/workflow";
@@ -227,7 +228,7 @@ const ALIAS_MAP = {
 // RECOMMENDATION CARD COMPONENT (PROPERTY-BY-PROPERTY RENDERING)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function RecommendationCard({ item, isPhysio = false, onStartExercise = null }) {
+export function RecommendationCard({ item, isPhysio = false }) {
   if (!item) return null;
 
   // Ensure item is normalized into a safe structure
@@ -254,10 +255,14 @@ export function RecommendationCard({ item, isPhysio = false, onStartExercise = n
 
   const hasDosage =
     norm.sets != null || norm.repetitions != null || norm.durationSeconds != null;
-  const canStartExercise = isPhysio && norm.id && onStartExercise;
+
+  const image = isPhysio ? getExerciseImage(norm.id) : null;
 
   return (
     <li className="specialist-rec-item specialist-rec-card">
+      {image ? (
+        <img className="specialist-rec-image" src={image.src} alt={image.alt} />
+      ) : null}
       <div className="specialist-rec-content">
         <div className="specialist-rec-header">
           <h4 className="specialist-rec-title">{safeTitle}</h4>
@@ -309,16 +314,10 @@ export function RecommendationCard({ item, isPhysio = false, onStartExercise = n
         )}
       </div>
 
-      {canStartExercise && (
-        <button
-          type="button"
-          className="specialist-action-btn specialist-rec-start-btn"
-          onClick={() => onStartExercise(norm.id)}
-          aria-label={`Start ${safeTitle || "exercise"}`}
-        >
-          Start exercise →
-        </button>
-      )}
+      {/* No "Start exercise" here any more: this card is a
+          recommendation, a reference and a completion control. The
+          camera-guided session is started from the Movement panel on My
+          Plan, which is the one place that owns execution. */}
     </li>
   );
 }
@@ -413,6 +412,16 @@ function SpecialistDetailPageInner() {
     }
   }
   const evidenceList = normalizeEvidence(rawEvidence);
+
+  // Evidence states the specialists report alongside their findings.
+  // Both are optional: a card from an older persisted run simply has
+  // neither, and renders exactly as it did before.
+  const missingInformation = toArray(liveSpecialist?.missing_information)
+    .concat(toArray(liveSpecialist?.missing_safety_information))
+    .filter(Boolean);
+  const notAssessedMovements = toArray(liveSpecialist?.not_assessed_movements).filter(
+    (entry) => entry && entry.label
+  );
 
   // Normalize recommendations safely
   let rawRecommendations = liveSpecialist?.recommendations;
@@ -542,6 +551,49 @@ function SpecialistDetailPageInner() {
                 No additional evidence is currently available.
               </p>
             )}
+
+            {/*
+              What this specialist still needs. The backend reports it
+              (missing_information) instead of filling the gap with
+              general advice, so the screen has to show it -- otherwise an
+              unanswered question looks the same as a reviewed finding.
+            */}
+            {missingInformation.length > 0 ? (
+              <div className="specialist-missing-block">
+                <h3 className="specialist-missing-title">Not yet known</h3>
+                <ul className="specialist-evidence-list">
+                  {missingInformation.map((itemStr, idx) => (
+                    <li key={idx} className="specialist-evidence-item">
+                      <span className="specialist-evidence-icon" aria-hidden="true">
+                        ?
+                      </span>
+                      <span className="specialist-evidence-text">
+                        {safeDisplayValue(itemStr)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            {notAssessedMovements.length > 0 ? (
+              <div className="specialist-missing-block">
+                <h3 className="specialist-missing-title">Movement checks not measured</h3>
+                <ul className="specialist-evidence-list">
+                  {notAssessedMovements.map((entry, idx) => (
+                    <li key={idx} className="specialist-evidence-item">
+                      <span className="specialist-evidence-icon" aria-hidden="true">
+                        ?
+                      </span>
+                      <span className="specialist-evidence-text">
+                        {safeDisplayValue(entry?.label)} — not measured. This is not a
+                        result, and nothing has been assumed from it.
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </section>
 
           {/* Actionable Plan / Recommendations */}
@@ -602,7 +654,6 @@ function SpecialistDetailPageInner() {
                           key={ex.id || `physio_${idx}`}
                           item={ex}
                           isPhysio={true}
-                          onStartExercise={(id) => navigate(`/exercise/${id}`)}
                         />
                       ))}
                     </ul>
@@ -614,7 +665,6 @@ function SpecialistDetailPageInner() {
                         key={rec.id || `rec_${idx}`}
                         item={rec}
                         isPhysio={isPhysio}
-                        onStartExercise={(id) => navigate(`/exercise/${id}`)}
                       />
                     ))}
                   </ul>

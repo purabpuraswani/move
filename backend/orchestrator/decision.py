@@ -32,12 +32,15 @@ produced it — and, separately, which could not be evaluated and why —
 so the Orchestrator's output stays explainable by inspection.
 """
 
+from activity_agent.reasoning import STEPS_LOW_THRESHOLD
 from orchestration.selection_policy import (
     PHYSICAL_NEED_DIMENSIONS,
     TRIGGERING_LEVELS,
     conservative_starter_applies,
     evidence_summary,
 )
+from nutrition_agent.report_relevance import report_nutrition_evidence
+from recovery_agent.reasoning import SLEEP_SHORT_THRESHOLD_HOURS
 
 # Re-exported under their historical names so existing importers of this
 # module (and its tests) keep working unchanged.
@@ -221,12 +224,71 @@ def decide_behaviour_required(need_profile) -> dict:
     )
 
 
-def decide_nutrition_required(need_profile) -> dict:
-    """Return {"nutrition_required": bool, "reason": str, ...}."""
+def _confirmed_reports_of(user_state) -> list:
+    """The confirmed reports on a User State, or an empty list."""
 
-    return _single_dimension_decision(
+    section = (user_state or {}).get("medical_context") or {}
+
+    if not section.get("available"):
+        return []
+
+    confirmed = (section.get("data") or {}).get("confirmed_reports") or {}
+
+    return confirmed.get("reports") or []
+
+
+def decide_nutrition_required(need_profile, user_state=None) -> dict:
+    """Return {"nutrition_required": bool, "reason": str, ...}.
+
+    Two independent kinds of evidence can make this specialist relevant,
+    and either is enough:
+
+    1. The dietary questionnaire (nutrition_need), as before.
+    2. A medical report the user has CONFIRMED that records a
+       nutrition-relevant measurement -- see
+       nutrition_agent/report_relevance.py, which tests relevance only
+       and never reads a value as a finding.
+
+    `user_state` is optional so that callers which only have a need
+    profile keep working unchanged; without it, only the questionnaire
+    route can activate nutrition, exactly as before.
+    """
+
+    decision = _single_dimension_decision(
         need_profile, "nutrition_need", "nutrition_required"
     )
+
+    report_evidence = report_nutrition_evidence(_confirmed_reports_of(user_state))
+
+    decision["report_evidence"] = report_evidence["evidence"]
+    decision["activated_by"] = []
+
+    if decision["nutrition_required"]:
+        decision["activated_by"].append("dietary_questionnaire")
+
+    if not report_evidence["relevant"]:
+        return decision
+
+    decision["activated_by"].append("confirmed_medical_report")
+
+    # A confirmed report makes the domain relevant even when the dietary
+    # questions were never answered -- that is the whole point of the
+    # second route. The reason records both, so the plan can say which
+    # evidence brought the specialist in.
+    if decision["nutrition_required"]:
+        decision["reason"] = (
+            f"{decision['reason']}; a confirmed medical report also records "
+            "nutrition-relevant measurements"
+        )
+    else:
+        decision["nutrition_required"] = True
+        decision["reason"] = (
+            "a confirmed medical report records nutrition-relevant "
+            "measurements, so dietary and lifestyle support is relevant "
+            f"(previously: {decision['reason']})"
+        )
+
+    return decision
 
 
 # ---------------------------------------------------------------------------
@@ -297,18 +359,35 @@ def decide_exercise_activity_required(user_state: dict, need_profile: dict = Non
     if exercise_days is not None:
         evidence.append(f"Exercise frequency: {exercise_days} days/week")
 
-    if not evidence and not exercise_need_level:
+    # Activity evidence is the only thing that selects this specialist.
+    # exercise_need is a composite of the camera movement checks, which
+    # is physiotherapy's evidence: a HIGH movement need says nothing
+    # about how far this person walks, and selecting an activity
+    # specialist off it produced advice with no evidence behind it.
+    # With no activity answers at all, the honest outcome is that this
+    # domain was never evaluated -- not that activity is adequate.
+    if not evidence:
         return {
             "exercise_activity_required": False,
-            "reason": "No daily activity or step evidence available to evaluate general physical activity needs.",
+            "reason": (
+                "No daily activity evidence (steps, sitting time or exercise "
+                "frequency) has been collected, so physical activity needs "
+                "have not been evaluated."
+            ),
             "evidence": [],
             "evaluated": False,
         }
 
-    if steps is not None and steps < 5000:
+    # Thresholds are imported from the specialist that owns the domain,
+    # so the rule that selects an agent and the agent's own finding can
+    # never disagree about what counts as low.
+    if steps is not None and steps < STEPS_LOW_THRESHOLD:
         return {
             "exercise_activity_required": True,
-            "reason": f"Daily step count ({steps}) is below the active baseline threshold (5,000 steps/day).",
+            "reason": (
+                f"Daily step count ({steps}) is below the active baseline "
+                f"threshold ({STEPS_LOW_THRESHOLD:,} steps/day)."
+            ),
             "evidence": evidence,
             "evaluated": True,
         }
@@ -368,15 +447,22 @@ def decide_recovery_required(user_state: dict) -> dict:
     if not evidence:
         return {
             "recovery_required": False,
-            "reason": "No sleep or recovery data recorded yet.",
+            "reason": (
+                "No sleep or rest answers have been collected, so recovery "
+                "has not been evaluated."
+            ),
             "evidence": [],
             "evaluated": False,
         }
 
-    if sleep_hours is not None and sleep_hours < 6.0:
+    if sleep_hours is not None and sleep_hours < SLEEP_SHORT_THRESHOLD_HOURS:
         return {
             "recovery_required": True,
-            "reason": f"Sleep duration ({sleep_hours} hours/night) is below the recommended 7-9 hours for musculoskeletal recovery.",
+            "reason": (
+                f"Sleep duration ({sleep_hours} hours/night) is below this "
+                f"project's {SLEEP_SHORT_THRESHOLD_HOURS:g}-hour marker for treating "
+                "rest as a constraint on how quickly activity increases."
+            ),
             "evidence": evidence,
             "evaluated": True,
         }
@@ -391,7 +477,10 @@ def decide_recovery_required(user_state: dict) -> dict:
 
     return {
         "recovery_required": False,
-        "reason": f"Sleep duration ({sleep_hours} hours) and rest patterns are adequate for current activity demands.",
+            "reason": (
+                f"Reported sleep ({sleep_hours} hours) and rest answers did not "
+                "cross this project's markers for treating recovery as a constraint."
+            ),
         "evidence": evidence,
         "evaluated": True,
     }

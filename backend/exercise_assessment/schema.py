@@ -45,6 +45,17 @@ POSE_RELATED_KEY_SUBSTRINGS = ("keypoint", "landmark", "pose", "skeleton", "fram
 # measurable_metrics (exercise_library data) must be a subset of this list —
 # enforced indirectly, since a result can never report a metric the exercise
 # doesn't declare, and every metric the library declares is drawn from here.
+# How this result was produced. A camera session is a measurement; a
+# manual confirmation is the user saying they did the exercise. Both are
+# real evidence that it happened, and they are NOT the same evidence --
+# keeping them apart is what stops a ticked box from being read later as a
+# measured performance (see physio_agent/adaptation.py). Results stored
+# before this field existed have no `source` and are read as camera
+# results, which is what they were.
+SOURCE_CAMERA = "camera"
+SOURCE_MANUAL = "manual_confirmation"
+SOURCE_VALUES = (SOURCE_CAMERA, SOURCE_MANUAL)
+
 KNOWN_METRICS = (
     "repetitions",
     "durationSeconds",
@@ -187,6 +198,7 @@ def validate_exercise_result(raw) -> dict:
         "completedAt",
         "measurements",
         "errors",
+        "source",
     }
 
     if unknown:
@@ -204,9 +216,29 @@ def validate_exercise_result(raw) -> dict:
     if status not in STATUS_VALUES:
         _fail(f"status must be one of {', '.join(STATUS_VALUES)}")
 
+    source = raw.get("source") or SOURCE_CAMERA
+
+    if source not in SOURCE_VALUES:
+        _fail(f"source must be one of {', '.join(SOURCE_VALUES)}")
+
+    if source == SOURCE_MANUAL and status != "completed":
+        _fail(
+            "a manually confirmed result can only be 'completed' — ticking a box "
+            "says the exercise was done, and it cannot report anything else"
+        )
+
     measurements = raw.get("measurements")
 
-    if status == "invalid":
+    if source == SOURCE_MANUAL:
+        # A tick measures nothing. Storing a manual confirmation with
+        # measurements would make a self-report indistinguishable from a
+        # camera reading in every consumer downstream.
+        if measurements not in (None, {}):
+            _fail("a manually confirmed result must not carry measurements")
+
+        measurements = {}
+
+    elif status == "invalid":
         if measurements not in (None, {}):
             _fail("an invalid result must not carry measurements")
 
@@ -240,6 +272,7 @@ def validate_exercise_result(raw) -> dict:
     return {
         "exerciseId": exercise_id,
         "status": status,
+        "source": source,
         "startedAt": raw.get("startedAt"),
         "completedAt": raw.get("completedAt"),
         "measurements": measurements,

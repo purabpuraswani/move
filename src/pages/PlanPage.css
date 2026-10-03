@@ -17,7 +17,7 @@
 }
 
 .plan-main {
-  max-width: 780px;
+  max-width: var(--content-max);
 
   margin: 0 auto;
 
@@ -644,11 +644,33 @@
   line-height: 1.5;
 }
 
+/* Six specialists, so the row count is fixed rather than fitted: with
+   auto-fit and a 260px minimum, the ~1156px content area fitted FOUR
+   columns, which left the second row as two cards and a large gap. Three
+   explicit columns give 3 + 3 with no empty cell.
+   align-items: stretch (the grid default, stated here because it is load
+   bearing) makes every card in a row the same height, and each card's own
+   space-between keeps its "Specialist details" link on the bottom edge. */
 .plan-team-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   margin-top: 20px;
+  align-items: stretch;
+}
+
+/* Tablet: two columns, three rows. */
+@media (min-width: 700px) {
+  .plan-team-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Desktop: the 3 x 2 the six specialists are meant to form. */
+@media (min-width: 1100px) {
+  .plan-team-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .plan-team-card {
@@ -750,3 +772,95 @@
   text-decoration: underline;
 }
 
+
+/* Recommended exercises on a specialist card: image, prescription and the
+   existing completion control. Reference only — there is no Start button
+   here, because the camera-guided session belongs to the Movement panel
+   and the exercise page. */
+.plan-exercise-ref-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.plan-exercise-ref {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.plan-exercise-ref--done {
+  border-color: #bbf7d0;
+  background: #f6fefa;
+}
+
+.plan-exercise-ref-image {
+  flex: 0 0 72px;
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+  background: #ffffff;
+  border-radius: 8px;
+}
+
+.plan-exercise-ref-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.plan-exercise-ref-name {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.plan-exercise-ref-meta {
+  margin: 0;
+  font-size: 11.5px;
+  color: #64748b;
+}
+
+.plan-exercise-ref-label {
+  font-weight: 600;
+  color: #475569;
+}
+
+.plan-exercise-ref-safety {
+  margin: 2px 0 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #92400e;
+}
+
+.plan-exercise-ref-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.plan-exercise-ref-check input {
+  width: 15px;
+  height: 15px;
+  accent-color: #16a34a;
+  cursor: pointer;
+}
+
+.plan-exercise-ref-check input:disabled {
+  cursor: not-allowed;
+}
+
+.plan-exercise-ref-check label {
+  cursor: pointer;
+}

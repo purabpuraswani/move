@@ -4,7 +4,7 @@
   color: var(--dark, #111827);
   font-family: "DM Sans", system-ui, sans-serif;
   padding: 32px 24px 90px;
-  max-width: 1080px;
+  max-width: var(--content-max);
   margin: 0 auto;
 }
 

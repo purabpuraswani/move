@@ -119,6 +119,30 @@ def count_exercise_results(user_id: str, *, plan_id: str = None) -> int:
     return exercise_results_collection.count_documents(query)
 
 
+def delete_manual_exercise_result(user_id: str, result_id: str) -> bool:
+    """Delete one manually confirmed result belonging to this user.
+
+    Deliberately narrow: only a `manual_confirmation` row can be removed,
+    and only by the user who owns it. A camera session is a measurement
+    that happened, and this store stays append-only for those -- un-ticking
+    a box is a correction to a self-report, not a licence to erase
+    recorded evidence.
+
+    Returns True when a row was deleted, False when nothing matched (an
+    unknown id, another user's row, or a camera result).
+    """
+
+    result = exercise_results_collection.delete_one(
+        {
+            "_id": _object_id(result_id),
+            "user_id": user_id,
+            "source": "manual_confirmation",
+        }
+    )
+
+    return result.deleted_count == 1
+
+
 def get_exercise_result(user_id: str, result_id: str) -> dict:
     document = exercise_results_collection.find_one(
         {"_id": _object_id(result_id), "user_id": user_id}
@@ -152,6 +176,9 @@ def serialise_exercise_result(document: dict) -> dict:
         "id": str(document["_id"]),
         "exerciseId": document.get("exerciseId"),
         "status": document.get("status"),
+        # Documents written before this field existed were all camera
+        # sessions, so that is what they are reported as.
+        "source": document.get("source") or "camera",
         "startedAt": document.get("startedAt"),
         "completedAt": document.get("completedAt"),
         "measurements": document.get("measurements"),

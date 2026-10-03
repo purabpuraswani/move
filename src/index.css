@@ -20,6 +20,19 @@
   --radius-md: 15px;
   --radius-lg: 20px;
 
+  /* One content grid for the whole application.
+     Every authenticated page shell sizes itself from these, so the left
+     and right edges of Dashboard, My Plan, Progress, History, Reports and
+     the specialist pages line up instead of each page inventing its own
+     max-width (they previously ranged from 720px to 1280px, which is what
+     left wide blank margins on large screens).
+     --content-max-narrow is for reading columns only: assessment
+     instructions and other long prose, where a 1200px line length would
+     be worse, not better. */
+  --content-max: 1200px;
+  --content-max-narrow: 880px;
+  --content-gutter: 24px;
+
   font-family: "DM Sans", sans-serif;
 
   font-synthesis: none;
@@ -175,5 +188,19 @@ img {
   .primary-button,
   .secondary-button {
     width: 100%;
+  }
+}
+
+/* Shared content container. Pages that have their own shell class size it
+   from the tokens above rather than using this directly; this exists for
+   anything new, so a third set of widths never appears. */
+.mw-content {
+  width: min(100% - (var(--content-gutter) * 2), var(--content-max));
+  margin-inline: auto;
+}
+
+@media (max-width: 640px) {
+  :root {
+    --content-gutter: 16px;
   }
 }

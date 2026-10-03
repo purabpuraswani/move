@@ -25,6 +25,12 @@ PRIORITIES = ("low", "medium", "high", "critical")
 # Orchestrator would silently accept. Extend this tuple when a specialist
 # agent is actually implemented — not before, per the Phase 0 boundary.
 KNOWN_AGENT_IDS = (
+    # The two specialist areas that were presentation-layer text
+    # until they were implemented as real agents (activity_agent/,
+    # recovery_agent/). Added here only now that each has a real
+    # input view, real reasoning and a real Agent Result.
+    "exercise_activity",
+    "recovery",
     "physio",
     "nutrition",
     "behaviour",

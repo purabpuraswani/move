@@ -497,7 +497,11 @@
    ========================================================= */
 
 .dashboard-main {
-  width: min(1280px, 90%);
+  /* Same content grid as every other page, so the dashboard's edges line
+     up with My Plan, Progress and the specialist pages. This was the one
+     page already using most of the viewport (min(1280px, 90%)), which is
+     why the others looked unusually narrow beside it. */
+  width: min(100% - (var(--content-gutter) * 2), var(--content-max));
 
   margin: 0 auto;
 

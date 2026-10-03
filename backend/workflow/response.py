@@ -22,10 +22,20 @@ from nutrition_library.catalog import (
     NutritionTopicNotFoundError,
     get_nutrition_topic_details,
 )
+from activity_agent.evidence import build_activity_view
+from activity_agent.reasoning import assess_activity
+from nutrition_agent.evidence import build_nutrition_evidence_view
+from orchestration.evidence import STATUS_INSUFFICIENT_EVIDENCE
 from orchestrator.decision import (
     decide_exercise_activity_required,
     decide_recovery_required,
 )
+from physio_agent.agent import _movement_evidence
+from recovery_agent.evidence import build_recovery_view
+from recovery_agent.reasoning import assess_recovery
+from safety.gate import _missing_safety_information
+from safety.rules import reported_health_concerns
+from safety.schema import STATUS_TO_LEVEL
 
 # safety/schema.py's SAFETY_STATUSES, translated into a plain-language
 # sentence a non-technical user can act on. These are the only five values
@@ -892,25 +902,38 @@ def build_specialists_team(user_state: dict = None, safety_status=None, safety_r
     behaviour_plan = _behaviour_plan_summary(user_state)
 
     # 1. Exercise & Physical Activity
+    #
+    # The card shows what the Exercise & Physical Activity specialist
+    # actually reasoned, by calling the same pure function the agent runs
+    # (activity_agent/reasoning.py). It used to hold two fixed paragraphs
+    # that every user saw word for word, whatever their step count; a card
+    # that cannot differ between users is not a specialist.
     exercise_dec = decide_exercise_activity_required(user_state, need_profile)
     is_exercise_active = exercise_dec.get("exercise_activity_required", False)
     exercise_evaluated = exercise_dec.get("evaluated", False)
-    exercise_recs = []
-    if is_exercise_active:
-        exercise_recs = [
+
+    activity_domain = assess_activity(build_activity_view(user_state))
+    exercise_recs = (
+        [
             {
-                "id": "daily_walking_routine",
-                "title": "Daily Walking Routine",
-                "action": "Build up to 6,000–7,500 brisk steps a day, divided into 15–20 minute walks.",
-                "why": "Supports aerobic capacity and baseline metabolic activity without joint strain.",
-            },
-            {
-                "id": "sedentary_interruption",
-                "title": "Active Movement Breaks",
-                "action": "Stand up and walk or gently stretch for 2 minutes every hour of seated work.",
-                "why": "Interrupts prolonged hip flexion and reduces postural fatigue.",
-            },
+                "id": item["id"],
+                "title": item["title"],
+                "action": item["action"],
+                "why": item["why"],
+            }
+            for item in activity_domain["activity_recommendations"]
         ]
+        if is_exercise_active
+        else []
+    )
+    exercise_evidence = activity_domain["evidence_used"] or [
+        "No daily activity answers (steps, sitting time, exercise frequency) recorded yet."
+    ]
+    exercise_missing = (
+        activity_domain["missing_information"]
+        if activity_domain["status"] == STATUS_INSUFFICIENT_EVIDENCE
+        else []
+    )
 
     exercise_status = (
         "ACTIVE"
@@ -958,6 +981,31 @@ def build_specialists_team(user_state: dict = None, safety_status=None, safety_r
             else "Complete the baseline movement check (shoulder raise, sit-to-stand, balance) to evaluate."
         )
     )
+    assessed_movements, not_assessed_movements = _movement_evidence(
+        (user_state.get("physical_assessment") or {}).get("data")
+    )
+
+    # What the camera actually measured, named movement by movement. An
+    # unmeasured check is listed as unmeasured and never as a finding
+    # about the user's movement.
+    physio_evidence = [
+        f"{entry['label']}: measured" for entry in assessed_movements
+    ] + [
+        f"{entry['label']}: not measured ({entry['status']})"
+        for entry in not_assessed_movements
+    ] or [
+        (need_profile.get("overallSummary") or {}).get("headline")
+        or "No baseline movement check has produced a usable measurement yet."
+    ]
+
+    # The full prescription for the team card: the same entries the
+    # Movement panel renders (name, focus, dosage, difficulty, safety),
+    # so the card can show what was actually recommended instead of a
+    # single summary line. Built from the stored plan record, not
+    # re-derived, so card and panel cannot disagree.
+    physio_plan_record = _latest_plan_record(user_state.get("exercise_history") or {})
+    physio_programme = _programme_entries(physio_plan_record) if physio_plan_record else []
+
     physio_recs = (
         [
             {
@@ -999,6 +1047,8 @@ def build_specialists_team(user_state: dict = None, safety_status=None, safety_r
             else "Answer the lifestyle questionnaire to evaluate everyday nutrition habits."
         )
     )
+    nutrition_evidence_view = build_nutrition_evidence_view(user_state)
+
     nutrition_recs = (
         [
             {
@@ -1014,25 +1064,38 @@ def build_specialists_team(user_state: dict = None, safety_status=None, safety_r
     )
 
     # 4. Recovery & Care
+    #
+    # Same change as Exercise above: the card reports the Recovery
+    # specialist's own finding and the constraint it placed on
+    # progression, instead of two fixed sentences about sleep that were
+    # shown to every user regardless of what they reported.
     recovery_dec = decide_recovery_required(user_state)
     is_recovery_active = recovery_dec.get("recovery_required", False)
     recovery_evaluated = recovery_dec.get("evaluated", False)
-    recovery_recs = []
-    if is_recovery_active:
-        recovery_recs = [
+
+    recovery_domain = assess_recovery(build_recovery_view(user_state))
+    recovery_recs = (
+        [
             {
-                "id": "sleep_rhythm",
-                "title": "Sleep Rhythm & Consistency",
-                "action": "Maintain a regular 7–8 hour sleep schedule with a 30-minute wind-down routine.",
-                "why": "Restorative sleep is essential for muscle protein synthesis and neural motor recovery.",
-            },
-            {
-                "id": "recovery_intervals",
-                "title": "Movement Recovery Spacing",
-                "action": "Allow at least 24 hours between higher-demand sit-to-stand and strength sets.",
-                "why": "Enables musculoskeletal tissue recovery and prevents cumulative fatigue.",
-            },
+                "id": item["id"],
+                "title": item["title"],
+                "action": item["action"],
+                "why": item["why"],
+            }
+            for item in recovery_domain["recovery_recommendations"]
         ]
+        if is_recovery_active
+        else []
+    )
+    recovery_evidence = recovery_domain["evidence_used"] or [
+        "No sleep or rest answers recorded yet."
+    ]
+    recovery_missing = (
+        recovery_domain["missing_information"]
+        if recovery_domain["status"] == STATUS_INSUFFICIENT_EVIDENCE
+        else []
+    )
+    recovery_constraint = recovery_domain["constraint"]
 
     recovery_status = (
         "ACTIVE"
@@ -1111,6 +1174,42 @@ def build_specialists_team(user_state: dict = None, safety_status=None, safety_r
             )
         )
     )
+    self_reported_health = (
+        ((user_state.get("medical_context") or {}).get("data") or {}).get("self_reported")
+        if (user_state.get("medical_context") or {}).get("available")
+        else None
+    )
+    reported_concerns = reported_health_concerns(self_reported_health)
+    # confirmed_reports is a container ({"reports": [...]}) that exists
+    # even when empty, so its presence is not evidence of a report. Only a
+    # non-empty reports list counts -- the same test the Orchestrator
+    # applies before handing anything to the Safety Gate.
+    _confirmed_container = (
+        ((user_state.get("medical_context") or {}).get("data") or {}).get("confirmed_reports")
+        if (user_state.get("medical_context") or {}).get("available")
+        else None
+    )
+    confirmed_reports = (
+        _confirmed_container
+        if isinstance(_confirmed_container, dict) and _confirmed_container.get("reports")
+        else None
+    )
+
+    safety_evidence = [
+        "Reported at onboarding: "
+        + (
+            ", ".join(concern.replace("_", " ") for concern in reported_concerns)
+            if reported_concerns
+            else "no health conditions reported"
+        ),
+        "Confirmed medical report on file: " + ("yes" if confirmed_reports else "no"),
+        "Declared difficulty of every candidate exercise is checked against this "
+        "gate's ceiling before a plan is stored.",
+    ]
+    safety_missing = _missing_safety_information(
+        need_profile, confirmed_reports, self_reported_health
+    )
+
     safety_reason = (
         (safety_result or {}).get("reason")
         or safety_status_message(safety_code)
@@ -1132,7 +1231,12 @@ def build_specialists_team(user_state: dict = None, safety_status=None, safety_r
             "status_label": exercise_label,
             "focus": "Daily walking, step volume & sedentary reduction",
             "reason": exercise_dec.get("reason"),
-            "evidence": exercise_dec.get("evidence", []),
+            "evidence": exercise_evidence,
+            "findings": activity_domain["activity_findings"],
+            "progression": activity_domain["progression"],
+            "constraints": activity_domain["constraints"],
+            "missing_information": exercise_missing,
+            "confidence": activity_domain["confidence"],
             "recommendations": exercise_recs,
         },
         "physio": {
@@ -1148,14 +1252,18 @@ def build_specialists_team(user_state: dict = None, safety_status=None, safety_r
             "status_label": physio_label,
             "focus": "Upper-body mobility, balance & functional strength",
             "reason": physio_reason,
-            "evidence": (need_profile.get("overallSummary") or {}).get("headline")
-            or "Baseline movement check metrics (shoulder elevation, sit-to-stand timing, single-leg stance).",
+            # This dict previously repeated "evidence" and
+            # "recommendations"; the later pair won, so the card always
+            # rendered an empty programme and a generic evidence line no
+            # matter what the Physio Agent had selected. One key each now,
+            # carrying the agent's real output.
+            "evidence": physio_evidence,
+            "assessed_movements": assessed_movements,
+            "not_assessed_movements": not_assessed_movements,
             "recommendations": physio_recs,
-            "evidence": [
-                (need_profile.get("overallSummary") or {}).get("headline")
-                or "Baseline movement check metrics (shoulder elevation, sit-to-stand timing, single-leg stance)."
-            ],
-            "recommendations": [],
+            # What to show on the card itself: the exercises, with the
+            # detail needed to recognise and tick one off.
+            "exercises": physio_programme if is_physio_active else [],
         },
         "nutrition": {
             "id": "nutrition",
@@ -1170,7 +1278,14 @@ def build_specialists_team(user_state: dict = None, safety_status=None, safety_r
             "status_label": nutrition_label,
             "focus": "Everyday dietary patterns, hydration & meal regularity",
             "reason": nutrition_reason,
-            "evidence": (need_profile.get("nutrition_need") or {}).get("evidence", []),
+            "evidence": (need_profile.get("nutrition_need") or {}).get("evidence", [])
+            or nutrition_evidence_view["evidence_used"],
+            # With nothing answered this is INSUFFICIENT_EVIDENCE plus the
+            # specific questions still unanswered -- not generic advice to
+            # eat well, which would be a recommendation with no evidence.
+            "evidence_status": nutrition_evidence_view["status"],
+            "missing_information": nutrition_evidence_view["missing_information"],
+            "confidence": nutrition_evidence_view["confidence"],
             "recommendations": nutrition_recs,
         },
         "recovery": {
@@ -1186,7 +1301,11 @@ def build_specialists_team(user_state: dict = None, safety_status=None, safety_r
             "status_label": recovery_label,
             "focus": "Restorative sleep, movement spacing & workload pacing",
             "reason": recovery_dec.get("reason"),
-            "evidence": recovery_dec.get("evidence", []),
+            "evidence": recovery_evidence,
+            "findings": recovery_domain["recovery_findings"],
+            "constraint": recovery_constraint,
+            "missing_information": recovery_missing,
+            "confidence": recovery_domain["confidence"],
             "recommendations": recovery_recs,
         },
         "behaviour": {
@@ -1218,7 +1337,13 @@ def build_specialists_team(user_state: dict = None, safety_status=None, safety_r
             "status_label": safety_label,
             "focus": "Clinical screening, contraindications & exercise boundary safety",
             "reason": safety_reason,
-            "evidence": ["Screened against self-reported conditions, confirmed medical reports, and candidate exercise intensity."],
+            # This line used to claim self-reported conditions were
+            # screened when the gate did not read them at all. The gate now
+            # does read them (safety/rules.py), and this describes exactly
+            # the three inputs it uses -- nothing more.
+            "evidence": safety_evidence,
+            "level": STATUS_TO_LEVEL.get(safety_code),
+            "missing_safety_information": safety_missing,
             "flags": (safety_result or {}).get("flags", []),
             "actions": (safety_result or {}).get("actions", []),
             "requires_referral": (safety_result or {}).get("requires_referral", False),

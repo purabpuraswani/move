@@ -46,6 +46,8 @@ import {
 } from "../services/specialistData.js";
 import FoodLogPanel from "../components/FoodLogPanel.jsx";
 import SpecialistPanel from "../components/SpecialistPanel.jsx";
+import SpecialistExerciseList from "../components/SpecialistExerciseList.jsx";
+import useExerciseCompletion from "../hooks/useExerciseCompletion.js";
 import BehaviourActionPanel from "../components/BehaviourActionPanel.jsx";
 import AppNavigation from "../components/AppNavigation.jsx";
 
@@ -72,7 +74,7 @@ function formatDate(value) {
  * topics, habit goals — never ids, and never model text passed straight
  * through.
  */
-function PlanSection({ title, blurb, plan, emptyHint, onOpenExercise = null }) {
+function PlanSection({ title, blurb, plan, emptyHint }) {
   const safeTitle = safeDisplayValue(title);
   const safeBlurb = safeDisplayValue(blurb);
 
@@ -102,18 +104,11 @@ function PlanSection({ title, blurb, plan, emptyHint, onOpenExercise = null }) {
           with the camera. Nutrition and habit goals are not -- they are things
           to do rather than things to run, so they stay as plain text instead
           of pretending to be buttons. */}
-      {onOpenExercise && exerciseItems.length ? (
+      {exerciseItems.length ? (
         <ul className="plan-items">
           {exerciseItems.map((exercise, idx) => (
-            <li key={exercise?.id || idx} className="plan-item plan-item--action">
+            <li key={exercise?.id || idx} className="plan-item">
               <span>{safeDisplayValue(exercise?.name || exercise?.title)}</span>
-              <button
-                type="button"
-                className="plan-item-start"
-                onClick={() => onOpenExercise(exercise?.id)}
-              >
-                Start
-              </button>
             </li>
           ))}
         </ul>
@@ -149,6 +144,10 @@ function PlanSection({ title, blurb, plan, emptyHint, onOpenExercise = null }) {
 }
 
 function PlanPage() {
+  // Today's completions, shared with the Movement panel through the one
+  // exercise-results API — not a second progress store.
+  const completion = useExerciseCompletion();
+
   const navigate = useNavigate();
 
   const [workflow, setWorkflow] = useState(null);
@@ -685,66 +684,13 @@ function PlanPage() {
               </div>
 
               <div className="plan-team-grid">
-                {toArray(
-                  toArray(workflow?.specialists_team).length > 0
-                    ? workflow.specialists_team
-                    : [
-                        {
-                          id: "exercise_activity",
-                          title: "Exercise & Physical Activity",
-                          subtitle: "Daily walking & sedentary pacing",
-                          icon: "🏃",
-                          status: "EVALUATED_NOT_REQUIRED",
-                          status_label: "Evaluated — Not Required",
-                          reason: "Daily step count and movement volume evaluated against baseline targets.",
-                        },
-                        {
-                          id: "physio",
-                          title: "Physiotherapy & Movement",
-                          subtitle: "Mobility & corrective exercise",
-                          icon: "🧑‍⚕️",
-                          status: workflow?.exercise_plan?.available ? "ACTIVE" : "EVALUATED_NOT_REQUIRED",
-                          status_label: workflow?.exercise_plan?.available ? "Active in Your Plan" : "Evaluated — Not Required",
-                          reason: "Calibrated directly from your physical movement checks.",
-                        },
-                        {
-                          id: "nutrition",
-                          title: "Nutrition & Lifestyle",
-                          subtitle: "Dietary quality & hydration",
-                          icon: "🍎",
-                          status: workflow?.nutrition_plan?.available ? "ACTIVE" : "EVALUATED_NOT_REQUIRED",
-                          status_label: workflow?.nutrition_plan?.available ? "Active in Your Plan" : "Evaluated — Not Required",
-                          reason: "Evaluates dietary needs, meal consistency, and authentic food logging.",
-                        },
-                        {
-                          id: "recovery",
-                          title: "Recovery & Care",
-                          subtitle: "Sleep hygiene & rest days",
-                          icon: "🌙",
-                          status: "EVALUATED_NOT_REQUIRED",
-                          status_label: "Evaluated — Not Required",
-                          reason: "Monitors rest intervals, sleep hygiene, and post-activity recovery.",
-                        },
-                        {
-                          id: "behaviour",
-                          title: "Behaviour & Adherence",
-                          subtitle: "Habit formation & routine pacing",
-                          icon: "🧠",
-                          status: workflow?.behaviour_plan?.available ? "ACTIVE" : "EVALUATED_NOT_REQUIRED",
-                          status_label: workflow?.behaviour_plan?.available ? "Active in Your Plan" : "Evaluated — Not Required",
-                          reason: "Habit stacking and routine consistency coaching.",
-                        },
-                        {
-                          id: "safety",
-                          title: "Safety & Clinical Escalation",
-                          subtitle: "Clinical gatekeeper & contraindications",
-                          icon: "🛡️",
-                          status: "ACTIVE",
-                          status_label: workflow?.safety_status || "Active & Monitoring",
-                          reason: "Authoritative clinical gatekeeper evaluating medical context and safety.",
-                        },
-                      ],
-                ).map((specialist, idx) => {
+                {/* The six specialist statuses come from the backend's
+                    build_specialists_team(), which derives each one from
+                    that user's actual evidence. There is deliberately no
+                    frontend fallback list: inventing a status here would
+                    mean the page could claim a specialist had "evaluated"
+                    something it never saw. */}
+                {toArray(workflow?.specialists_team).map((specialist, idx) => {
                   const slug =
                     specialist.id === "exercise_activity"
                       ? "exercise"
@@ -788,6 +734,16 @@ function PlanPage() {
                         <p className="plan-team-card-reason">
                           {safeReason}
                         </p>
+
+                        {/* The exercises this specialist actually
+                            recommended, with their own reference image and
+                            the existing completion control. Reference and
+                            tick-off only — starting a camera session stays
+                            on the Movement panel and the exercise page. */}
+                        <SpecialistExerciseList
+                          exercises={specialist.exercises}
+                          completion={completion}
+                        />
                       </div>
 
                       <Link
@@ -847,7 +803,6 @@ function PlanPage() {
                     <SpecialistPanel
                       key={specialist?.id || specialist?.title || sIdx}
                       specialist={specialist}
-                      onStartExercise={(id) => navigate(`/exercise/${id}`)}
                       actionSlot={actionSlot}
                     />
                   );
@@ -862,7 +817,6 @@ function PlanPage() {
                     blurb="Exercises chosen for what your assessment showed."
                     plan={workflow.exercise_plan}
                     emptyHint="No movement plan was needed this time."
-                    onOpenExercise={(id) => navigate(`/exercise/${id}`)}
                   />
                   <PlanSection
                     title="Nutrition"

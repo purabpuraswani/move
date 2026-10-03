@@ -1,8 +1,13 @@
 import { useEffect, useState } from "react";
 
 import MovementDemo from "../movementDemos/MovementDemo.jsx";
+import { getExerciseImage } from "../movementDemos/exerciseImages.js";
 import { getMovementDemo } from "../movementDemos/registry.js";
-import { fetchExerciseResults } from "../services/exerciseResults";
+import {
+  confirmExerciseManually,
+  deleteManualExerciseResult,
+  fetchExerciseResults,
+} from "../services/exerciseResults";
 import {
   normalizeRecommendation,
   safeDisplayValue,
@@ -49,12 +54,49 @@ function prescriptionOf(exercise) {
   return parts.join(" · ") || null;
 }
 
-function ExerciseCard({ exercise, isCompletedToday = false, lastResult = null, onStart }) {
+function ExerciseCard({
+  exercise,
+  isCompletedToday = false,
+  lastResult = null,
+  onManualComplete,
+  onManualUndo,
+}) {
   const [showDemo, setShowDemo] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [checkboxError, setCheckboxError] = useState(null);
   const prescription = prescriptionOf(exercise);
+  // The instructional diagram, where one exists for this exercise id. The
+  // animated stick figure stays as the fallback for every other exercise,
+  // so nothing loses its demonstration.
+  const image = getExerciseImage(exercise.id);
   const demo = getMovementDemo(`exercise-${exercise.id}`);
-  const watching = toArray(exercise.watching);
-  const isCameraGuided = watching.length > 0 && !watching.includes("whether you mark it as done");
+  const checkboxId = `exercise-complete-${exercise.id}`;
+  // A camera session is a measurement and is not undone by a checkbox;
+  // only a result this user ticked by hand can be un-ticked.
+  const manualResultId =
+    lastResult && lastResult.source === "manual_confirmation" ? lastResult.id : null;
+  const lockedByCamera = isCompletedToday && !manualResultId;
+
+  async function handleToggle(event) {
+    const nextChecked = event.target.checked;
+
+    setCheckboxError(null);
+    setSaving(true);
+
+    try {
+      if (nextChecked) {
+        await onManualComplete?.(exercise.id);
+      } else if (manualResultId) {
+        await onManualUndo?.(manualResultId);
+      }
+    } catch (error) {
+      setCheckboxError(
+        error?.message || "That could not be saved just now. Please try again.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <li className={`specialist-exercise-card ${isCompletedToday ? "specialist-exercise-card--completed" : ""}`}>
@@ -74,9 +116,6 @@ function ExerciseCard({ exercise, isCompletedToday = false, lastResult = null, o
       <div className="specialist-exercise-pills">
         {prescription ? <span className="specialist-pill specialist-pill--metric" title="Prescribed volume">{prescription}</span> : null}
         {exercise.difficulty ? <span className="specialist-pill specialist-pill--level" title="Difficulty level">{safeDisplayValue(exercise.difficulty)}</span> : null}
-        <span className={`specialist-pill ${isCameraGuided ? "specialist-pill--camera" : "specialist-pill--manual"}`} title="Guidance mode">
-          {isCameraGuided ? "📷 Camera guided" : "✓ Guided practice"}
-        </span>
       </div>
 
       {isCompletedToday && lastResult?.measurements ? (
@@ -107,20 +146,53 @@ function ExerciseCard({ exercise, isCompletedToday = false, lastResult = null, o
         </div>
       ) : null}
 
-      {demo ? (
+      {image || demo ? (
         <div className="specialist-demo-container">
           <button type="button" className="specialist-demo-toggle-btn" onClick={() => setShowDemo(!showDemo)}>
             {showDemo ? "Hide demonstration ▲" : "View demonstration preview ▼"}
           </button>
-          {showDemo ? <div className="specialist-inline-demo"><MovementDemo demo={demo} /></div> : null}
+          {showDemo ? (
+            <div className="specialist-inline-demo">
+              {image ? (
+                <img
+                  className="specialist-demo-image"
+                  src={image.src}
+                  alt={image.alt}
+                  loading="lazy"
+                />
+              ) : (
+                <MovementDemo demo={demo} />
+              )}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
       <div className="specialist-exercise-cta-row">
-        <button type="button" className={`specialist-start-btn ${isCompletedToday ? "specialist-start-btn--completed" : ""}`} onClick={() => onStart(exercise.id)}>
-          {isCompletedToday ? "Repeat exercise ↻" : "Start exercise →"}
-        </button>
+        {/*
+          A real control, not an icon: checking it records a completed
+          exercise result marked as self-reported. It never pretends a
+          camera session happened, and it never changes the prescription,
+          the plan or the recommendation — it only records that the user
+          says they did it.
+        */}
+        <div className="specialist-complete-check">
+          <input
+            type="checkbox"
+            id={checkboxId}
+            className="specialist-complete-checkbox"
+            checked={isCompletedToday}
+            disabled={saving || lockedByCamera}
+            onChange={handleToggle}
+          />
+          <label htmlFor={checkboxId} className="specialist-complete-label">
+            {lockedByCamera ? "Completed (recorded session)" : "Mark as completed"}
+          </label>
+        </div>
       </div>
+      {checkboxError ? (
+        <p className="specialist-complete-error" role="alert">{checkboxError}</p>
+      ) : null}
     </li>
   );
 }
@@ -187,7 +259,7 @@ function RecordingGuidance({ items, open, onToggle }) {
   );
 }
 
-function SpecialistPanel({ specialist, onStartExercise = null, actionSlot = null }) {
+function SpecialistPanel({ specialist, actionSlot = null }) {
   const [showRecordingGuidance, setShowRecordingGuidance] = useState(false);
   const [completedExerciseIds, setCompletedExerciseIds] = useState(new Set());
   const [todayResults, setTodayResults] = useState([]);
@@ -216,6 +288,45 @@ function SpecialistPanel({ specialist, onStartExercise = null, actionSlot = null
     window.__setCompletedExerciseIds = (ids) => setCompletedExerciseIds(new Set(ids));
     return () => { delete window.__setCompletedExerciseIds; };
   }, []);
+
+  // Marking an exercise done by hand. This writes a real exercise result
+  // through the same API the camera flow uses, so it survives navigation
+  // and reload and counts towards adherence — there is no second progress
+  // store. What it does NOT do is claim a measurement: the result is
+  // recorded as a self-report (source: manual_confirmation), and nothing
+  // about the plan, the prescription or the agents is re-run.
+  async function handleManualComplete(exerciseId) {
+    const response = await confirmExerciseManually({ exerciseId });
+    const saved = response?.result;
+
+    setCompletedExerciseIds((previous) => new Set(previous).add(exerciseId));
+
+    if (saved) {
+      setTodayResults((previous) => [
+        ...previous.filter((result) => result.exerciseId !== exerciseId),
+        saved,
+      ]);
+    }
+  }
+
+  // Un-ticking: delete that one self-reported result. A camera-recorded
+  // session has no id here to delete and the backend refuses it anyway,
+  // so a measured session can never be removed this way.
+  async function handleManualUndo(resultId) {
+    await deleteManualExerciseResult(resultId);
+
+    const removed = todayResults.find((result) => result.id === resultId);
+
+    setTodayResults((previous) => previous.filter((result) => result.id !== resultId));
+
+    if (removed?.exerciseId) {
+      setCompletedExerciseIds((previous) => {
+        const next = new Set(previous);
+        next.delete(removed.exerciseId);
+        return next;
+      });
+    }
+  }
 
   if (!specialist) return null;
 
@@ -264,7 +375,7 @@ function SpecialistPanel({ specialist, onStartExercise = null, actionSlot = null
         <header className="specialist-coaching-head"><div className="specialist-coaching-brand"><span className="specialist-coaching-badge">Movement plan • Physio</span><h2 className="specialist-coaching-title">Your movement plan</h2></div>{planVersion ? <span className="specialist-version-pill">Plan v{safeDisplayValue(planVersion)}</span> : null}</header>
         <section className="specialist-today-hero"><div className="specialist-today-header"><span className="specialist-section-eyebrow">Today</span><h3 className="specialist-today-heading">Today's Movement Session</h3></div>{safeGoal ? <p className="specialist-coaching-goal">{safeGoal}</p> : null}<div className="specialist-daily-progress-card"><div className="specialist-progress-row"><span className="specialist-progress-label">Today's completion</span><span className="specialist-progress-fraction"><strong>{completedCount}</strong> of {totalCount} {totalCount === 1 ? "exercise" : "exercises"} completed</span></div><div className="specialist-progress-bar-track"><div className="specialist-progress-bar-fill" style={{ width: `${progressPercentage}%` }} /></div></div></section>
         <section className="specialist-coaching-section specialist-focus-section"><div className="specialist-section-header"><span className="specialist-section-eyebrow">Your Focus</span><h3 className="specialist-section-title">What we're working on</h3></div>{workingOn.length ? <ul className="specialist-chips">{workingOn.map((item, index) => <li key={index} className="specialist-chip">{safeDisplayValue(item)}</li>)}</ul> : null}{safeRationale ? <p className="specialist-rationale-text">{safeRationale}</p> : null}<FindingsBlock findings={findings} label="From your baseline assessment:" /></section>
-        <section className="specialist-coaching-section specialist-exercises-section"><div className="specialist-section-header specialist-exercises-header-row"><div><span className="specialist-section-eyebrow">Your Exercises</span><h3 className="specialist-section-title">Prescribed Movements</h3></div><span className="specialist-exercise-count-tag">{programme.length} {programme.length === 1 ? "movement" : "movements"}</span></div>{programme.length ? <ul className="specialist-exercises-list">{programme.map((exercise, index) => <ExerciseCard key={exercise?.id || index} exercise={exercise} isCompletedToday={completedExerciseIds.has(exercise?.id)} lastResult={todayResults.find((result) => result.exerciseId === exercise?.id)} onStart={onStartExercise || (() => {})} />)}</ul> : <div className="specialist-empty-programme"><p className="specialist-text--quiet">No specific exercises scheduled for today.</p></div>}</section>
+        <section className="specialist-coaching-section specialist-exercises-section"><div className="specialist-section-header specialist-exercises-header-row"><div><span className="specialist-section-eyebrow">Your Exercises</span><h3 className="specialist-section-title">Prescribed Movements</h3></div><span className="specialist-exercise-count-tag">{programme.length} {programme.length === 1 ? "movement" : "movements"}</span></div>{programme.length ? <ul className="specialist-exercises-list">{programme.map((exercise, index) => <ExerciseCard key={exercise?.id || index} exercise={exercise} isCompletedToday={completedExerciseIds.has(exercise?.id)} lastResult={todayResults.find((result) => result.exerciseId === exercise?.id)} onManualComplete={handleManualComplete} onManualUndo={handleManualUndo} />)}</ul> : <div className="specialist-empty-programme"><p className="specialist-text--quiet">No specific exercises scheduled for today.</p></div>}</section>
         <section className="specialist-coaching-section specialist-learning-section"><div className="specialist-section-header"><span className="specialist-section-eyebrow">Adaptive Intelligence</span><h3 className="specialist-section-title">What MoveWell is learning from you</h3></div><LearningBlock learning={learning} subject={subject} /></section>
         <section className="specialist-coaching-section specialist-next-section"><div className="specialist-section-header"><span className="specialist-section-eyebrow">The Adaptive Loop</span><h3 className="specialist-section-title">What happens next</h3></div>{safeNextReview ? <p className="specialist-review-timeline"><strong>Your review cycle:</strong> {safeNextReview}</p> : null}{planVersion > 1 ? <ChangesBlock changes={changes} /> : null}{needFromYou.length ? <RecordingGuidance items={needFromYou} open={showRecordingGuidance} onToggle={() => setShowRecordingGuidance(!showRecordingGuidance)} /> : null}</section>
       </article>

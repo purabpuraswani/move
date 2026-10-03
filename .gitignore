@@ -37,3 +37,6 @@ backend/uploads/
 *.njsproj
 *.sln
 *.sw?
+
+# Local development database (created at runtime, not source)
+backend/movewell.db

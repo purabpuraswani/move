@@ -21,6 +21,21 @@ the whole recommendation list itself.
 
 SAFETY_STATUSES = ("ALLOW", "MODIFY", "PAUSE", "REFER", "NOT_ASSESSED")
 
+# The same decision, said in the vocabulary a reader (and the specialist
+# card) needs: what does this mean for the user? `status` stays the
+# machine-readable gate outcome every caller already branches on; `level`
+# is derived from it by exactly this mapping and never set independently,
+# so the two can never disagree.
+SAFETY_LEVELS = ("SAFE", "CAUTION", "ESCALATE", "INSUFFICIENT_INFORMATION")
+
+STATUS_TO_LEVEL = {
+    "ALLOW": "SAFE",
+    "MODIFY": "CAUTION",
+    "PAUSE": "CAUTION",
+    "REFER": "ESCALATE",
+    "NOT_ASSESSED": "INSUFFICIENT_INFORMATION",
+}
+
 REQUIRED_FIELDS = (
     "status",
     "flags",
@@ -30,6 +45,11 @@ REQUIRED_FIELDS = (
     "modified_recommendation_ids",
     "blocked_recommendation_ids",
 )
+
+# Added after the fields above were already in use. Optional in the
+# validator so a Safety Result written before they existed still
+# validates; always present on anything build_safety_result() produces.
+OPTIONAL_FIELDS = ("level", "missing_safety_information")
 
 
 class SafetyResultValidationError(ValueError):
@@ -49,7 +69,16 @@ def build_safety_result(
     requires_referral: bool = False,
     modified_recommendation_ids: list = None,
     blocked_recommendation_ids: list = None,
+    missing_safety_information: list = None,
 ) -> dict:
+    """Build a validated Safety Result.
+
+    `missing_safety_information` names the specific safety-relevant
+    questions this project has no answer to. It is the difference between
+    "nothing suggests a concern" and "we were never told" -- the gate
+    reports the second rather than treating silence as clearance.
+    """
+
     result = {
         "status": status,
         "flags": flags if flags is not None else [],
@@ -61,6 +90,10 @@ def build_safety_result(
         ),
         "blocked_recommendation_ids": (
             blocked_recommendation_ids if blocked_recommendation_ids is not None else []
+        ),
+        "level": STATUS_TO_LEVEL.get(status),
+        "missing_safety_information": (
+            missing_safety_information if missing_safety_information is not None else []
         ),
     }
 
@@ -78,7 +111,7 @@ def validate_safety_result(result) -> None:
     if missing:
         _fail(f"Safety Result missing field(s): {', '.join(missing)}")
 
-    unexpected = set(result) - set(REQUIRED_FIELDS)
+    unexpected = set(result) - set(REQUIRED_FIELDS) - set(OPTIONAL_FIELDS)
 
     if unexpected:
         _fail(f"Safety Result has unexpected field(s): {', '.join(sorted(unexpected))}")
@@ -89,7 +122,18 @@ def validate_safety_result(result) -> None:
     if not isinstance(result["reason"], str) or not result["reason"].strip():
         _fail("reason must be a non-empty string")
 
-    for field in ("flags", "actions", "modified_recommendation_ids", "blocked_recommendation_ids"):
+    if "level" in result and result["level"] != STATUS_TO_LEVEL.get(result["status"]):
+        _fail(
+            "level must be the mapping of status "
+            f"({result['status']} -> {STATUS_TO_LEVEL.get(result['status'])}), never set independently"
+        )
+
+    for field in (
+        "flags",
+        "actions",
+        "modified_recommendation_ids",
+        "blocked_recommendation_ids",
+    ) + (("missing_safety_information",) if "missing_safety_information" in result else ()):
         value = result[field]
 
         if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
@@ -101,6 +145,8 @@ def validate_safety_result(result) -> None:
     if result["status"] == "REFER" and not result["requires_referral"]:
         _fail("a REFER status must have requires_referral=True")
 
+    # missing_safety_information is deliberately NOT in this check: a
+    # NOT_ASSESSED result naming what it still needs is the point of it.
     if result["status"] == "NOT_ASSESSED" and (
         result["flags"] or result["actions"] or result["modified_recommendation_ids"]
         or result["blocked_recommendation_ids"] or result["requires_referral"]

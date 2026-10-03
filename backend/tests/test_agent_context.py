@@ -459,7 +459,19 @@ class SummaryTests(unittest.TestCase):
                           report_totals={"total": 3})
         )
 
-        encoded = json.dumps(summary)
+        # `generatedAt` is a wall-clock timestamp and `signature` a hash;
+        # neither is derived from a reading, and both can contain a
+        # reading's digits by coincidence -- a run at 10:26:13.217462
+        # used to fail this on the "13.2" in the timestamp. Searching the
+        # fields that actually carry content keeps the check honest
+        # without making it depend on the clock.
+        encoded = json.dumps(
+            {
+                key: value
+                for key, value in summary.items()
+                if key not in ("generatedAt", "signature")
+            }
+        )
 
         self.assertNotIn("13.2", encoded)
         self.assertNotIn("Haemoglobin", encoded)

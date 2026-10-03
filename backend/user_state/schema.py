@@ -282,8 +282,19 @@ def _build_medical_context(profile_doc, confirmed_reports_doc) -> dict:
     self_reported = None
 
     if isinstance(profile_doc, dict) and profile_doc:
+        # routes/profile.py stores the onboarding health checklist nested
+        # under "health"; callers that build a profile dict by hand (this
+        # project's own tests, and the workflow assembly fixtures) put the
+        # same fields at the top level. Both are read, nested first, so a
+        # real signed-up user's answers actually reach medical_context --
+        # before this, they never did, and every account looked to the
+        # Safety Gate like someone who had reported nothing.
+        nested = profile_doc.get("health")
+        source = nested if isinstance(nested, dict) else profile_doc
+
         values = {
-            key: profile_doc.get(key) for key in _SELF_REPORTED_HEALTH_FIELDS
+            key: source.get(key, profile_doc.get(key))
+            for key in _SELF_REPORTED_HEALTH_FIELDS
         }
 
         if any(value not in (None, "") for value in values.values()):

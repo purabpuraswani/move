@@ -18,6 +18,8 @@ import { useNavigate } from "react-router-dom";
 
 import { usePoseEngine } from "../assessment/hooks/usePoseEngine.js";
 import CameraStage from "../assessment/components/CameraStage.jsx";
+import DemonstrationVideo from "../assessment/components/DemonstrationVideo.jsx";
+import { getExerciseVideo } from "../movementDemos/exerciseVideos.js";
 import ShoulderPanel from "../assessment/components/ShoulderPanel.jsx";
 import FtsstPanel from "../assessment/components/FtsstPanel.jsx";
 import BalancePanel from "../assessment/components/BalancePanel.jsx";
@@ -293,6 +295,17 @@ function AssessmentPage() {
   }
 
   const showCamera = CAMERA_STEPS.includes(step);
+  // The recording for whichever check is on screen. BALANCE_LEFT and
+  // BALANCE_RIGHT are two sides of the same movement, so they share one.
+  const stepVideo = getExerciseVideo(
+    step === STEP.SHOULDER
+      ? "shoulder"
+      : step === STEP.CHAIR || step === STEP.FTSST
+        ? "ftsst"
+        : step === STEP.BALANCE_LEFT || step === STEP.BALANCE_RIGHT
+          ? "balance"
+          : null,
+  );
 
   return (
     <div className="assess-page">
@@ -330,15 +343,25 @@ function AssessmentPage() {
 
       <main className={showCamera ? "assess-main assess-main--split" : "assess-main"}>
         {showCamera && (
-          <CameraStage
-            engine={engine}
-            hint={CAMERA_HINTS[step]}
-            outline={cameraState.outline}
-            countdown={cameraState.countdown}
-            trackingStatus={cameraState.trackingStatus}
-            guidance={cameraState.guidance}
-            visible={cameraState.visible}
-          />
+          // The workspace: the user's camera and the demonstration of the
+          // movement, side by side, so the movement can be watched while it
+          // is performed. The step panel below carries the readiness
+          // information and the controls.
+          <div className="assess-workspace">
+            <CameraStage
+              engine={engine}
+              hint={CAMERA_HINTS[step]}
+              outline={cameraState.outline}
+              countdown={cameraState.countdown}
+              trackingStatus={cameraState.trackingStatus}
+              guidance={cameraState.guidance}
+              visible={cameraState.visible}
+            />
+
+            {cameraState.visible ? (
+              <DemonstrationVideo video={stepVideo} />
+            ) : null}
+          </div>
         )}
 
         {step === STEP.INTRO && (

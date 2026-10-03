@@ -22,6 +22,9 @@ import { useNavigate, Link } from "react-router-dom";
 
 import { getToken } from "../services/auth";
 import { fetchExerciseResults } from "../services/exerciseResults";
+import { fetchProgressSeries } from "../services/progress";
+import { toArray } from "../services/specialistData.js";
+import ProgressLineChart from "../progress/ProgressLineChart.jsx";
 import { fetchFoodLog } from "../services/foodLog";
 import { fetchLatestWorkflow, hasAnyPlan, runWorkflow } from "../services/workflow";
 import AppNavigation from "../components/AppNavigation.jsx";
@@ -79,6 +82,7 @@ function ProgressPage() {
   const [workflow, setWorkflow] = useState(null);
   const [foodEntries, setFoodEntries] = useState([]);
   const [exerciseResults, setExerciseResults] = useState([]);
+  const [series, setSeries] = useState(null);
   const [state, setState] = useState("loading");
   const [error, setError] = useState(null);
   const [reviewing, setReviewing] = useState(false);
@@ -100,12 +104,16 @@ function ProgressPage() {
       fetchLatestWorkflow(),
       fetchFoodLog({ limit: 50 }).catch(() => ({ entries: [] })),
       fetchExerciseResults({ limit: 50 }).catch(() => ({ results: [] })),
+      // The charts are a bonus on top of the counts: if this one call
+      // fails the page still renders what it already had.
+      fetchProgressSeries().catch(() => null),
     ])
-      .then(([latest, foodPage, exercisePage]) => {
+      .then(([latest, foodPage, exercisePage, progressSeries]) => {
         if (!ignore) {
           setWorkflow(latest);
           setFoodEntries(foodPage.entries || []);
           setExerciseResults(exercisePage.results || exercisePage.exercise_results || []);
+          setSeries(progressSeries);
           setState("ready");
         }
       })
@@ -228,6 +236,96 @@ function ProgressPage() {
                 </p>
               )}
             </section>
+
+            {/* ─────────── RECORDED PROGRESS, FROM STORED DATA ───────────
+                Every figure below comes from backend/routes/progress.py,
+                which reads stored exercise results, stored assessments
+                and stored plan versions. Each series carries its own
+                `plottable` flag; where it is false the chart states the
+                single recorded figure and says a trend needs more
+                sessions, rather than drawing a line through one point. */}
+            {series ? (
+              <>
+                <section className="progress-card">
+                  <h2 className="progress-card-title">Exercises completed over time</h2>
+
+                  <ProgressLineChart
+                    series={series.completions}
+                    title="Exercises completed per day"
+                    emptyNote="No completed exercises recorded yet."
+                  />
+
+                  {series.completions?.total_completions > 0 ? (
+                    <p className="progress-chart-note">
+                      {series.completions.total_completions} completion
+                      {series.completions.total_completions === 1 ? "" : "s"} recorded
+                      across {series.completions.point_count} day
+                      {series.completions.point_count === 1 ? "" : "s"}.
+                    </p>
+                  ) : null}
+                </section>
+
+                <section className="progress-card">
+                  <h2 className="progress-card-title">Movement measurements</h2>
+                  <p className="progress-card-lead">
+                    Taken from your recorded movement checks. A check you
+                    skipped contributes no point — it is missing, not a
+                    decline.
+                  </p>
+
+                  <div className="progress-chart-grid">
+                    {toArray(series.movementMetrics).map((metric) => (
+                      <ProgressLineChart
+                        key={metric.metric}
+                        series={metric}
+                        title={metric.label}
+                        unit={metric.unit}
+                        emptyNote="This check has not produced a usable measurement yet."
+                      />
+                    ))}
+                  </div>
+                </section>
+
+                {toArray(series.recentCompletions).length ? (
+                  <section className="progress-card">
+                    <h2 className="progress-card-title">Recently completed</h2>
+
+                    <ul className="progress-recent-list">
+                      {toArray(series.recentCompletions).map((entry, index) => (
+                        <li key={index} className="progress-recent-row">
+                          <span className="progress-recent-name">{entry.exerciseId}</span>
+                          <span className="progress-recent-meta">
+                            {(entry.completedAt || "").slice(0, 10)}
+                            {" · "}
+                            {entry.source === "manual_confirmation"
+                              ? "self-reported"
+                              : "measured"}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ) : null}
+
+                {toArray(series.planHistory).length ? (
+                  <section className="progress-card">
+                    <h2 className="progress-card-title">Plan adaptations</h2>
+
+                    <ul className="progress-plan-history">
+                      {toArray(series.planHistory).map((domain) => (
+                        <li key={domain.domain} className="progress-plan-domain">
+                          <strong>{domain.domain}</strong>
+                          <span className="progress-recent-meta">
+                            {domain.version_count} version
+                            {domain.version_count === 1 ? "" : "s"}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ) : null}
+              </>
+            ) : null}
 
             {planExists ? (
               <section className="progress-card">

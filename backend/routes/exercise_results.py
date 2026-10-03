@@ -24,6 +24,7 @@ from exercise_assessment.store import (
     MAX_HISTORY_LIMIT,
     ExerciseResultNotFoundError,
     count_exercise_results,
+    delete_manual_exercise_result,
     get_exercise_result,
     list_exercise_results,
     save_exercise_result,
@@ -148,3 +149,37 @@ def read_exercise_result(
         raise _database_error() from None
 
     return {"result": serialise_exercise_result(document)}
+
+
+@router.delete("/{result_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_exercise_result(
+    result_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Remove one manually confirmed result -- un-ticking "mark as completed".
+
+    Only a manual confirmation can be deleted, and only by the user who
+    recorded it. A camera session is a measurement that actually happened,
+    so this history stays append-only for those: a 404 here means either
+    no such row, or a row this endpoint is not allowed to touch, and the
+    caller cannot tell the two apart.
+    """
+
+    user_id = str(current_user["_id"])
+
+    try:
+        deleted = delete_manual_exercise_result(user_id, result_id)
+
+    except PyMongoError:
+        raise _database_error() from None
+
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                "No manually confirmed result with that id was found for this "
+                "account. Camera-recorded sessions cannot be deleted."
+            ),
+        )
+
+    return None

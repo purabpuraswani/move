@@ -51,6 +51,7 @@ from physio_agent.adaptation import (
     summarise,
 )
 from physio_agent.plan_schema import build_exercise_plan, build_exercise_plan_entry
+from physio_agent.shaping import activity_context, measured_evidence, plan_shape
 from physio_agent.tool_client import ExerciseToolClient
 
 AGENT_ID = "physio"
@@ -131,6 +132,49 @@ class PhysioAgentError(Exception):
     """Raised for a Physio Agent run that could not produce a result at all
     (as opposed to a run that completed with an empty plan, which is a
     valid, structured outcome — see run_physio_agent())."""
+
+
+# The three baseline checks, by the name a user would recognise. Used to
+# report, in the agent's own findings, which movements were actually
+# measured and which were not -- so "we could not read your balance
+# check" can never be read downstream as "your balance is poor".
+MOVEMENT_LABELS = {
+    "shoulder": "Hand / shoulder raise",
+    "ftsst": "Chair sit-to-stand x5",
+    "balance": "One-leg stand",
+}
+
+
+def _movement_evidence(physical_assessment) -> tuple:
+    """(assessed, not_assessed) movement lists from the stored session.
+
+    A test is `assessed` only when it completed with a usable result.
+    Everything else -- invalid, skipped, never started, or no session at
+    all -- is `not_assessed` and carries the reason the session itself
+    recorded. Neither list is a finding about the user's ability.
+    """
+
+    tests = ((physical_assessment or {}).get("tests")) or {}
+    assessed = []
+    not_assessed = []
+
+    for test_id, label in MOVEMENT_LABELS.items():
+        entry = tests.get(test_id) or {}
+        status = entry.get("status") or "not_started"
+
+        if status == "completed":
+            assessed.append({"movement": test_id, "label": label, "status": status})
+        else:
+            not_assessed.append(
+                {
+                    "movement": test_id,
+                    "label": label,
+                    "status": status,
+                    "reasons": entry.get("invalidReasons") or [],
+                }
+            )
+
+    return assessed, not_assessed
 
 
 def _required_capabilities(current_needs: dict) -> dict:
@@ -263,12 +307,17 @@ def _rationale_for(
         )
 
     reasons = "; ".join(
-f"{dimension_labels[t['dimension']]} is {t['level']}" for t in triggers
+        f"{dimension_labels[t['dimension']]} is {t['level']}" for t in triggers
     )
 
+    # The measurement itself, in the Need Assessment's own words, so the
+    # reason points at this user's evidence instead of a level alone.
+    measurement = measured_evidence(triggers)
+
     return (
-        f"Selected because {reasons or 'the current needs assessment flags this capability'}, "
-        f"and {exercise['name']} supports {capability.replace('_', ' ')} training "
+        f"Selected because {reasons or 'the current needs assessment flags this capability'}"
+        + (f" ({measurement})" if measurement else "")
+        + f", and {exercise['name']} supports {capability.replace('_', ' ')} training "
         f"at the {exercise['difficulty']} level."
     )
 
@@ -618,11 +667,26 @@ def run_physio_agent(
     max_difficulty = DEFAULT_MAX_DIFFICULTY
     max_exercises = MAX_EXERCISES_PER_PLAN
 
+    # What this user's own answers say about the starting point. Absent
+    # answers produce no context and change nothing.
+    context = activity_context(payload.get("relevant_lifestyle_constraints"))
+    shape = None
+
     if not triggers_by_capability and conservative_starter_applies(current_needs):
         triggers_by_capability = _starter_capabilities(current_needs)
         selection_mode = SELECTION_MODE_CONSERVATIVE_STARTER
         max_difficulty = STARTER_MAX_DIFFICULTY
         max_exercises = STARTER_MAX_EXERCISES
+
+    if triggers_by_capability and selection_mode == SELECTION_MODE_NEED_BASED:
+        # Severity decides order and share of the plan; activity evidence
+        # decides its size. Neither invents a need or raises a difficulty.
+        shape = plan_shape(triggers_by_capability, context)
+        max_exercises = min(max_exercises, shape["max_exercises"])
+        triggers_by_capability = {
+            capability: triggers_by_capability[capability]
+            for capability in shape["ordered_capabilities"]
+        }
 
     if not triggers_by_capability:
         # Reachable in a direct unit test of the agent; the Orchestrator's
@@ -722,7 +786,13 @@ def run_physio_agent(
             if len(plan_entries) >= max_exercises:
                 break
 
-            if taken_for_capability >= MAX_EXERCISES_PER_CAPABILITY:
+            capability_cap = (
+                shape["slots"].get(capability, MAX_EXERCISES_PER_CAPABILITY)
+                if shape
+                else MAX_EXERCISES_PER_CAPABILITY
+            )
+
+            if taken_for_capability >= capability_cap:
                 break
 
             if exercise["exercise_id"] in chosen_ids:
@@ -833,8 +903,18 @@ def run_physio_agent(
     # if it doesn't recognise them — this is domain content, not metadata.
     summary = evidence_summary(current_needs)
 
+    assessed_movements, not_assessed_movements = _movement_evidence(
+        payload.get("physical_assessment")
+    )
+
     findings = {
         "need_levels": need_levels,
+        # What was actually measured, and what was not. Kept as two
+        # separate lists rather than one annotated list so no consumer can
+        # collapse them: an unmeasured movement is an absence of evidence,
+        # never evidence of a limitation.
+        "assessed_movements": assessed_movements,
+        "not_assessed_movements": not_assessed_movements,
         # Which pathway built this plan, and what the evidence looked like
         # when it did. This is what lets a caller (and the Movement screen)
         # explain the programme without re-deriving the reasoning — and what
@@ -842,6 +922,21 @@ def run_physio_agent(
         # "we could not measure this" all the way to the user.
         "selection_mode": selection_mode,
         "capabilities_targeted": sorted(triggers_by_capability),
+        # How this plan was shaped for this user: the order severity put
+        # the capabilities in, the size their activity answers justified,
+        # and the evidence behind that size.
+        "plan_shaping": (
+            {
+                "ordered_capabilities": shape["ordered_capabilities"],
+                "slots": shape["slots"],
+                "max_exercises": shape["max_exercises"],
+                "low_activity": shape["low_activity"],
+                "notes": shape["notes"],
+                "activity_evidence": context["evidence"],
+            }
+            if shape
+            else None
+        ),
         "unassessed_dimensions": list(summary["unassessed"]),
         # Every decision this cycle, including the REMOVEs that by
         # definition have no plan entry. This is what the plan-version

@@ -22,8 +22,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import CameraStage from "../assessment/components/CameraStage.jsx";
+import RawCameraView from "../assessment/components/RawCameraView.jsx";
 import { usePoseEngine } from "../assessment/hooks/usePoseEngine.js";
 import { EXERCISE_ENGINE_CONFIG, ENGINE_TYPES } from "../exerciseAssessment/config.js";
+import {
+  SIGNAL_ORIENTATION,
+  STABILITY_DELTA,
+  calculatePoseDelta,
+  evaluatePreflightChecklist,
+} from "../exerciseAssessment/preflight.js";
 import {
   createExerciseAssessmentEngine,
   ExerciseNotSupportedError,
@@ -34,7 +41,8 @@ import {
 } from "../exerciseAssessment/signals.js";
 import { HOLD_STATE } from "../exerciseAssessment/holdDurationEngine.js";
 import { REP_STATE } from "../assessment/utils/peaks.js";
-import { shoulderTorsoRatio } from "../assessment/utils/geometry.js";
+import { getExerciseImage } from "../movementDemos/exerciseImages.js";
+import { getExerciseVideo } from "../movementDemos/exerciseVideos.js";
 import { getMovementDemo } from "../movementDemos/registry.js";
 import MovementDemo from "../movementDemos/MovementDemo.jsx";
 import { getToken } from "../services/auth";
@@ -48,28 +56,6 @@ const STEP = {
   PREFLIGHT: "preflight",
   RUNNING: "running",
   DONE: "done",
-};
-
-const SIGNAL_ORIENTATION = {
-  kneeExtensionAngleDeg: "side",
-  kneeFlexionAngleDeg: "side",
-  hipFlexionAngleDeg: "front",
-  hipAbductionAngleDeg: "front",
-  hipExtensionAngleDeg: "side",
-  elbowFlexionAngleDeg: "side",
-  armElevationAngleDeg: "front",
-  liftedFootHeightRatio: "front",
-};
-
-const SIGNAL_BODY_SCOPE = {
-  elbowFlexionAngleDeg: "upper",
-  armElevationAngleDeg: "upper",
-  kneeExtensionAngleDeg: "full",
-  kneeFlexionAngleDeg: "full",
-  hipFlexionAngleDeg: "full",
-  hipAbductionAngleDeg: "full",
-  hipExtensionAngleDeg: "full",
-  liftedFootHeightRatio: "full",
 };
 
 const VIEW_GUIDANCE = {
@@ -117,143 +103,18 @@ function getCoachFeedback(outcome) {
 }
 
 const STABLE_FRAMES_TARGET = 15;
-const PREFLIGHT_CONFIDENCE = 0.55;
 
-function evaluatePreflightChecklist(frame, config) {
-  if (!frame?.keypoints || !config) {
-    return {
-      ready: false,
-      guidance: "Position yourself in front of the camera.",
-      checklist: { visible: false, orientation: false, margins: false, stable: false },
-    };
-  }
-
-  const signal = config.signal;
-  const orientationReq = SIGNAL_ORIENTATION[signal] || "front";
-  const scope = SIGNAL_BODY_SCOPE[signal] || "full";
-  const kp = frame.keypoints;
-
-  // 1. Joints visibility
-  const armJointsLeft = ["left_shoulder", "left_elbow", "left_wrist"];
-  const armJointsRight = ["right_shoulder", "right_elbow", "right_wrist"];
-  const legJointsLeft = ["left_hip", "left_knee", "left_ankle"];
-  const legJointsRight = ["right_hip", "right_knee", "right_ankle"];
-
-  if (scope === "upper") {
-    const hasLeftArm = armJointsLeft.every((j) => (kp[j]?.score ?? 0) >= PREFLIGHT_CONFIDENCE);
-    const hasRightArm = armJointsRight.every((j) => (kp[j]?.score ?? 0) >= PREFLIGHT_CONFIDENCE);
-    const hasShoulders = (kp.left_shoulder?.score ?? 0) >= PREFLIGHT_CONFIDENCE &&
-                         (kp.right_shoulder?.score ?? 0) >= PREFLIGHT_CONFIDENCE;
-    const isVisible = hasShoulders && (hasLeftArm || hasRightArm);
-    if (!isVisible) {
-      return {
-        ready: false,
-        guidance: "Ensure your upper body and arms are clearly in view.",
-        checklist: { visible: false, orientation: false, margins: false, stable: false },
-      };
-    }
-  } else {
-    const hasShoulder = (kp.left_shoulder?.score ?? 0) >= PREFLIGHT_CONFIDENCE ||
-                        (kp.right_shoulder?.score ?? 0) >= PREFLIGHT_CONFIDENCE;
-    const hasHips = (kp.left_hip?.score ?? 0) >= PREFLIGHT_CONFIDENCE ||
-                    (kp.right_hip?.score ?? 0) >= PREFLIGHT_CONFIDENCE;
-    const hasLeftLeg = legJointsLeft.every((j) => (kp[j]?.score ?? 0) >= PREFLIGHT_CONFIDENCE);
-    const hasRightLeg = legJointsRight.every((j) => (kp[j]?.score ?? 0) >= PREFLIGHT_CONFIDENCE);
-    const isVisible = hasShoulder && hasHips && (hasLeftLeg || hasRightLeg);
-    if (!isVisible) {
-      return {
-        ready: false,
-        guidance: "Step back so your full body (head to feet) is in view.",
-        checklist: { visible: false, orientation: false, margins: false, stable: false },
-      };
-    }
-  }
-
-  // 2. Margin checks (clipping check)
-  const leftAnkle = kp.left_ankle;
-  const rightAnkle = kp.right_ankle;
-  const leftShoulder = kp.left_shoulder;
-  const rightShoulder = kp.right_shoulder;
-
-  if (scope === "full") {
-    const maxAnkleY = Math.max(
-      leftAnkle?.score >= PREFLIGHT_CONFIDENCE ? leftAnkle.y : 0,
-      rightAnkle?.score >= PREFLIGHT_CONFIDENCE ? rightAnkle.y : 0
-    );
-    if (maxAnkleY > 0.95) {
-      return {
-        ready: false,
-        guidance: "Step back to fit whole body into frame.",
-        checklist: { visible: true, orientation: false, margins: false, stable: false },
-      };
-    }
-  }
-
-  const minShoulderY = Math.min(
-    leftShoulder?.score >= PREFLIGHT_CONFIDENCE ? leftShoulder.y : 1,
-    rightShoulder?.score >= PREFLIGHT_CONFIDENCE ? rightShoulder.y : 1
+function SessionPanel({ title, children, footer = null, className = "", bodyClassName = "" }) {
+  return (
+    <section className={`exercise-panel ${className}`}>
+      <h2 className="exercise-panel-title">{title}</h2>
+      {/* The body may be a fixed-ratio media box with overflow hidden, so
+          anything that must stay readable (a caption) goes in the footer
+          beneath it rather than inside it. */}
+      <div className={`exercise-panel-body ${bodyClassName}`}>{children}</div>
+      {footer}
+    </section>
   );
-  if (minShoulderY < 0.05) {
-    return {
-      ready: false,
-      guidance: "Adjust camera tilt so your shoulders are within frame.",
-      checklist: { visible: true, orientation: false, margins: false, stable: false },
-    };
-  }
-
-  // 3. Orientation check (shoulder-to-torso ratio)
-  let orientationOk = true;
-  let orientationMsg = null;
-  const hasTorso = (kp.left_shoulder?.score ?? 0) >= 0.35 &&
-                   (kp.right_shoulder?.score ?? 0) >= 0.35 &&
-                   (kp.left_hip?.score ?? 0) >= 0.35 &&
-                   (kp.right_hip?.score ?? 0) >= 0.35;
-
-  if (hasTorso) {
-    const ratio = shoulderTorsoRatio(
-      kp.left_shoulder,
-      kp.right_shoulder,
-      kp.left_hip,
-      kp.right_hip
-    );
-
-    if (ratio !== null) {
-      if (orientationReq === "side" && ratio > 0.42) {
-        orientationOk = false;
-        orientationMsg = "Turn side-on to the camera.";
-      } else if (orientationReq === "front" && ratio < 0.36) {
-        orientationOk = false;
-        orientationMsg = "Turn to face the camera directly.";
-      }
-    }
-  }
-
-  if (!orientationOk) {
-    return {
-      ready: false,
-      guidance: orientationMsg,
-      checklist: { visible: true, orientation: false, margins: true, stable: false },
-    };
-  }
-
-  return {
-    ready: true,
-    guidance: "Hold steady...",
-    checklist: { visible: true, orientation: true, margins: true, stable: false },
-  };
-}
-
-function calculatePoseDelta(prevKp, currKp) {
-  const joints = ["left_shoulder", "right_shoulder", "left_hip", "right_hip"];
-  let totalDelta = 0;
-  let count = 0;
-  joints.forEach((j) => {
-    if (prevKp[j] && currKp[j]) {
-      totalDelta += Math.hypot(currKp[j].x - prevKp[j].x, currKp[j].y - prevKp[j].y);
-      count += 1;
-    }
-  });
-  return count > 0 ? totalDelta / count : 1;
 }
 
 function ExercisePage() {
@@ -324,6 +185,15 @@ function ExercisePage() {
   const prevKeypointsRef = useRef(null);
 
   const config = EXERCISE_ENGINE_CONFIG[exerciseId];
+  // The instructional diagram for this exercise, where one exists. Same
+  // source as the plan card (movementDemos/exerciseImages.js), so both
+  // screens show the same picture for the same exercise id.
+  const exerciseImage = getExerciseImage(exerciseId);
+  // An instructor recording exists only for the three baseline
+  // movements; every other exercise falls back to the animated
+  // demonstration rather than showing a video of a different movement.
+  const instructorVideo = getExerciseVideo(exerciseId);
+
   const demo = useMemo(() => {
     try {
       return getMovementDemo(`exercise-${exerciseId}`);
@@ -441,7 +311,11 @@ function ExercisePage() {
     if (step !== STEP.PREFLIGHT || !config) return undefined;
 
     return pose.subscribe((frame) => {
-      const evaluation = evaluatePreflightChecklist(frame, config);
+      // The frame's own pixel size. The framing checks are fractions of
+      // it, so without this they were comparing pixels against 0.95 and
+      // could never pass -- which is what kept Begin recording disabled.
+      const videoSize = pose.getVideoSize();
+      const evaluation = evaluatePreflightChecklist(frame, config, videoSize);
 
       if (!evaluation.ready) {
         stableFramesRef.current = 0;
@@ -459,11 +333,11 @@ function ExercisePage() {
       const prev = prevKeypointsRef.current;
       let delta = 0;
       if (prev) {
-        delta = calculatePoseDelta(prev, frame.keypoints);
+        delta = calculatePoseDelta(prev, frame.keypoints, videoSize);
       }
       prevKeypointsRef.current = frame.keypoints;
 
-      if (delta < 0.04) {
+      if (delta < STABILITY_DELTA) {
         stableFramesRef.current += 1;
       } else {
         stableFramesRef.current = Math.max(0, stableFramesRef.current - 2);
@@ -657,7 +531,15 @@ function ExercisePage() {
 
         {step === STEP.BRIEF ? (
           <>
-            {demo ? <MovementDemo demo={demo} /> : null}
+            {exerciseImage ? (
+              <img
+                className="exercise-demo-image"
+                src={exerciseImage.src}
+                alt={exerciseImage.alt}
+              />
+            ) : demo ? (
+              <MovementDemo demo={demo} />
+            ) : null}
 
             {unsupported ? (
               <div className="exercise-note">
@@ -701,9 +583,61 @@ function ExercisePage() {
         ) : null}
 
         {step === STEP.PREFLIGHT ? (
-          <>
-            <CameraStage engine={pose} hint={viewHint} />
+          <div className="exercise-session">
+            <div className="exercise-video-row">
+            <SessionPanel
+              title="Exercise video"
+              bodyClassName="exercise-panel-body--media"
+              footer={
+                instructorVideo ? (
+                  <p className="exercise-panel-caption">{instructorVideo.caption}</p>
+                ) : null
+              }
+            >
+              {instructorVideo ? (
+                <video
+                  className="exercise-panel-video"
+                  src={instructorVideo.src}
+                  controls
+                  loop
+                  muted
+                  playsInline
+                  preload="metadata"
+                />
+              ) : exerciseImage ? (
+                <img className="exercise-panel-image" src={exerciseImage.src} alt={exerciseImage.alt} />
+              ) : (
+                <p className="exercise-panel-empty">
+                  No recorded demonstration for this exercise yet.
+                </p>
+              )}
+            </SessionPanel>
 
+            <SessionPanel title="User (raw)" bodyClassName="exercise-panel-body--media">
+              <RawCameraView engine={pose} label="Your live camera, without pose markers" />
+            </SessionPanel>
+
+            <SessionPanel title="User (markers)" bodyClassName="exercise-panel-body--media">
+              <CameraStage engine={pose} hint={viewHint} />
+            </SessionPanel>
+            </div>
+
+            <div className="exercise-support-row">
+              <aside className="exercise-reference">
+                <h3 className="exercise-reference-title">Reference</h3>
+                {exerciseImage ? (
+                  <img
+                    className="exercise-reference-image"
+                    src={exerciseImage.src}
+                    alt={exerciseImage.alt}
+                  />
+                ) : (
+                  <p className="exercise-panel-empty">No reference image for this exercise.</p>
+                )}
+              </aside>
+
+              <section className="exercise-support-panel">
+                <h3 className="exercise-reference-title">Position check</h3>
             <div className="exercise-setup">
               <h2 className="exercise-setup-title">Camera preflight check</h2>
 
@@ -743,36 +677,95 @@ function ExercisePage() {
                   style={{ width: `${preflightState.stabilityProgress}%` }}
                 />
               </div>
-
-              <div className="exercise-actions">
-                <button
-                  type="button"
-                  className="exercise-start"
-                  onClick={start}
-                  disabled={!preflightReady}
-                >
-                  Begin recording
-                </button>
-                <button
-                  type="button"
-                  className="exercise-start exercise-start--quiet"
-                  onClick={() => {
-                    pose.stopLoop();
-                    pose.release();
-                    setStep(STEP.BRIEF);
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
             </div>
-          </>
+              </section>
+            </div>
+
+            <div className="exercise-controls-bar">
+              <button
+                type="button"
+                className="exercise-start"
+                onClick={start}
+                disabled={!preflightReady}
+              >
+                Begin recording
+              </button>
+              <button
+                type="button"
+                className="exercise-start exercise-start--quiet"
+                onClick={() => {
+                  pose.stopLoop();
+                  pose.release();
+                  setStep(STEP.BRIEF);
+                }}
+              >
+                Cancel
+              </button>
+              <p className="exercise-controls-note">
+                {preflightReady
+                  ? "All checks passed — recording can start."
+                  : preflightState.guidance}
+              </p>
+            </div>
+          </div>
         ) : null}
 
         {step === STEP.RUNNING ? (
-          <>
-            <CameraStage engine={pose} hint={viewHint} />
+          <div className="exercise-session">
+            <div className="exercise-video-row">
+            <SessionPanel
+              title="Exercise video"
+              bodyClassName="exercise-panel-body--media"
+              footer={
+                instructorVideo ? (
+                  <p className="exercise-panel-caption">{instructorVideo.caption}</p>
+                ) : null
+              }
+            >
+              {instructorVideo ? (
+                <video
+                  className="exercise-panel-video"
+                  src={instructorVideo.src}
+                  controls
+                  loop
+                  muted
+                  playsInline
+                  preload="metadata"
+                />
+              ) : exerciseImage ? (
+                <img className="exercise-panel-image" src={exerciseImage.src} alt={exerciseImage.alt} />
+              ) : (
+                <p className="exercise-panel-empty">
+                  No recorded demonstration for this exercise yet.
+                </p>
+              )}
+            </SessionPanel>
 
+            <SessionPanel title="User (raw)" bodyClassName="exercise-panel-body--media">
+              <RawCameraView engine={pose} label="Your live camera, without pose markers" />
+            </SessionPanel>
+
+            <SessionPanel title="User (markers)" bodyClassName="exercise-panel-body--media">
+              <CameraStage engine={pose} hint={viewHint} />
+            </SessionPanel>
+            </div>
+
+            <div className="exercise-support-row">
+              <aside className="exercise-reference">
+                <h3 className="exercise-reference-title">Reference</h3>
+                {exerciseImage ? (
+                  <img
+                    className="exercise-reference-image"
+                    src={exerciseImage.src}
+                    alt={exerciseImage.alt}
+                  />
+                ) : (
+                  <p className="exercise-panel-empty">No reference image for this exercise.</p>
+                )}
+              </aside>
+
+              <section className="exercise-support-panel">
+                <h3 className="exercise-reference-title">Recording</h3>
             <div className="exercise-live">
               {config.engineType === ENGINE_TYPES.REP_COUNTING ? (
                 <div className="exercise-metric">
@@ -813,11 +806,22 @@ function ExercisePage() {
                 </div>
               ) : null}
             </div>
+              </section>
+            </div>
 
-            <button type="button" className="exercise-start" onClick={finish}>
-              I have finished
-            </button>
-          </>
+            <div className="exercise-controls-bar">
+              <span className="exercise-recording-pill" role="status">
+                <span className="exercise-recording-dot" aria-hidden="true" />
+                Recording…
+              </span>
+              <button type="button" className="exercise-start" onClick={finish}>
+                Stop · I have finished
+              </button>
+              <p className="exercise-controls-note">
+                Your camera stays on this device. Only the counts and timings are saved.
+              </p>
+            </div>
+          </div>
         ) : null}
 
         {step === STEP.DONE && outcome ? (

@@ -39,6 +39,8 @@ from nutrition_agent.adaptation import (
     decide_for_goal,
     summarise,
 )
+from nutrition_agent.evidence import build_nutrition_evidence_view
+from nutrition_agent.report_relevance import report_nutrition_evidence
 from nutrition_agent.input_contract import build_nutrition_agent_input
 from nutrition_agent.plan_schema import build_nutrition_goal_entry, build_nutrition_plan
 from nutrition_agent.tool_client import NutritionToolClient
@@ -192,6 +194,77 @@ def run_nutrition_agent(
     nutrition_need = (
         (current_needs or {}).get("nutrition_need") if current_needs else None
     )
+
+    # A confirmed medical report can make this domain relevant on its own,
+    # with the dietary questions never answered (see
+    # orchestrator/decision.py's second activation route). What it cannot
+    # do is tell us WHICH dietary change to prescribe: that still comes
+    # from the questionnaire. So this path contributes what the evidence
+    # actually supports -- the report context, a prompt to complete the
+    # questions, and a referral of the figures to a clinician -- and never
+    # a meal plan derived from a lab value.
+    report_context = report_nutrition_evidence(
+        (payload.get("confirmed_medical_context") or {}).get("reports")
+    )
+
+    if (
+        nutrition_need is None or nutrition_need.get("level") not in TRIGGERING_LEVELS
+    ) and report_context["relevant"]:
+        return build_agent_result(
+            agent=AGENT_ID,
+            status="completed",
+            workflow_id=trace.workflow_id,
+            request_id=trace.request_id,
+            agent_run_id=trace.agent_run_id,
+            priority="medium",
+            findings={
+                "mode": "report_context_only",
+                "reason": (
+                    "A confirmed medical report records nutrition-relevant "
+                    "measurements, but the dietary questions have not been "
+                    "answered, so no specific dietary change can be targeted "
+                    "yet."
+                ),
+                "report_evidence": report_context["evidence"],
+                "missing_information": [
+                    "Meal pattern, fruit/vegetable servings, water intake and "
+                    "processed-food frequency have not been answered."
+                ],
+            },
+            recommendations=[
+                {
+                    "id": "discuss_report_values_with_clinician",
+                    "title": "Discuss these results with your clinician",
+                    "action": (
+                        "Take your confirmed report to your doctor or a "
+                        "registered dietitian and ask what, if anything, it "
+                        "means for your diet."
+                    ),
+                    # Quotes the report and stops. MoveWell does not read a
+                    # value as high, low, or indicative of a condition.
+                    "why": (
+                        "Your confirmed report contains measurements that are "
+                        "usually relevant to diet. MoveWell records what the "
+                        "report says but does not interpret the figures."
+                    ),
+                },
+                {
+                    "id": "complete_nutrition_questions",
+                    "title": "Answer the nutrition questions",
+                    "action": (
+                        "Complete the four dietary questions in your profile: "
+                        "meal pattern, fruit and vegetable servings, water "
+                        "intake, and how often you eat processed food."
+                    ),
+                    "why": (
+                        "Without them there is no evidence of what your diet "
+                        "actually looks like, so no specific dietary support "
+                        "can be tailored to you."
+                    ),
+                },
+            ],
+            requires_reassessment=False,
+        )
 
     if nutrition_need is None or nutrition_need.get("level") not in TRIGGERING_LEVELS:
         # Reachable in a direct unit test of the agent; the Orchestrator's
@@ -429,8 +502,20 @@ def run_nutrition_agent(
         nutrition_goals=goal_entries,
     )
 
+    evidence_view = build_nutrition_evidence_view(
+        user_state, food_log_entries=food_log_entries
+    )
+
     findings = {
         "nutrition_need_level": nutrition_need["level"],
+        # What this domain could and could not establish, from the same
+        # function the specialist card reads. With nothing answered this
+        # is INSUFFICIENT_EVIDENCE plus the specific questions that are
+        # missing -- never generic dietary advice.
+        "evidence_status": evidence_view["status"],
+        "missing_information": evidence_view["missing_information"],
+        "evidence_used": evidence_view["evidence_used"],
+        "confidence": evidence_view["confidence"],
         "triggered_signals": triggered_signals,
         # Every decision this cycle, including the REMOVEs that by
         # definition have no goal entry, and what each one was decided from.

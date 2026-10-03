@@ -13,11 +13,329 @@
 }
 
 .exercise-main {
-  max-width: 720px;
+  /* The exercise workspace sits on the same content grid as every other
+     page, so its edges line up with the plan it was opened from. */
+  width: 100%;
+
+  max-width: var(--content-max);
 
   margin: 0 auto;
 
-  padding: 28px 24px 90px;
+  padding: 28px var(--content-gutter) 90px;
+}
+
+/* ---------- exercise session workspace -----------------------------------
+ *
+ * Six regions in a 3 x 2 grid: demonstration, raw camera and pose camera on
+ * the top row; reference image, position/recording status and the session
+ * controls on the bottom row.
+ *
+ * The camera used to be the only thing in this column and it was positioned
+ * sticky (a rule that belongs to the assessment page's two-column layout),
+ * which lifted it out of the flow and parked it over the instructions. Each
+ * region is now a plain grid cell with min-width: 0, so nothing overlaps and
+ * nothing can force the page sideways.
+ */
+
+.exercise-session {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+/* The three primary boxes: exercise video, raw camera, keypoint camera.
+   Equal columns on desktop, so the row reads as one workspace rather than
+   three unrelated cards. Everything else lives below them. */
+.exercise-video-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+/* Reference image and readiness text, below the cameras. The reference is
+   deliberately the narrow column: it is a thumbnail to glance at, not a
+   fourth camera-sized card. */
+.exercise-support-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.exercise-reference,
+.exercise-support-panel {
+  min-width: 0;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.exercise-reference-title {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Compact on purpose, and contained: the whole diagram stays visible. */
+.exercise-reference-image {
+  display: block;
+  width: 100%;
+  max-height: 190px;
+  object-fit: contain;
+  background: #ffffff;
+  border-radius: var(--radius-sm);
+}
+
+/* A control strip, not a panel. */
+.exercise-controls-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.exercise-controls-bar .exercise-start {
+  margin: 0;
+  width: auto;
+}
+
+.exercise-controls-bar .exercise-controls-note {
+  flex: 1 1 220px;
+  min-width: 0;
+  text-align: right;
+}
+
+.exercise-panel {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.exercise-panel-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.exercise-panel-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Media panels keep their content inside a fixed-ratio box, so the three
+   cards on the top row line up and the camera cannot grow past its cell. */
+.exercise-panel-body--media {
+  aspect-ratio: 4 / 3;
+  min-height: 0;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: #0f1512;
+}
+
+.exercise-panel-body--media > * {
+  width: 100%;
+  min-width: 0;
+}
+
+/* The pose camera brings its own frame styling from the assessment page;
+   inside a panel it fills the cell instead of its own 580px column. */
+.exercise-panel-body--media .assess-camera,
+.exercise-panel-body--media .assess-camera__frame {
+  max-width: 100%;
+  max-height: 100%;
+  height: 100%;
+  margin: 0;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+/* The instructor recording. contain, so a portrait clip is letterboxed
+   inside the panel rather than cropped to fill it. */
+.exercise-panel-video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #0f1512;
+}
+
+/* The caption sits outside the fixed-ratio media box so it cannot cover
+   the video. */
+.exercise-panel-caption {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+/* The whole diagram, never cropped or stretched. */
+.exercise-panel-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #ffffff;
+  border-radius: var(--radius-sm);
+}
+
+.exercise-panel-empty {
+  margin: 0;
+  padding: 16px;
+  color: #cbd5d1;
+  font-size: 14px;
+  text-align: center;
+}
+
+/* The status and control panels reuse the existing blocks unchanged; the
+   panel only supplies the frame around them. */
+.exercise-support-panel .exercise-setup,
+.exercise-support-panel .exercise-live {
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: none;
+}
+
+.exercise-actions--stacked {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.exercise-actions--stacked .exercise-start {
+  width: 100%;
+}
+
+.exercise-controls-note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.exercise-recording-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--green-light);
+  color: var(--green);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.exercise-recording-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--danger);
+  animation: exercise-recording-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes exercise-recording-pulse {
+  50% { opacity: 0.25; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .exercise-recording-dot {
+    animation: none;
+  }
+}
+
+/* Raw camera: the second view of the same stream. */
+.raw-camera {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #0f1512;
+}
+
+.raw-camera__video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+.raw-camera__cover {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 20px;
+  background: rgba(16, 23, 19, 0.92);
+  color: #e8efe9;
+  font-size: 14px;
+  text-align: center;
+}
+
+.raw-camera__spinner {
+  width: 26px;
+  height: 26px;
+  border: 3px solid rgba(232, 239, 233, 0.25);
+  border-top-color: #e8efe9;
+  border-radius: 50%;
+  animation: raw-camera-spin 0.9s linear infinite;
+}
+
+@keyframes raw-camera-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .raw-camera__spinner {
+    animation-duration: 3s;
+  }
+}
+
+/* Tablet: the two camera views sit side by side under the video, and the
+   reference and readiness share a row. */
+@media (min-width: 760px) {
+  .exercise-video-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .exercise-support-row {
+    grid-template-columns: minmax(0, 260px) minmax(0, 1fr);
+  }
+}
+
+/* Desktop: the three primary boxes in one equal row. */
+@media (min-width: 1100px) {
+  .exercise-video-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .exercise-support-row {
+    grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
+  }
 }
 
 .exercise-back {
@@ -401,4 +719,18 @@
   font-size: 13px;
   line-height: 1.45;
   color: #1e3a8a;
+}
+
+
+/* Instructional exercise diagram on the brief step. Shown whole: contained,
+   never cropped or stretched, and never recoloured. */
+.exercise-demo-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 460px;
+  object-fit: contain;
+  margin: 0 auto 20px;
+  border-radius: 10px;
+  background: #ffffff;
 }

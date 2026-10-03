@@ -41,6 +41,7 @@ from behaviour_agent.adaptation import (
     decide_for_goal,
     summarise,
 )
+from behaviour_agent.barriers import behaviour_interventions, identify_barriers
 from behaviour_agent.adherence import summarise_for_progress
 from behaviour_agent.input_contract import build_behaviour_agent_input
 from behaviour_agent.plan_schema import build_habit_goal_entry, build_habit_plan
@@ -280,6 +281,10 @@ def run_behaviour_agent(
         )
 
     goal_entries = []
+    # topic_id -> the library record behind it, for barriers.py. Kept
+    # as the goals are selected rather than re-fetched afterwards: a
+    # second lookup could disagree with what was actually chosen.
+    selected_topic_records = {}
     decisions = []
     tool_call_failed = None
     mcp_session_id = None
@@ -388,6 +393,7 @@ def run_behaviour_agent(
             if target_signal:
                 covered_signals.add(target_signal)
 
+            selected_topic_records[topic["topic_id"]] = topic
             goal_entries.append(
                 build_habit_goal_entry(
                     topic_id=topic["topic_id"],
@@ -429,6 +435,7 @@ def run_behaviour_agent(
 
         topic = topics[0]
 
+        selected_topic_records[topic["topic_id"]] = topic
         goal_entries.append(
             build_habit_goal_entry(
                 topic_id=topic["topic_id"],
@@ -479,6 +486,16 @@ def run_behaviour_agent(
         habit_goals=goal_entries,
     )
 
+    behaviour_adherence = summarise_for_progress(behaviour_actions)
+    # Library barriers are read only for the topics this plan actually
+    # selected, so a barrier never appears for a goal the user does not have.
+    selected_topics = [
+        selected_topic_records[entry["topic_id"]]
+        for entry in goal_entries
+        if entry["topic_id"] in selected_topic_records
+    ]
+    barriers = identify_barriers(behaviour_adherence, selected_topics)
+
     findings = {
         "behaviour_need_level": behaviour_need["level"],
         "triggered_signals": triggered_signals,
@@ -487,7 +504,16 @@ def run_behaviour_agent(
         # What the recorded actions add up to across every goal. Computed
         # by behaviour_agent/adherence.py, which returns NOT_LOGGED or
         # INSUFFICIENT_DATA rather than a rate when there is not enough.
-        "behaviour_adherence": summarise_for_progress(behaviour_actions),
+        "behaviour_adherence": behaviour_adherence,
+        # This specialist's own lever: what is getting in the way, and the
+        # change to the plan's shape that addresses it. Never an exercise
+        # and never a dose -- those belong to Physio and to Exercise &
+        # Physical Activity, and repeating them here would be this agent
+        # doing another agent's job.
+        "barriers": barriers,
+        "behaviour_interventions": behaviour_interventions(
+            behaviour_adherence, barriers, len(goal_entries)
+        ),
         "adaptation_summary": (
             summarise(decisions) if previous_plan is not None else None
         ),

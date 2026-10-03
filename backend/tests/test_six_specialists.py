@@ -80,7 +80,11 @@ class TestSixSpecialistsSystem(unittest.TestCase):
         decision = decide_recovery_required(user_state)
         self.assertTrue(decision["recovery_required"])
         self.assertTrue(decision["evaluated"])
-        self.assertIn("recommended 7-9 hours", decision["reason"])
+        # The reason names this project's own marker. It deliberately no
+        # longer states a sleep duration as a physiological requirement:
+        # that claim had no source in this codebase.
+        self.assertIn("6-hour marker", decision["reason"])
+        self.assertNotIn("recommended 7-9 hours", decision["reason"])
 
     def test_recovery_decision_good_sleep(self):
         user_state = {

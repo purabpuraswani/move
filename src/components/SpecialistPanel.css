@@ -653,9 +653,14 @@
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
+  /* One column until there is genuinely room for two. On the wider
+     content grid a single column left each card stretched across the
+     page with empty space beside it; auto-fill keeps the card styling
+     untouched and simply lets them sit side by side when they fit. */
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr));
   gap: 1.125rem;
+  align-items: start;
 }
 
 .specialist-exercise-card {
@@ -876,10 +881,81 @@
   border-radius: 10px;
 }
 
+/* The instructional diagram. object-fit: contain and an auto height keep
+   the whole two-panel figure visible at any card width -- it is never
+   cropped, stretched, filtered or recoloured. */
+.specialist-demo-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 420px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+/* The checkbox sits on the same row as Start exercise, and wraps onto its
+   own line before either control gets squeezed. */
 .specialist-exercise-cta-row {
   margin-top: 1rem;
   display: flex;
-  justify-content: flex-end;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.specialist-complete-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.specialist-complete-checkbox {
+  width: 1.125rem;
+  height: 1.125rem;
+  accent-color: var(--green, #10b981);
+  cursor: pointer;
+  flex-shrink: 0;
+  margin: 0;
+}
+
+.specialist-complete-checkbox:disabled {
+  cursor: not-allowed;
+}
+
+.specialist-complete-label {
+  font-size: 0.875rem;
+  color: #475569;
+  cursor: pointer;
+  user-select: none;
+}
+
+.specialist-complete-checkbox:disabled + .specialist-complete-label {
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.specialist-complete-checkbox:focus-visible {
+  outline: 2px solid var(--green, #10b981);
+  outline-offset: 2px;
+}
+
+.specialist-complete-error {
+  margin: 0.5rem 0 0;
+  font-size: 0.8125rem;
+  color: #b91c1c;
+}
+
+@media (max-width: 480px) {
+  .specialist-exercise-cta-row {
+    justify-content: flex-start;
+  }
+
+  .specialist-exercise-cta-row .specialist-start-btn {
+    width: 100%;
+  }
 }
 
 .specialist-start-btn {

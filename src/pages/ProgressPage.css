@@ -13,7 +13,7 @@
 }
 
 .progress-main {
-  max-width: 780px;
+  max-width: var(--content-max);
 
   margin: 0 auto;
 
@@ -266,4 +266,148 @@
   padding: 3px 0;
 
   font-size: 15px;
+}
+
+/* ───────────────────────── Progress charts ─────────────────────────
+   Uses the existing surface/border/text tokens so these sections sit
+   in the same design language as the cards above. The SVG scales with
+   its container rather than a measured width, which is what keeps it
+   readable from phone to desktop. */
+
+.progress-card-lead {
+  margin: -4px 0 14px;
+
+  font-size: 13.5px;
+  line-height: 1.5;
+
+  color: var(--text-muted, #64748b);
+}
+
+.progress-chart-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 18px;
+}
+
+@media (min-width: 860px) {
+  .progress-chart-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.progress-chart {
+  min-width: 0;
+}
+
+.progress-chart-title {
+  margin: 0 0 8px;
+
+  font-size: 14px;
+  font-weight: 600;
+
+  color: var(--text, #0f172a);
+}
+
+.progress-chart-svg {
+  display: block;
+
+  width: 100%;
+  height: 160px;
+
+  overflow: visible;
+}
+
+.progress-chart-axis,
+.progress-chart-gridline {
+  stroke: var(--border, #e2e8f0);
+  stroke-width: 1;
+}
+
+.progress-chart-gridline {
+  stroke-dasharray: 3 4;
+}
+
+.progress-chart-line {
+  fill: none;
+  stroke: #2563eb;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.progress-chart-dot {
+  fill: #2563eb;
+}
+
+.progress-chart-scale {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  justify-content: space-between;
+
+  margin-top: 6px;
+
+  font-size: 11.5px;
+
+  color: var(--text-muted, #64748b);
+}
+
+/* The honest states: one point, or none. Neither draws a line. */
+.progress-chart-single {
+  margin: 0 0 4px;
+
+  font-size: 15px;
+}
+
+.progress-chart-single-date {
+  color: var(--text-muted, #64748b);
+}
+
+.progress-chart-empty,
+.progress-chart-note {
+  margin: 4px 0 0;
+
+  font-size: 13px;
+  line-height: 1.5;
+
+  color: var(--text-muted, #64748b);
+}
+
+.progress-recent-list,
+.progress-plan-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.progress-recent-row,
+.progress-plan-domain {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  justify-content: space-between;
+  align-items: baseline;
+
+  padding-bottom: 8px;
+
+  border-bottom: 1px solid var(--border, #e2e8f0);
+
+  font-size: 14px;
+}
+
+.progress-recent-row:last-child,
+.progress-plan-domain:last-child {
+  padding-bottom: 0;
+
+  border-bottom: none;
+}
+
+.progress-recent-meta {
+  font-size: 12px;
+
+  color: var(--text-muted, #64748b);
 }

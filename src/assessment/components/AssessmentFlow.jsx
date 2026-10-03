@@ -11,6 +11,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import MovementDemo from "../../movementDemos/MovementDemo.jsx";
+import DemonstrationVideo from "./DemonstrationVideo.jsx";
+import { getExerciseVideo } from "../../movementDemos/exerciseVideos.js";
 import { getMovementDemo } from "../../movementDemos/registry.js";
 import { evaluatePositioning, STABLE_PREFLIGHT_FRAMES } from "../utils/positioning.js";
 import { getActionableSuggestion } from "../utils/labels.js";
@@ -261,11 +263,17 @@ export default function AssessmentFlow({
   // Phase 1: Instructions
   if (phase === FLOW_PHASE.INSTRUCTIONS) {
     const demo = demoId ? getMovementDemo(demoId) : null;
+    // A recorded demonstration of this same check, where one exists
+    // (public/assessment-videos/). The animated figure stays as the
+    // fallback, so a check with no recording is unaffected.
+    const video = getExerciseVideo(demoId);
 
     return (
       <div className="assess-panel">
         <span className="assess-panel__step">{safeDisplayValue(stepLabel)}</span>
         <h2>{safeDisplayValue(title)}</h2>
+
+        <DemonstrationVideo video={video} />
 
         {demo && (
           <div className="assess-demo-container">

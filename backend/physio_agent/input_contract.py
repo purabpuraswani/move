@@ -117,6 +117,12 @@ def build_physio_agent_input(
                 "daily_sitting_hours": questionnaire_section["data"].get(
                     "daily_sitting_hours"
                 ),
+                # Added for physio_agent/shaping.py: how often the user
+                # already exercises decides how much programme is
+                # realistic to give them. Still a narrow view -- this
+                # agent gets the two activity answers that bear on plan
+                # size, not the whole questionnaire.
+                "exercise_days": questionnaire_section["data"].get("exercise_days"),
                 "work_type": questionnaire_section["data"].get("work_type"),
             }
             if questionnaire_section.get("available")

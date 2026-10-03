@@ -16,11 +16,14 @@ a MODIFY just because a later rule would also have matched.
 """
 
 from safety.rules import (
+    reported_health_concerns,
+    self_reported_answers,
     rule_advanced_exercise_with_confirmed_medical_context_paused,
     rule_confirmed_medical_context_modifies_with_disclaimer,
     rule_default_allow,
     rule_no_candidates_not_assessed,
     rule_safety_status_high_refers,
+    rule_self_reported_health_modifies,
 )
 from safety.schema import build_safety_result
 
@@ -47,11 +50,40 @@ def _validate_candidate_recommendations(candidate_recommendations) -> None:
             raise SafetyEvaluationError("each candidate recommendation must have a non-empty 'type'")
 
 
+def _missing_safety_information(need_profile, confirmed_medical_context, self_reported_health) -> list:
+    """The safety-relevant questions this project has no answer to.
+
+    Reported so that "no concern was found" is never confused with "we
+    were never told". It lists sources, not suspicions.
+    """
+
+    missing = []
+
+    answers = self_reported_answers(self_reported_health)
+
+    if not any(isinstance(value, str) and value.strip() for value in answers.values()):
+        missing.append("Self-reported health answers from onboarding")
+
+    if not confirmed_medical_context:
+        missing.append("A user-confirmed medical report")
+
+    safety_status = ((need_profile or {}).get("safety_status") or {}).get("level")
+
+    if safety_status in (None, "NOT_ASSESSED"):
+        missing.append(
+            "A reviewed safety screening (this project has no validated "
+            "escalation rule set yet, so no safety status is assigned)"
+        )
+
+    return missing
+
+
 def evaluate_safety(
     *,
     need_profile: dict = None,
     confirmed_medical_context: dict = None,
     candidate_recommendations: list = None,
+    self_reported_health: dict = None,
 ) -> dict:
     """Evaluate candidate specialist recommendations. Returns a validated
     Safety Result (safety/schema.py). Raises SafetyEvaluationError for
@@ -68,6 +100,9 @@ def evaluate_safety(
     if confirmed_medical_context is not None and not isinstance(confirmed_medical_context, dict):
         raise SafetyEvaluationError("confirmed_medical_context must be null or an object")
 
+    if self_reported_health is not None and not isinstance(self_reported_health, dict):
+        raise SafetyEvaluationError("self_reported_health must be null or an object")
+
     decision = (
         rule_no_candidates_not_assessed(candidate_recommendations)
         or rule_safety_status_high_refers(need_profile, candidate_recommendations)
@@ -77,7 +112,16 @@ def evaluate_safety(
         or rule_confirmed_medical_context_modifies_with_disclaimer(
             confirmed_medical_context, candidate_recommendations
         )
+        # Ordered after the confirmed-report rules and before ALLOW: a
+        # confirmed report is stronger evidence than a self-reported
+        # answer, so it decides first where both exist.
+        or rule_self_reported_health_modifies(self_reported_health, candidate_recommendations)
         or rule_default_allow(candidate_recommendations)
     )
 
-    return build_safety_result(**decision)
+    return build_safety_result(
+        **decision,
+        missing_safety_information=_missing_safety_information(
+            need_profile, confirmed_medical_context, self_reported_health
+        ),
+    )

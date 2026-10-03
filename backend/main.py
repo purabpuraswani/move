@@ -20,6 +20,7 @@ from routes.profile import router as profile_router
 from routes.reports import router as reports_router
 from routes.workflow import router as workflow_router
 from routes.dashboard import router as dashboard_router
+from routes.progress import router as progress_router
 from routes.auth import router as auth_router
 from user_state.store import ensure_indexes as ensure_user_state_indexes
 from password_reset.store import ensure_indexes as ensure_password_reset_indexes
@@ -94,6 +95,7 @@ app.include_router(reports_router)
 app.include_router(guidance_router)
 app.include_router(workflow_router)
 app.include_router(dashboard_router)
+app.include_router(progress_router)
 
 @app.get("/")
 def root():
