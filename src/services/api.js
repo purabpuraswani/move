@@ -1,13 +1,14 @@
 /**
  * Shared API configuration and resilient fetcher for MoveWell AI.
  *
- * Local development uses the MoveWell backend on port 8100.
+ * Local development uses the MoveWell backend on port 8000, with port 8100
+ * supported for older local launch commands.
  */
 
 const envUrl =
   typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_URL
     ? import.meta.env.VITE_API_URL
-    : "http://127.0.0.1:8100";
+    : "http://127.0.0.1:8000";
 
 let cachedBaseUrl = null;
 
@@ -29,7 +30,26 @@ export function setWorkingApiUrl(url) {
 }
 
 export function getAlternateUrl(urlString) {
-  // There is one local backend endpoint; do not silently retry port 8000.
+  try {
+    const url = new URL(urlString);
+
+    if (url.hostname !== "127.0.0.1" && url.hostname !== "localhost") {
+      return null;
+    }
+
+    if (url.port === "8000") {
+      url.port = "8100";
+      return url.toString().replace(/\/$/, "");
+    }
+
+    if (url.port === "8100") {
+      url.port = "8000";
+      return url.toString().replace(/\/$/, "");
+    }
+  } catch {
+    return null;
+  }
+
   return null;
 }
 
