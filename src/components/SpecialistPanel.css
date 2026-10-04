@@ -1384,3 +1384,273 @@
 .specialist-adaptation-banner--behaviour .adaptation-desc {
   color: #312e81;
 }
+
+/* Dark-first treatment for the embedded plan panels on My Plan. */
+.specialist--movement,
+.specialist--nutrition,
+.specialist--behaviour {
+  border-color: var(--border);
+  background: linear-gradient(135deg, var(--surface) 0%, var(--surface-soft) 100%);
+  box-shadow: var(--shadow-soft);
+}
+
+.specialist-coaching-head,
+.specialist-coaching-section {
+  border-color: var(--border);
+}
+
+.specialist-coaching-badge {
+  color: var(--green-bright);
+  background: rgba(53, 209, 139, 0.14);
+}
+
+.specialist-coaching-badge--nutrition {
+  color: var(--amber);
+  background: rgba(245, 195, 107, 0.14);
+}
+
+.specialist-coaching-badge--behaviour {
+  color: var(--cyan);
+  background: rgba(101, 232, 237, 0.12);
+}
+
+.specialist-coaching-title,
+.specialist-today-heading,
+.specialist-section-title,
+.specialist-focus-card-name {
+  color: var(--dark);
+}
+
+.specialist-version-pill {
+  color: var(--dark-soft);
+  background: rgba(168, 243, 207, 0.08);
+  border-color: var(--border);
+}
+
+.specialist-today-hero {
+  background: linear-gradient(135deg, rgba(16, 42, 34, 0.9), rgba(11, 31, 25, 0.9));
+  border-color: var(--border);
+}
+
+.specialist-today-hero--nutrition {
+  background: linear-gradient(135deg, rgba(72, 54, 25, 0.42), rgba(43, 35, 20, 0.62));
+  border-color: rgba(245, 195, 107, 0.28);
+}
+
+.specialist-today-hero--behaviour {
+  background: linear-gradient(135deg, rgba(29, 50, 58, 0.5), rgba(15, 35, 37, 0.7));
+  border-color: rgba(101, 232, 237, 0.24);
+}
+
+.specialist-section-eyebrow,
+.specialist-progress-label,
+.specialist-action-card-label,
+.specialist-context-label {
+  color: var(--muted);
+}
+
+.specialist-coaching-goal,
+.specialist-rationale-text,
+.specialist-progress-fraction,
+.specialist-focus-card-action,
+.specialist-today-action-item {
+  color: var(--dark-soft);
+}
+
+.specialist-daily-progress-card,
+.specialist-today-action-card,
+.specialist-focus-card,
+.specialist-baseline-context {
+  background: rgba(7, 17, 15, 0.52);
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+.specialist-progress-fraction strong,
+.specialist-progress-bar-fill {
+  color: var(--green-bright);
+  background: var(--green);
+}
+
+.specialist-progress-bar-track {
+  background: rgba(168, 243, 207, 0.14);
+}
+
+.specialist-finding-pill {
+  color: var(--dark-soft);
+  background: rgba(168, 243, 207, 0.06);
+  border-color: var(--border);
+}
+
+.specialist-finding-pill--unmeasured {
+  background: rgba(245, 195, 107, 0.1);
+  border-color: rgba(245, 195, 107, 0.35);
+}
+
+.finding-pill-cap,
+.specialist-focus-card-action strong,
+.specialist-focus-card-why,
+.specialist-text--quiet {
+  color: var(--muted);
+}
+
+.finding-pill-res {
+  color: var(--dark);
+}
+
+.specialist-chip--nutrition {
+  color: var(--amber);
+  background: rgba(245, 195, 107, 0.14);
+}
+
+.specialist-chip--behaviour {
+  color: var(--cyan);
+  background: rgba(101, 232, 237, 0.12);
+}
+
+.specialist-focus-card:hover {
+  border-color: rgba(101, 232, 237, 0.35);
+}
+
+.specialist-adherence-pill,
+.specialist-adherence-pill--not-logged {
+  color: var(--muted);
+  background: rgba(168, 243, 207, 0.08);
+  border-color: var(--border);
+}
+
+.specialist-adherence-pill--known {
+  color: var(--green-bright);
+  background: rgba(53, 209, 139, 0.12);
+  border-color: rgba(53, 209, 139, 0.3);
+}
+
+.specialist-unmeasured-notice {
+  background: rgba(101, 170, 237, 0.1);
+  border-left-color: var(--cyan);
+  color: #b9dce0;
+}
+
+.specialist-exercise-count-tag {
+  color: var(--green-bright);
+  background: rgba(53, 209, 139, 0.14);
+  border-color: rgba(53, 209, 139, 0.35);
+}
+
+.specialist-exercise-card {
+  background: rgba(7, 17, 15, 0.58);
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+.specialist-exercise-card:hover {
+  border-color: rgba(101, 232, 237, 0.35);
+  box-shadow: none;
+}
+
+.specialist-exercise-card--completed {
+  background: rgba(53, 209, 139, 0.08);
+  border-color: rgba(53, 209, 139, 0.4);
+}
+
+.specialist-exercise-name {
+  color: var(--dark);
+}
+
+.specialist-exercise-target,
+.specialist-exercise-why,
+.specialist-complete-label,
+.specialist-learning-desc {
+  color: var(--dark-soft);
+}
+
+.specialist-target-label,
+.specialist-adj-label {
+  color: var(--muted);
+}
+
+.specialist-completed-pill {
+  color: var(--green-bright);
+  background: rgba(53, 209, 139, 0.14);
+  border-color: rgba(53, 209, 139, 0.35);
+}
+
+.specialist-pill--metric {
+  color: var(--dark-soft);
+  background: rgba(168, 243, 207, 0.08);
+  border-color: var(--border);
+}
+
+.specialist-pill--level {
+  color: var(--green-bright);
+  background: rgba(53, 209, 139, 0.12);
+  border-color: rgba(53, 209, 139, 0.3);
+}
+
+.specialist-pill--camera {
+  color: var(--cyan);
+  background: rgba(101, 232, 237, 0.1);
+  border-color: rgba(101, 232, 237, 0.3);
+}
+
+.specialist-pill--manual {
+  color: var(--amber);
+  background: rgba(245, 195, 107, 0.12);
+  border-color: rgba(245, 195, 107, 0.3);
+}
+
+.specialist-recorded-today-summary {
+  color: var(--green-bright);
+  background: rgba(53, 209, 139, 0.1);
+  border-color: rgba(53, 209, 139, 0.3);
+}
+
+.specialist-exercise-safety-callout {
+  background: rgba(245, 195, 107, 0.1);
+  border-left-color: var(--amber);
+  color: #f2c982;
+}
+
+.specialist-exercise-adjustments,
+.specialist-inline-demo,
+.specialist-learning-evidence,
+.specialist-empty-programme {
+  background: rgba(168, 243, 207, 0.06);
+  border-color: var(--border);
+}
+
+.specialist-adj-text {
+  color: var(--dark-soft);
+}
+
+.specialist-demo-toggle-btn {
+  color: var(--cyan);
+  border-color: var(--border);
+}
+
+.specialist-demo-toggle-btn:hover {
+  background: rgba(101, 232, 237, 0.1);
+  border-color: rgba(101, 232, 237, 0.35);
+}
+
+.specialist-demo-image {
+  background: #102a22;
+}
+
+.specialist-complete-checkbox:disabled + .specialist-complete-label {
+  color: var(--muted);
+}
+
+.specialist-complete-error {
+  color: var(--danger);
+}
+
+.specialist-start-btn--completed {
+  background: rgba(53, 209, 139, 0.1);
+  color: var(--green-bright);
+  border-color: var(--green);
+}
+
+.specialist-start-btn--completed:hover {
+  background: rgba(53, 209, 139, 0.18);
+}

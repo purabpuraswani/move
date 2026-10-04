@@ -275,7 +275,7 @@ export default function AssessmentFlow({
 
         <DemonstrationVideo video={video} />
 
-        {demo && (
+        {!video && demo && (
           <div className="assess-demo-container">
             <MovementDemo demo={demo} />
           </div>

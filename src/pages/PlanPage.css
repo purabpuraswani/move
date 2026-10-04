@@ -549,12 +549,13 @@
    -------------------------------------------------------------------- */
 
 .plan-section--partial {
-  background: linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%);
-  border: 1px solid #bbf7d0;
+  background: linear-gradient(135deg, var(--surface) 0%, var(--surface-soft) 100%);
+  border: 1px solid rgba(101, 232, 237, 0.2);
   border-radius: var(--radius-md, 12px);
   padding: 24px;
   margin-bottom: 24px;
-  box-shadow: 0 4px 16px -2px rgba(16, 185, 129, 0.08);
+  box-shadow: var(--shadow-soft);
+  color: var(--dark);
 }
 
 .plan-partial-badge {
@@ -563,8 +564,8 @@
   font-weight: 700;
   letter-spacing: 1.2px;
   text-transform: uppercase;
-  color: #059669;
-  background: #dcfce7;
+  color: #062117;
+  background: var(--green-bright);
   padding: 3px 10px;
   border-radius: 999px;
   margin-bottom: 10px;
@@ -583,18 +584,18 @@
   gap: 14px;
   padding: 12px 16px;
   border-radius: 8px;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  transition: all 0.15s ease;
+  background: rgba(7, 17, 15, 0.46);
+  border: 1px solid var(--border);
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .plan-check-row--done {
-  border-color: #86efac;
-  background: #f0fdf4;
+  border-color: rgba(53, 209, 139, 0.58);
+  background: rgba(53, 209, 139, 0.08);
 }
 
 .plan-check-row--pending {
-  border-color: #e2e8f0;
+  border-color: var(--border);
   opacity: 0.88;
 }
 
@@ -611,13 +612,13 @@
 }
 
 .plan-check-row--done .plan-check-badge {
-  background: #10b981;
-  color: #ffffff;
+  background: var(--green);
+  color: #062117;
 }
 
 .plan-check-row--pending .plan-check-badge {
-  background: #e2e8f0;
-  color: #64748b;
+  background: rgba(168, 243, 207, 0.14);
+  color: var(--dark-soft);
 }
 
 .plan-check-text {
@@ -629,16 +630,16 @@
 .plan-check-name {
   font-size: 14px;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--dark);
 }
 
 .plan-check-sub {
   font-size: 12px;
-  color: #64748b;
+  color: var(--muted);
 }
 
 .plan-check-row--done .plan-check-sub {
-  color: #059669;
+  color: var(--green-bright);
   font-weight: 500;
 }
 
@@ -900,4 +901,148 @@
 
 .plan-exercise-ref-check label {
   cursor: pointer;
+}
+
+/* Dark MoveWell treatment for workflow-generated summary sections. */
+.plan-safety {
+  background: rgba(245, 195, 107, 0.1);
+  border-left-color: var(--amber);
+  color: var(--dark-soft);
+}
+
+.plan-today-glance,
+.plan-team-section {
+  background: linear-gradient(135deg, var(--surface) 0%, var(--surface-soft) 100%);
+  border-color: var(--border);
+  box-shadow: var(--shadow-soft);
+}
+
+.plan-today-title,
+.plan-today-card-title,
+.plan-team-title,
+.plan-team-card-title,
+.plan-exercise-ref-name {
+  color: var(--dark);
+}
+
+.plan-today-lead,
+.plan-today-card-desc,
+.plan-team-lead,
+.plan-team-card-subtitle,
+.plan-exercise-ref-meta,
+.plan-exercise-ref-check {
+  color: var(--dark-soft);
+}
+
+.plan-today-card,
+.plan-team-card,
+.plan-exercise-ref {
+  background: rgba(7, 17, 15, 0.46);
+  border-color: var(--border);
+}
+
+.plan-today-card:hover,
+.plan-team-card:hover {
+  border-color: rgba(101, 232, 237, 0.35);
+  background: rgba(16, 42, 34, 0.8);
+  box-shadow: none;
+}
+
+.plan-today-card-stat {
+  color: var(--muted);
+}
+
+.plan-today-card-link,
+.plan-team-card-link {
+  color: var(--cyan);
+}
+
+.plan-today-card-link:hover,
+.plan-team-card-link:hover {
+  color: var(--mint);
+}
+
+.plan-today-card-badge--movement {
+  background: rgba(53, 209, 139, 0.14);
+  color: var(--green-bright);
+}
+
+.plan-today-card-badge--nutrition {
+  background: rgba(245, 195, 107, 0.14);
+  color: var(--amber);
+}
+
+.plan-today-card-badge--behaviour {
+  background: rgba(101, 232, 237, 0.12);
+  color: var(--cyan);
+}
+
+.plan-team-eyebrow {
+  color: var(--cyan);
+}
+
+.plan-team-card-badge--active {
+  background: rgba(53, 209, 139, 0.14);
+  color: var(--green-bright);
+  border-color: rgba(53, 209, 139, 0.35);
+}
+
+.plan-team-card-badge--evaluated {
+  background: rgba(168, 243, 207, 0.1);
+  color: var(--dark-soft);
+  border-color: var(--border);
+}
+
+.plan-team-card-badge--not-assessed {
+  background: rgba(245, 195, 107, 0.14);
+  color: var(--amber);
+  border-color: rgba(245, 195, 107, 0.35);
+}
+
+.plan-team-card-reason {
+  color: var(--dark-soft);
+}
+
+.plan-exercise-ref--done {
+  border-color: rgba(53, 209, 139, 0.4);
+  background: rgba(53, 209, 139, 0.08);
+}
+
+.plan-exercise-ref-image {
+  background: #102a22;
+}
+
+.plan-exercise-ref-label {
+  color: var(--dark-soft);
+}
+
+.plan-exercise-ref-safety {
+  color: var(--amber);
+}
+
+.plan-exercise-ref-check input {
+  accent-color: var(--green);
+}
+
+.plan-error {
+  background: rgba(255, 142, 131, 0.1);
+  border: 1px solid rgba(255, 142, 131, 0.25);
+}
+
+.plan-missing-title {
+  color: var(--dark-soft);
+}
+
+.plan-missing-item {
+  border-left-color: var(--amber);
+  background: rgba(245, 195, 107, 0.08);
+}
+
+.plan-missing-name {
+  color: var(--dark);
+}
+
+.plan-missing-reason,
+.plan-version {
+  color: var(--muted);
 }

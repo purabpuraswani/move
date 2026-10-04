@@ -86,7 +86,7 @@
      the later ones won, and the dead ones are removed. */
   max-width: var(--content-max-narrow);
   margin: 0 auto;
-  padding: 28px var(--content-gutter) 64px;
+  padding: 18px var(--content-gutter) 64px;
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -313,12 +313,21 @@
 .assess-camera__hint {
   margin: 12px 2px 0;
   padding: 10px 14px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
   border-radius: var(--radius-sm);
   background: var(--green-light);
   border: 1px solid #cfe4d8;
   font-size: 0.85rem;
   line-height: 1.5;
   color: #24503b;
+}
+
+/* Guidance changes while tracking, but the camera frame must not resize or
+   move when a status message changes length. */
+.assess-camera__hint:empty {
+  visibility: hidden;
 }
 
 .assess-camera__note {

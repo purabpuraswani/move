@@ -103,6 +103,7 @@ function getCoachFeedback(outcome) {
 }
 
 const STABLE_FRAMES_TARGET = 15;
+const VOICE_COOLDOWN_MS = 2200;
 
 function SessionPanel({ title, children, footer = null, className = "", bodyClassName = "" }) {
   return (
@@ -134,6 +135,45 @@ function ExercisePage() {
     stabilityProgress: 0,
   });
   const [planProgramme, setPlanProgramme] = useState([]);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const lastSpokenCueRef = useRef("");
+  const lastSpokenAtRef = useRef(0);
+
+  const voiceAvailable =
+    typeof window !== "undefined" &&
+    "speechSynthesis" in window &&
+    "SpeechSynthesisUtterance" in window;
+
+  useEffect(() => {
+    if (!voiceAvailable || step !== STEP.RUNNING || !voiceEnabled || !live.cue) {
+      return undefined;
+    }
+
+    const now = Date.now();
+    const cueChanged = live.cue !== lastSpokenCueRef.current;
+    const cooldownElapsed = now - lastSpokenAtRef.current >= VOICE_COOLDOWN_MS;
+
+    if (!cueChanged || !cooldownElapsed) return undefined;
+
+    const utterance = new SpeechSynthesisUtterance(live.cue);
+    utterance.rate = 0.95;
+    utterance.pitch = 1;
+    utterance.volume = 0.9;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+    lastSpokenCueRef.current = live.cue;
+    lastSpokenAtRef.current = now;
+
+    return undefined;
+  }, [live.cue, step, voiceEnabled, voiceAvailable]);
+
+  useEffect(() => {
+    if (step === STEP.RUNNING) return undefined;
+    lastSpokenCueRef.current = "";
+    lastSpokenAtRef.current = 0;
+    if (voiceAvailable) window.speechSynthesis.cancel();
+    return undefined;
+  }, [step, voiceAvailable]);
 
   useEffect(() => {
     let isMounted = true;
@@ -156,6 +196,9 @@ function ExercisePage() {
     setSaveState("idle");
     setSaveError(null);
     setLive({ reps: 0, seconds: 0, holdState: null, repState: null, cue: "" });
+    lastSpokenCueRef.current = "";
+    lastSpokenAtRef.current = 0;
+    if (voiceAvailable) window.speechSynthesis.cancel();
   }, [exerciseId]);
 
   useEffect(() => {
@@ -814,11 +857,31 @@ function ExercisePage() {
                 <span className="exercise-recording-dot" aria-hidden="true" />
                 Recording…
               </span>
+              {voiceAvailable ? (
+                <button
+                  type="button"
+                  className={`exercise-voice-toggle${voiceEnabled ? " is-on" : ""}`}
+                  onClick={() => {
+                    setVoiceEnabled((enabled) => !enabled);
+                    window.speechSynthesis.cancel();
+                  }}
+                  aria-pressed={voiceEnabled}
+                  aria-label={
+                    voiceEnabled
+                      ? "Turn off spoken form corrections"
+                      : "Turn on spoken form corrections"
+                  }
+                >
+                  {voiceEnabled ? "🔊 Voice corrections on" : "🔇 Voice corrections off"}
+                </button>
+              ) : null}
               <button type="button" className="exercise-start" onClick={finish}>
                 Stop · I have finished
               </button>
               <p className="exercise-controls-note">
-                Your camera stays on this device. Only the counts and timings are saved.
+                {voiceAvailable
+                  ? "Corrections are spoken from this device. Your camera stays here; only counts and timings are saved."
+                  : "Your camera stays on this device. Only the counts and timings are saved."}
               </p>
             </div>
           </div>

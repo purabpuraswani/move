@@ -234,11 +234,9 @@ export default function CameraStage({
 
       </div>
 
-      {(guidance || hint) && (
-        <p className="assess-camera__hint">
-          {guidance || hint}
-        </p>
-      )}
+      <p className="assess-camera__hint" role="status" aria-live="polite">
+        {guidance || hint || "\u00a0"}
+      </p>
 
       <p className="assess-camera__note">
         Everything you see here runs on your own device. No video, image, or frame
@@ -247,4 +245,3 @@ export default function CameraStage({
     </div>
   );
 }
-
