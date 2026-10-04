@@ -383,17 +383,20 @@ function SpecialistDetailPageInner() {
     safeDisplayValue(liveSpecialist?.status_label) ||
     (status === "ACTIVE"
       ? "Active in Your Plan"
-      : status === "EVALUATED_NOT_REQUIRED"
-      ? "Evaluated — No Intervention Required"
-      : "Not Assessed");
+      : "Not activated");
 
   const isActive = status === "ACTIVE";
   const isEvaluatedNotRequired = status === "EVALUATED_NOT_REQUIRED";
   const isNotAssessed = status === "NOT_ASSESSED";
+  const isInactive = !isActive;
 
   // Safeguard reason: always a safe string
   const rawReason = liveSpecialist?.reason || config.defaultReason;
   const reason = safeDisplayValue(rawReason) || config.defaultReason;
+  const inactiveReason =
+    isInactive
+      ? `Current assessment did not identify a ${config.title.toLowerCase()} need requiring a specialist-specific intervention.`
+      : reason;
 
   // Normalize evidence safely
   let rawEvidence = liveSpecialist?.evidence ?? config.defaultEvidence;
@@ -518,9 +521,9 @@ function SpecialistDetailPageInner() {
           {/* Clinical Rationale Panel */}
           <section className="specialist-card-panel" aria-labelledby="decision-heading">
             <h2 id="decision-heading" className="specialist-panel-title">
-              📋 Clinical Decision & Rationale
+              📋 Agent Decision & Rationale
             </h2>
-            <p className="specialist-reason-text">{reason}</p>
+            <p className="specialist-reason-text">{isInactive ? inactiveReason : reason}</p>
           </section>
 
           {/* Evidence Panel */}
@@ -596,42 +599,23 @@ function SpecialistDetailPageInner() {
             </h2>
 
             {/* Inactive state fallback */}
-            {isEvaluatedNotRequired && recommendationsList.length === 0 && physioProgramme.length === 0 ? (
+            {isInactive ? (
               <div className="specialist-empty-state">
                 <div className="specialist-empty-icon" aria-hidden="true">
-                  ✓
+                  ℹ️
                 </div>
                 <p className="specialist-empty-text">
-                  {safeDisplayValue(config.inactiveMessage) ||
-                    "No specific intervention is currently required based on your current evidence."}
+                  <strong>Status:</strong> Not activated
                 </p>
-                <button
-                  type="button"
-                  className="specialist-secondary-btn"
-                  onClick={() => navigate("/dashboard")}
-                >
-                  Return to Dashboard
-                </button>
-              </div>
-            ) : isNotAssessed ? (
-              <div className="specialist-empty-state">
-                <div className="specialist-empty-icon" aria-hidden="true">
-                  📋
-                </div>
-                <p className="specialist-empty-text">
-                  {isPhysio
-                    ? "Complete your 3-check baseline movement assessment to receive tailored movement prescriptions."
-                    : "No specific recommendations are currently available for this specialist."}
+                <p className="specialist-reason-text" style={{ marginTop: "8px" }}>
+                  <strong>Why:</strong> No relevant constraint or need was identified from the current assessment and user state.
                 </p>
-                {isPhysio && (
-                  <button
-                    type="button"
-                    className="specialist-action-btn"
-                    onClick={() => navigate("/assessment")}
-                  >
-                    Start baseline assessment →
-                  </button>
-                )}
+                <p className="specialist-reason-text" style={{ marginTop: "8px" }}>
+                  <strong>Evidence:</strong> {evidenceList.length > 0 ? evidenceList.slice(0, 2).join(" • ") : "No specialist-specific evidence was required."}
+                </p>
+                <p className="specialist-reason-text" style={{ marginTop: "8px" }}>
+                  <strong>Contribution:</strong> No specialist-specific modification was added to the current MoveWell plan.
+                </p>
               </div>
             ) : (
               <>

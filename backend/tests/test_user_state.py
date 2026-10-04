@@ -162,6 +162,25 @@ class PhysicalAssessmentRepresentationTests(unittest.TestCase):
         self.assertEqual(shoulder["invalidReasons"], [])
         self.assertEqual(shoulder["attempts"], 2)
 
+    def test_completed_sit_to_stand_preserves_setup_context(self):
+        state = build_user_state(
+            assessment_doc={
+                "tests": {
+                    "shoulder": {"status": "not_started"},
+                    "ftsst": {
+                        "status": "completed",
+                        "measurements": {"completionTimeSeconds": 13.84},
+                        "setup": {"chairSeatHeightCm": 60, "measuredSide": "left"},
+                    },
+                    "balance": {"status": "not_started"},
+                }
+            }
+        )
+
+        setup = state["physical_assessment"]["data"]["tests"]["ftsst"]["setup"]
+        self.assertEqual(setup["chairSeatHeightCm"], 60)
+        self.assertEqual(setup["measuredSide"], "left")
+
     def test_a_session_with_no_completed_test_is_marked_unavailable(self):
         assessment_doc = {
             "tests": {

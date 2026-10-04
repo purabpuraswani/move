@@ -28,6 +28,7 @@ from nutrition_agent.evidence import build_nutrition_evidence_view
 from orchestration.evidence import STATUS_INSUFFICIENT_EVIDENCE
 from orchestrator.decision import (
     decide_exercise_activity_required,
+    decide_physio_required,
     decide_recovery_required,
 )
 from physio_agent.agent import _movement_evidence
@@ -943,19 +944,22 @@ def build_specialists_team(user_state: dict = None, safety_status=None, safety_r
     exercise_label = (
         "Active recommendation included"
         if is_exercise_active
-        else (
-            "Reviewed — no specific intervention required"
-            if exercise_evaluated
-            else "Not yet evaluated"
-        )
+        else "Not activated"
     )
 
     # 2. Physiotherapy & Movement
-    is_physio_active = exercise_plan.get("available", False)
-    has_physio_eval = bool(
-        need_profile.get("mobility_need")
-        or need_profile.get("stability_need")
-        or need_profile.get("functional_movement_need")
+    physio_dec = decide_physio_required(
+        need_profile,
+        # A persisted plan is history, not evidence that the current
+        # assessment still requires Physio. Only current MEDIUM/HIGH needs
+        # make this specialist active in the overview.
+        exercise_plan_exists=True,
+    )
+    is_physio_active = physio_dec.get("physio_required", False)
+    has_physio_eval = any(
+        isinstance(need_profile.get(dimension), dict)
+        and need_profile[dimension].get("level") != "NOT_ASSESSED"
+        for dimension in ("mobility_need", "stability_need", "functional_movement_need")
     )
     physio_status = (
         "ACTIVE"
@@ -965,20 +969,19 @@ def build_specialists_team(user_state: dict = None, safety_status=None, safety_r
     physio_label = (
         "Active recommendation included"
         if is_physio_active
-        else (
-            "Reviewed — no specific intervention required"
-            if has_physio_eval
-            else "Not yet evaluated"
-        )
+        else "Not activated"
     )
     physio_reason = (
-        exercise_plan.get("goal")
-        or "Tailored movement exercises matched to your baseline movement assessment."
+        physio_dec.get("reason")
         if is_physio_active
         else (
-            "Movement assessment tests showed capability within baseline norms; no corrective exercises needed."
-            if has_physio_eval
-            else "Complete the baseline movement check (shoulder raise, sit-to-stand, balance) to evaluate."
+            physio_dec.get("reason")
+            if physio_dec.get("reason")
+            else (
+                "Current assessment did not identify a movement constraint requiring physiotherapy-specific programming."
+                if has_physio_eval
+                else "Current assessment did not produce a movement need requiring a physiotherapy-specific intervention."
+            )
         )
     )
     assessed_movements, not_assessed_movements = _movement_evidence(
@@ -1031,20 +1034,16 @@ def build_specialists_team(user_state: dict = None, safety_status=None, safety_r
     nutrition_label = (
         "Active recommendation included"
         if is_nutrition_active
-        else (
-            "Reviewed — no specific intervention required"
-            if has_nutrition_eval
-            else "Not yet evaluated"
-        )
+        else "Not activated"
     )
     nutrition_reason = (
         nutrition_plan.get("goal")
         or "Nutritional guidance tailored to your recorded eating patterns and hydration."
         if is_nutrition_active
         else (
-            "Reported meal patterns and dietary variety are adequate; no active nutrition intervention required."
+            "Current assessment did not identify a nutrition or lifestyle constraint requiring a specialist-specific intervention."
             if has_nutrition_eval
-            else "Answer the lifestyle questionnaire to evaluate everyday nutrition habits."
+            else "Current assessment did not produce a nutrition need requiring a specialist-specific intervention."
         )
     )
     nutrition_evidence_view = build_nutrition_evidence_view(user_state)
@@ -1105,11 +1104,7 @@ def build_specialists_team(user_state: dict = None, safety_status=None, safety_r
     recovery_label = (
         "Active recommendation included"
         if is_recovery_active
-        else (
-            "Reviewed — no specific intervention required"
-            if recovery_evaluated
-            else "Not yet evaluated"
-        )
+        else "Not activated"
     )
 
     # 5. Behaviour & Adherence
@@ -1123,20 +1118,16 @@ def build_specialists_team(user_state: dict = None, safety_status=None, safety_r
     behaviour_label = (
         "Active recommendation included"
         if is_behaviour_active
-        else (
-            "Reviewed — no specific intervention required"
-            if has_behaviour_eval
-            else "Not yet evaluated"
-        )
+        else "Not activated"
     )
     behaviour_reason = (
         behaviour_plan.get("goal")
         or "Adaptive habit routines designed to fit into your existing daily schedule."
         if is_behaviour_active
         else (
-            "Daily activity pacing and routine adherence meet standard guidelines; no habit intervention needed."
+            "Current assessment did not identify a behaviour or adherence constraint requiring a specialist-specific intervention."
             if has_behaviour_eval
-            else "Answer the lifestyle questionnaire to evaluate behavioural habits."
+            else "Current assessment did not produce a behaviour need requiring a specialist-specific intervention."
         )
     )
     behaviour_recs = (
@@ -1167,9 +1158,9 @@ def build_specialists_team(user_state: dict = None, safety_status=None, safety_r
                 "Recommendation paused for safety"
                 if safety_code == "PAUSE"
                 else (
-                    "Clinical escalation — Referral recommended"
+                    "Referral recommended"
                     if safety_code == "REFER"
-                    else "Not yet evaluated"
+                    else "Not activated"
                 )
             )
         )

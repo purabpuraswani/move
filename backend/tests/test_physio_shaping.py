@@ -322,6 +322,31 @@ class ShoulderOnlyTests(unittest.TestCase):
             self.assertIn("upper-body mobility", entry["rationale"])
 
 
+class BalanceSelectionTests(unittest.TestCase):
+    """Balance evidence must prefer balance interventions over generic leg work."""
+
+    def test_balance_need_prioritises_balance_training_exercises(self):
+        findings = _physio(
+            _run(
+                ACTIVE_PROFILE,
+                _assessment(shoulder=(150, 148), ftsst=8.0, balance=(3.5, 4.0)),
+                "balance_specific",
+                exercise_results=[],
+            )
+        )
+
+        self.assertEqual(findings["capabilities_targeted"], ["stability"])
+        self.assertTrue(findings["plan"]["exercises"])
+
+        for entry in findings["plan"]["exercises"]:
+            self.assertIn(entry["exercise_id"], {
+                "heel-to-toe-stand",
+                "supported-single-leg-stand",
+                "quadruped-bird-dog",
+                "single-leg-reach-balance",
+            })
+
+
 class NormalAssessmentTests(unittest.TestCase):
     """TEST 5 -- nothing measured as a deficit means no plan. The agent
     does not manufacture a reason to prescribe."""
@@ -349,6 +374,28 @@ class NormalAssessmentTests(unittest.TestCase):
 
     def test_no_exercise_history_is_written(self):
         self.assertNotIn("exercise_history", self.result["state_updates"])
+
+
+class RawAssessmentEvidenceReachesPhysioTests(unittest.TestCase):
+    def test_agent_findings_retain_the_exact_domain_parameters(self):
+        assessment = _assessment(
+            shoulder=(55, 58),
+            ftsst=13.84,
+            balance=(5.97, 3.5),
+        )
+        findings = _physio(_run(ACTIVE_PROFILE, assessment, "raw_trace", exercise_results=[]))
+
+        movement = findings["movement_evidence"]
+        self.assertEqual(movement["shoulder"]["left_elevation_deg"], 55)
+        self.assertEqual(movement["shoulder"]["right_elevation_deg"], 58)
+        self.assertEqual(movement["shoulder"]["side_difference_deg"], 3)
+        self.assertEqual(movement["sit_to_stand"]["time_seconds"], 13.84)
+        self.assertEqual(movement["balance"]["left_hold_seconds"], 5.97)
+        self.assertEqual(movement["balance"]["right_hold_seconds"], 3.5)
+
+        self.assertTrue(
+            any("left_elevation_deg=55" in entry["rationale"] for entry in findings["plan"]["exercises"])
+        )
 
 
 class NotAssessedIsNotAnImpairmentTests(unittest.TestCase):
@@ -381,13 +428,8 @@ class NotAssessedIsNotAnImpairmentTests(unittest.TestCase):
             for word in ("poor", "impair", "deficit", "reduced"):
                 self.assertNotIn(word, evidence)
 
-    def test_the_offer_is_the_conservative_starter_not_a_finding(self):
-        self.assertEqual(self.findings["selection_mode"], "conservative_starter")
-        self.assertLessEqual(len(_plan_ids(self.findings)), 4)
-
-        for entry in self.findings["plan"]["exercises"]:
-            self.assertEqual(entry["difficulty"], "beginner")
-            self.assertIn("could not measure", entry["rationale"])
+    def test_missing_movement_evidence_does_not_activate_physio(self):
+        self.assertIsNone(self.findings)
 
     def test_nothing_in_the_run_asserts_poor_balance_or_mobility(self):
         text = str(self.result["agent_results"]).lower()
@@ -395,10 +437,8 @@ class NotAssessedIsNotAnImpairmentTests(unittest.TestCase):
         for claim in ("poor balance", "poor mobility", "impair", "deficit"):
             self.assertNotIn(claim, text)
 
-    def test_shaping_never_runs_on_the_starter_path(self):
-        # The starter plan has its own, stricter cap and difficulty; the
-        # activity shaping must not be able to enlarge it.
-        self.assertIsNone(self.findings["plan_shaping"])
+    def test_missing_movement_evidence_does_not_run_shaping(self):
+        self.assertIsNone(self.findings)
 
 
 class SafetyGateRemainsAuthoritativeTests(unittest.TestCase):

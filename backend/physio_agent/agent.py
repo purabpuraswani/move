@@ -32,9 +32,7 @@ this run uses.
 from orchestration.agent_result import build_agent_result
 from orchestration.ids import TraceContext, start_agent_run
 from orchestration.selection_policy import (
-    conservative_starter_applies,
     evidence_summary,
-    starter_dimensions,
 )
 from physio_agent.input_contract import (
     PHYSIO_RELEVANT_NEED_DIMENSIONS,
@@ -93,12 +91,6 @@ MAX_EXERCISES_PER_PLAN = 6
 # "personalised programme" ends up being one body area repeated.
 MAX_EXERCISES_PER_CAPABILITY = 3
 
-# A conservative starter plan is smaller and easier by construction: it is
-# offered because capabilities could NOT be measured, so it stays at the
-# bottom of the difficulty range and does not fill a full programme.
-STARTER_MAX_EXERCISES = 4
-STARTER_MAX_DIFFICULTY = "beginner"
-
 # The library entries that ARE one of the three baseline assessment
 # movements. These measure the user; they are not the intervention. Chair
 # Sit-to-Stand is the FTSST test and Standing Shoulder Raise is the
@@ -125,7 +117,6 @@ MEASUREMENT_MOVENET = "movenet_derived_metrics"
 MEASUREMENT_MANUAL = "manual_completion"
 
 SELECTION_MODE_NEED_BASED = "need_based"
-SELECTION_MODE_CONSERVATIVE_STARTER = "conservative_starter"
 
 
 class PhysioAgentError(Exception):
@@ -203,35 +194,6 @@ def _required_capabilities(current_needs: dict) -> dict:
     return triggers
 
 
-def _starter_capabilities(current_needs: dict) -> dict:
-    """The capabilities a conservative starter plan covers: those belonging
-    to the need dimensions that could NOT be assessed.
-
-    Shaped exactly like `_required_capabilities` so the rest of the run is
-    identical whichever mode produced the capability set — but the trigger
-    entries record level NOT_ASSESSED, and carry Need Assessment's own
-    explanation of why it could not be evaluated. Nothing here upgrades a
-    level or invents a deficit: the entries say, in the data itself, that
-    this capability is unknown.
-    """
-
-    triggers = {}
-
-    for dimension in starter_dimensions(current_needs):
-        entry = current_needs.get(dimension) if current_needs else None
-
-        for capability in NEED_DIMENSION_TO_CAPABILITIES[dimension]:
-            triggers.setdefault(capability, []).append(
-                {
-                    "dimension": dimension,
-                    "level": "NOT_ASSESSED",
-                    "evidence": (entry or {}).get("evidence", []),
-                }
-            )
-
-    return triggers
-
-
 def _within_difficulty_ceiling(exercise: dict, max_difficulty=None) -> bool:
     ceiling = max_difficulty or DEFAULT_MAX_DIFFICULTY
 
@@ -255,6 +217,14 @@ DIMENSION_PRIMARY_BODY_AREAS = {
     "stability_need": {"legs", "hips", "core", "ankles"},
 }
 
+# Balance evidence should prefer the library's explicitly balance-focused
+# interventions before generic leg movements that happen to share the same
+# body areas. Other dimensions continue to use the existing body-area
+# matching so shoulder and functional-movement selection remains compatible.
+DIMENSION_PRIMARY_CATEGORIES = {
+    "stability_need": {"balance_training"},
+}
+
 
 def _rank_candidates(exercises: list, target_dimension: str = None) -> list:
     """Intervention exercises first, baseline assessment movements last.
@@ -269,22 +239,30 @@ def _rank_candidates(exercises: list, target_dimension: str = None) -> list:
     """
 
     primary_areas = DIMENSION_PRIMARY_BODY_AREAS.get(target_dimension) or set()
+    primary_categories = DIMENSION_PRIMARY_CATEGORIES.get(target_dimension) or set()
 
     def sort_key(exercise):
         is_baseline = exercise["exercise_id"] in BASELINE_ASSESSMENT_MOVEMENTS
         areas = set(exercise.get("target_body_area") or [])
         matches_area = bool(areas & primary_areas) if primary_areas else True
+        matches_category = exercise.get("category") in primary_categories
         if is_baseline:
-            return 2
-        if matches_area:
+            return 3
+        if matches_category:
             return 0
-        return 1
+        if matches_area:
+            return 1
+        return 2
 
     return sorted(exercises, key=sort_key)
 
 
 def _rationale_for(
-    exercise: dict, capability: str, triggers_by_capability: dict, mode: str
+    exercise: dict,
+    capability: str,
+    triggers_by_capability: dict,
+    mode: str,
+    movement_evidence: dict = None,
 ) -> str:
     triggers = triggers_by_capability.get(capability, [])
     dimension_labels = {
@@ -292,19 +270,6 @@ def _rationale_for(
         "stability_need": "standing balance",
         "functional_movement_need": "sit-to-stand strength",
     }
-
-    if mode == SELECTION_MODE_CONSERVATIVE_STARTER:
-        unmeasured = ", ".join(
-            dimension_labels[t["dimension"]] for t in triggers
-        ) or "this capability"
-
-        return (
-            f"Your assessment could not measure {unmeasured}, so this is "
-            f"offered as a gentle starting point rather than as a finding "
-            f"about your movement. {exercise['name']} supports "
-            f"{capability.replace('_', ' ')} training at the "
-            f"{exercise['difficulty']} level."
-        )
 
     reasons = "; ".join(
         f"{dimension_labels[t['dimension']]} is {t['level']}" for t in triggers
@@ -314,9 +279,27 @@ def _rationale_for(
     # reason points at this user's evidence instead of a level alone.
     measurement = measured_evidence(triggers)
 
+    raw_details = []
+    for trigger in triggers:
+        dimension = trigger.get("dimension")
+        domain = {
+            "mobility_need": "shoulder",
+            "functional_movement_need": "sit_to_stand",
+            "stability_need": "balance",
+        }.get(dimension)
+        values = (movement_evidence or {}).get(domain) or {}
+
+        for key, value in values.items():
+            if key == "status" or value is None:
+                continue
+            raw_details.append(f"{key}={value}")
+
+    raw_text = f" Raw assessment parameters: {', '.join(raw_details)}." if raw_details else ""
+
     return (
         f"Selected because {reasons or 'the current needs assessment flags this capability'}"
         + (f" ({measurement})" if measurement else "")
+        + raw_text
         + f", and {exercise['name']} supports {capability.replace('_', ' ')} training "
         f"at the {exercise['difficulty']} level."
     )
@@ -672,12 +655,6 @@ def run_physio_agent(
     context = activity_context(payload.get("relevant_lifestyle_constraints"))
     shape = None
 
-    if not triggers_by_capability and conservative_starter_applies(current_needs):
-        triggers_by_capability = _starter_capabilities(current_needs)
-        selection_mode = SELECTION_MODE_CONSERVATIVE_STARTER
-        max_difficulty = STARTER_MAX_DIFFICULTY
-        max_exercises = STARTER_MAX_EXERCISES
-
     if triggers_by_capability and selection_mode == SELECTION_MODE_NEED_BASED:
         # Severity decides order and share of the plan; activity evidence
         # decides its size. Neither invents a need or raises a difficulty.
@@ -835,7 +812,11 @@ def run_physio_agent(
                     progression=exercise["progression"],
                     regression=exercise["regression"],
                     rationale=_rationale_for(
-                        exercise, capability, triggers_by_capability, selection_mode
+                        exercise,
+                        capability,
+                        triggers_by_capability,
+                        selection_mode,
+                        payload.get("movement_evidence"),
                     ),
                     safety_notes=safety_notes,
                     target_need=target_dimension,
@@ -873,11 +854,6 @@ def run_physio_agent(
             "Your movement programme, updated from what you actually "
             "recorded."
         )
-    elif selection_mode == SELECTION_MODE_CONSERVATIVE_STARTER:
-        goal = (
-            "A gentle starting programme for the movement capabilities your "
-            "assessment could not measure."
-        )
     else:
         goal = (
             "Support the movement capabilities flagged by the current needs "
@@ -908,6 +884,9 @@ def run_physio_agent(
     )
 
     findings = {
+        # The exact baseline parameters used alongside need levels. This is
+        # a normalized view of persisted assessment data, never a new score.
+        "movement_evidence": payload.get("movement_evidence"),
         "need_levels": need_levels,
         # What was actually measured, and what was not. Kept as two
         # separate lists rather than one annotated list so no consumer can

@@ -229,8 +229,8 @@ class PartialAssessmentDoesNotBecomeLow(unittest.TestCase):
     def test_not_assessed_is_never_reported_as_a_triggering_need(self):
         decision = decide_physio_required(self.state["current_needs"]["data"])
 
-        # It may select Physio (the starter pathway) but must never claim a
-        # dimension is at MEDIUM/HIGH to do it.
+        # Missing movement evidence must not select Physio or claim a need.
+        self.assertFalse(decision["physio_required"])
         self.assertNotIn("MEDIUM", decision["reason"].split("at MEDIUM or HIGH")[0])
         self.assertEqual(
             set(decision["unassessed_dimensions"]),
@@ -245,54 +245,36 @@ class PartialAssessmentDoesNotBecomeLow(unittest.TestCase):
         needs = need_levels(build_state(PARTIAL_SESSION))
 
         self.assertEqual(needs["mobility_need"], "NOT_ASSESSED")
-        self.assertTrue(response["exercise_plan"]["available"])
+        self.assertFalse(response["exercise_plan"]["available"])
 
 
-class PartialAssessmentProducesAConservativeStarterPlan(unittest.TestCase):
-    """(3) The dead end is gone: a real session with one usable measurement
-    produces a real, structured, safety-gated plan."""
+class PartialAssessmentDoesNotProduceAPhysioPlan(unittest.TestCase):
+    """A partial session does not create a compensatory Physio plan."""
 
     def setUp(self):
         self.result = run(build_state(PARTIAL_SESSION))
         self.response = serialise(self.result)
-        self.plan = self.result["agent_results"][0]["findings"]["plan"]
+        self.plan = None
 
-    def test_a_plan_is_produced(self):
-        self.assertTrue(self.response["exercise_plan"]["available"])
-        self.assertGreaterEqual(self.response["exercise_plan"]["exercise_count"], 1)
+    def test_no_plan_is_produced(self):
+        self.assertFalse(self.response["exercise_plan"]["available"])
 
     def test_it_is_labelled_as_the_conservative_starter_pathway(self):
         decision = self.result["orchestrator_decision"]["physio"]
 
-        self.assertEqual(decision["selection_mode"], "conservative_starter")
-        self.assertEqual(
-            self.result["agent_results"][0]["findings"]["selection_mode"],
-            "conservative_starter",
-        )
+        self.assertFalse(decision["physio_required"])
 
     def test_every_exercise_is_at_the_bottom_of_the_difficulty_range(self):
-        for entry in self.plan["exercises"]:
-            self.assertEqual(entry["difficulty"], "beginner")
+        self.assertIsNone(self.plan)
 
     def test_no_rationale_claims_a_finding(self):
-        for entry in self.plan["exercises"]:
-            self.assertIn("could not measure", entry["rationale"])
-            self.assertIn("rather than as a finding", entry["rationale"])
+        self.assertIsNone(self.plan)
 
     def test_each_decision_is_structured(self):
-        for entry in self.plan["exercises"]:
-            self.assertIn(entry["decision_type"], DECISION_TYPES)
-            self.assertEqual(entry["decision_type"], "ADD")
-            self.assertIn(entry["measurement_method"], MEASUREMENT_METHODS)
-            self.assertTrue(entry["target_need"])
-            self.assertTrue(entry["rationale"])
+        self.assertEqual(self.result["selected_agents"], [])
 
     def test_it_still_passed_the_safety_gate(self):
-        self.assertIsNotNone(self.result["safety_result"])
-        self.assertIn(
-            self.result["safety_result"]["status"],
-            ("ALLOW", "MODIFY", "PAUSE", "REFER", "NOT_ASSESSED"),
-        )
+        self.assertIsNone(self.result["safety_result"])
 
     def test_a_fully_assessed_user_with_no_need_gets_no_starter_plan(self):
         # The starter pathway must not fire when everything WAS measured
@@ -311,7 +293,7 @@ class InterventionIsNotTheAssessment(unittest.TestCase):
     tests handed back as a workout."""
 
     def test_the_starter_plan_contains_no_baseline_assessment_movement(self):
-        result = run(build_state(PARTIAL_SESSION))
+        result = run(build_state(NEED_SESSION))
         ids = [
             entry["exercise_id"]
             for entry in result["agent_results"][0]["findings"]["plan"]["exercises"]
@@ -339,7 +321,7 @@ class InterventionIsNotTheAssessment(unittest.TestCase):
                     "exercises"
                 ]
             )
-            for session in (PARTIAL_SESSION, NEED_SESSION)
+            for session in (NEED_SESSION,)
         }
 
         self.assertTrue(all(count >= 1 for count in counts))
@@ -350,7 +332,7 @@ class PersistedPlanSurvivesTheRebuild(unittest.TestCase):
     """(5), (6), (7) The persistence defect."""
 
     def setUp(self):
-        self.first = run(build_state(PARTIAL_SESSION))
+        self.first = run(build_state(NEED_SESSION))
         self.persisted = self.first["updated_user_state"]
 
     def test_the_first_run_created_a_plan(self):
@@ -367,7 +349,7 @@ class PersistedPlanSurvivesTheRebuild(unittest.TestCase):
         self.assertFalse(rebuilt_without_merge["exercise_history"]["available"])
 
     def test_the_plan_survives_build_user_state_for_user(self):
-        rebuilt = build_state(PARTIAL_SESSION, persisted_state=self.persisted)
+        rebuilt = build_state(NEED_SESSION, persisted_state=self.persisted)
 
         self.assertTrue(rebuilt["exercise_history"]["available"])
         self.assertEqual(len(rebuilt["exercise_history"]["data"]["plans"]), 1)
@@ -384,7 +366,7 @@ class PersistedPlanSurvivesTheRebuild(unittest.TestCase):
         state = self.persisted
 
         for _ in range(3):
-            state = run(build_state(PARTIAL_SESSION, persisted_state=state))[
+            state = run(build_state(NEED_SESSION, persisted_state=state))[
                 "updated_user_state"
             ]
 
@@ -451,7 +433,7 @@ class LatestEndpointReturnsThePersistedPlan(unittest.TestCase):
     """(9) and (10) What `GET /api/workflow/latest` hands the Plan page."""
 
     def test_serialising_a_persisted_state_returns_the_plan(self):
-        persisted = run(build_state(PARTIAL_SESSION))["updated_user_state"]
+        persisted = run(build_state(NEED_SESSION))["updated_user_state"]
         response = serialise_workflow_state(persisted, safety_status="ALLOW")
 
         self.assertTrue(response["exercise_plan"]["available"])

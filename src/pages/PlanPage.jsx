@@ -46,8 +46,6 @@ import {
 } from "../services/specialistData.js";
 import FoodLogPanel from "../components/FoodLogPanel.jsx";
 import SpecialistPanel from "../components/SpecialistPanel.jsx";
-import SpecialistExerciseList from "../components/SpecialistExerciseList.jsx";
-import useExerciseCompletion from "../hooks/useExerciseCompletion.js";
 import BehaviourActionPanel from "../components/BehaviourActionPanel.jsx";
 import AppNavigation from "../components/AppNavigation.jsx";
 
@@ -144,10 +142,6 @@ function PlanSection({ title, blurb, plan, emptyHint }) {
 }
 
 function PlanPage() {
-  // Today's completions, shared with the Movement panel through the one
-  // exercise-results API — not a second progress store.
-  const completion = useExerciseCompletion();
-
   const navigate = useNavigate();
 
   const [workflow, setWorkflow] = useState(null);
@@ -725,15 +719,6 @@ function PlanPage() {
                           {safeReason}
                         </p>
 
-                        {/* The exercises this specialist actually
-                            recommended, with their own reference image and
-                            the existing completion control. Reference and
-                            tick-off only — starting a camera session stays
-                            on the Movement panel and the exercise page. */}
-                        <SpecialistExerciseList
-                          exercises={specialist.exercises}
-                          completion={completion}
-                        />
                       </div>
 
                       <Link

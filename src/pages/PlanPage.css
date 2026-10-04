@@ -686,15 +686,14 @@
    auto-fit and a 260px minimum, the ~1156px content area fitted FOUR
    columns, which left the second row as two cards and a large gap. Three
    explicit columns give 3 + 3 with no empty cell.
-   align-items: stretch (the grid default, stated here because it is load
-   bearing) makes every card in a row the same height, and each card's own
-   space-between keeps its "Specialist details" link on the bottom edge. */
+   align-items: start keeps each card at its natural content height, so a
+   longer programme does not stretch its neighbours. */
 .plan-team-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   margin-top: 20px;
-  align-items: stretch;
+  align-items: start;
 }
 
 /* Tablet: two columns, three rows. */

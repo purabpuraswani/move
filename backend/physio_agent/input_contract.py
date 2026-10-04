@@ -30,6 +30,7 @@ REQUIRED_FIELDS = (
     "request_id",
     "agent_run_id",
     "physical_assessment",
+    "movement_evidence",
     "current_needs",
     "relevant_user_profile",
     "relevant_lifestyle_constraints",
@@ -98,6 +99,11 @@ def build_physio_agent_input(
             if physical_assessment_section.get("available")
             else None
         ),
+        "movement_evidence": build_movement_evidence(
+            physical_assessment_section.get("data")
+            if physical_assessment_section.get("available")
+            else None
+        ),
         "current_needs": (
             current_needs_section.get("data")
             if current_needs_section.get("available")
@@ -138,6 +144,61 @@ def build_physio_agent_input(
     return payload
 
 
+def build_movement_evidence(physical_assessment) -> dict:
+    """Expose the stored baseline measurements in domain-shaped form.
+
+    This is a projection, not a second source of truth: missing, skipped, or
+    invalid tests retain their status and produce no invented measurements.
+    """
+
+    tests = (physical_assessment or {}).get("tests") or {}
+
+    shoulder = tests.get("shoulder") or {}
+    shoulder_measurements = shoulder.get("measurements") or {}
+    left_shoulder = (shoulder_measurements.get("left") or {}).get("finalElevationDeg")
+    right_shoulder = (shoulder_measurements.get("right") or {}).get("finalElevationDeg")
+
+    ftsst = tests.get("ftsst") or {}
+    ftsst_measurements = ftsst.get("measurements") or {}
+    ftsst_setup = ftsst.get("setup") or {}
+
+    balance = tests.get("balance") or {}
+    balance_measurements = balance.get("measurements") or {}
+
+    return {
+        "shoulder": {
+            "status": shoulder.get("status", "not_started"),
+            "left_elevation_deg": left_shoulder,
+            "right_elevation_deg": right_shoulder,
+            "side_difference_deg": shoulder_measurements.get("observableDifferenceDeg"),
+            "repetitions": {
+                "left": (shoulder_measurements.get("left") or {}).get("repetitionCount"),
+                "right": (shoulder_measurements.get("right") or {}).get("repetitionCount"),
+            },
+        },
+        "sit_to_stand": {
+            "status": ftsst.get("status", "not_started"),
+            "time_seconds": ftsst_measurements.get("completionTimeSeconds"),
+            "stands_detected": ftsst_measurements.get("repetitionsDetected"),
+            "required_stands": ftsst_measurements.get("requiredRepetitions"),
+            "chair_height_cm": ftsst_setup.get("chairSeatHeightCm"),
+            "measured_side": ftsst_setup.get("measuredSide"),
+        },
+        "balance": {
+            "status": balance.get("status", "not_started"),
+            "left_hold_seconds": (balance_measurements.get("left") or {}).get("holdDurationSeconds"),
+            "right_hold_seconds": (balance_measurements.get("right") or {}).get("holdDurationSeconds"),
+            "side_difference_seconds": (
+                balance_measurements.get("observableDifferenceMs") / 1000
+                if isinstance(balance_measurements.get("observableDifferenceMs"), (int, float))
+                else None
+            ),
+            "left_end_reason": (balance_measurements.get("left") or {}).get("endReason"),
+            "right_end_reason": (balance_measurements.get("right") or {}).get("endReason"),
+        },
+    }
+
+
 def validate_physio_agent_input(payload) -> None:
     """Raise PhysioAgentInputValidationError if `payload` is malformed."""
 
@@ -157,6 +218,9 @@ def validate_physio_agent_input(payload) -> None:
     for key in ("workflow_id", "request_id", "agent_run_id"):
         if not isinstance(payload[key], str) or not payload[key]:
             _fail(f"{key} must be a non-empty string")
+
+    if not isinstance(payload["movement_evidence"], dict):
+        _fail("movement_evidence must be an object")
 
     if payload["current_needs"] is not None and not isinstance(
         payload["current_needs"], dict

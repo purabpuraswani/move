@@ -4,27 +4,10 @@ Explicit and structural, not a hidden threshold, and — since the plan
 -generation fix — explicit about the difference between "measured, no
 meaningful deficit" and "could not be measured at all".
 
-Physio is required when either:
-
-  (a) at least one of the three physical Need dimensions (mobility_need,
-      stability_need, functional_movement_need) is assessed at MEDIUM or
-      HIGH — an ordinary, evidence-driven selection; or
-
-  (b) the conservative starter pathway applies — see
-      orchestration/selection_policy.py, which carries the rule in full.
-      In short: nothing is at MEDIUM or HIGH, at least one dimension was
-      genuinely assessed, at least one could not be assessed, and this
-      user has no exercise plan yet.
-
-Branch (b) exists because branch (a) alone dead-ends a real user. A
-completed assessment in which the camera could only read one of three
-tests produces {LOW, NOT_ASSESSED, NOT_ASSESSED} — no MEDIUM, no HIGH —
-and the entire pipeline then correctly did nothing and returned an empty
-plan that the UI could not distinguish from "you have not started". That
-is a true statement about needs and a broken product. Branch (b) does not
-change what the evidence says: NOT_ASSESSED stays NOT_ASSESSED
-everywhere, and the plan built under it is beginner-only, capped, and
-explicitly labelled precautionary (physio_agent/agent.py).
+Physio is required only when at least one of the three physical Need
+dimensions (mobility_need, stability_need, functional_movement_need) is
+assessed at MEDIUM or HIGH. Missing or skipped movement evidence does not
+activate Physio and does not produce a compensatory plan.
 
 NOT_ASSESSED never becomes LOW, and it never becomes MEDIUM/HIGH. Every
 decision below names exactly which dimension(s), at which level(s),
@@ -33,12 +16,7 @@ so the Orchestrator's output stays explainable by inspection.
 """
 
 from activity_agent.reasoning import STEPS_LOW_THRESHOLD
-from orchestration.selection_policy import (
-    PHYSICAL_NEED_DIMENSIONS,
-    TRIGGERING_LEVELS,
-    conservative_starter_applies,
-    evidence_summary,
-)
+from orchestration.selection_policy import PHYSICAL_NEED_DIMENSIONS, TRIGGERING_LEVELS, evidence_summary
 from nutrition_agent.report_relevance import report_nutrition_evidence
 from recovery_agent.reasoning import SLEEP_SHORT_THRESHOLD_HOURS
 
@@ -121,28 +99,6 @@ def decide_physio_required(need_profile, *, exercise_plan_exists=False) -> dict:
             "evaluated_dimensions": evaluated,
             "unassessed_dimensions": unassessed,
             "selection_mode": SELECTION_MODE_NEED_BASED,
-        }
-
-    if conservative_starter_applies(
-        need_profile, exercise_plan_exists=exercise_plan_exists
-    ):
-        measured = ", ".join(
-            f"{dim}={level}" for dim, level in sorted(summary["assessed"].items())
-        )
-
-        return {
-            "physio_required": True,
-            "reason": (
-                "no physical need dimension is at MEDIUM or HIGH, but the "
-                f"assessment is incomplete: {', '.join(sorted(unassessed))} "
-                f"could not be evaluated while {measured} was measured. A "
-                "conservative, beginner-level starter plan is offered for "
-                "the unmeasured capabilities; this is not a finding that a "
-                "deficit exists"
-            ),
-            "evaluated_dimensions": evaluated,
-            "unassessed_dimensions": unassessed,
-            "selection_mode": SELECTION_MODE_CONSERVATIVE_STARTER,
         }
 
     return {

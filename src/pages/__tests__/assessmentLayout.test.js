@@ -132,16 +132,12 @@ test("the camera is never sticky", () => {
   }
 });
 
-test("the workspace is sized from the viewport, not from a constant", () => {
-  // The browser decides the height: the page is one viewport tall, the
-  // panel takes its natural height and the row takes what is left. An
-  // earlier version reserved an ESTIMATED panel height and overflowed
-  // by ~50px at 1366x768 because the estimate was wrong. There must be
-  // no such constant left to be wrong.
-  assert.match(
-    cssRules,
-    /\.assess-page:has\(\.assess-main--split\)[^{]*\{[^}]*height:\s*100vh/,
-    "the assessment page is no longer sized to the viewport",
+test("the workspace stays in normal document flow", () => {
+  // The camera row must not be squeezed against the controls by a viewport
+  // height lock. Short screens may scroll naturally instead.
+  assert.ok(
+    !/\.assess-page:has\(\.assess-main--split\)[^{]*\{[^}]*height:\s*100(?:dvh|vh)/.test(cssRules),
+    "the assessment page is locked to the viewport",
   );
   assert.ok(
     !cssRules.includes("--assess-reserved"),
@@ -160,10 +156,10 @@ test("the page is sized, never clipped", () => {
   }
 });
 
-test("the row takes the leftover height and the panel keeps its own", () => {
+test("the row keeps its intrinsic height and the panel keeps its own", () => {
   assert.ok(
-    blocksMentioning(".assess-workspace").some((block) => /flex:\s*1 1 auto/.test(block)),
-    "the media row no longer absorbs the leftover height",
+    blocksMentioning(".assess-workspace").some((block) => /flex:\s*0 0 auto/.test(block)),
+    "the media row is still configured to absorb leftover viewport height",
   );
   assert.match(
     cssRules,
@@ -172,22 +168,18 @@ test("the row takes the leftover height and the panel keeps its own", () => {
   );
 });
 
-test("the row keeps a floor so the camera cannot be squeezed away", () => {
-  const floors = blocksMentioning(".assess-workspace")
-    .map((block) => block.match(/min-height:\s*(\d+)px/))
-    .filter(Boolean)
-    .map((match) => Number(match[1]));
-
-  assert.ok(floors.length > 0, "the workspace has no minimum height");
+test("the hidden camera does not reserve an empty workspace", () => {
   assert.ok(
-    Math.max(...floors) >= 240,
-    `the camera floor fell to ${Math.max(...floors)}px, too short for a full-body check`,
+    blocksMentioning(".assess-main--split:has(.assess-camera--hidden) .assess-workspace")
+      .some((block) => /display:\s*none/.test(block)),
+    "the hidden camera still leaves an empty media row above setup content",
   );
 });
 
-test("the row has a ceiling so it cannot dominate a tall monitor", () => {
+test("the demonstration has a readable ceiling beside the camera", () => {
   assert.ok(
-    blocksMentioning(".assess-workspace").some((block) => /max-height:\s*\d+px/.test(block)),
+    blocksMentioning(".assess-workspace > .assess-demo-container--video > .assess-demo-video")
+      .some((block) => /max-height:\s*360px/.test(block)),
   );
 });
 
@@ -205,6 +197,7 @@ test("the camera keeps its native ratio so nothing is cropped", () => {
 
   assert.match(sized, /aspect-ratio:\s*4\s*\/\s*3/);
   assert.match(sized, /width:\s*auto/);
+  assert.match(sized, /height:\s*clamp\(300px,\s*38vh,\s*360px\)/);
   assert.match(sized, /max-height:\s*none/);
 });
 

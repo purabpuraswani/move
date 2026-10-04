@@ -418,6 +418,7 @@ function AssessmentPage() {
 
         {step === STEP.BALANCE_LEFT && (
           <BalancePanel
+            key="balance-left"
             engine={engine}
             supportSide="left"
             onComplete={completeLeftLeg}
@@ -428,6 +429,7 @@ function AssessmentPage() {
 
         {step === STEP.BALANCE_RIGHT && (
           <BalancePanel
+            key="balance-right"
             engine={engine}
             supportSide="right"
             onComplete={completeRightLeg}

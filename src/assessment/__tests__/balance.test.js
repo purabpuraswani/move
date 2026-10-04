@@ -121,6 +121,31 @@ test("a hold that ends when the foot comes down is a valid measurement", () => {
   );
 });
 
+test("the right support leg starts and completes its own hold", () => {
+  const { frames } = balanceSequence({ supportSide: "right", holdFrames: 90 });
+  const test3 = run(frames, { supportSide: "right" });
+
+  assert.equal(test3.phase, BALANCE_PHASE.DONE);
+
+  const side = test3.finish();
+
+  assert.equal(side.supportSide, "right");
+  assert.equal(side.valid, true);
+  assert.equal(side.endReason, END_REASON.FOOT_LOWERED);
+  assert.ok(side.holdDurationMs > 0);
+});
+
+test("right support with the left foot lifted records a usable duration", () => {
+  const { frames } = balanceSequence({ supportSide: "right", holdFrames: 162 });
+  const test3 = run(frames, { supportSide: "right" });
+
+  const side = test3.finish();
+
+  assert.equal(side.supportSide, "right");
+  assert.equal(side.valid, true);
+  assert.ok(side.holdDurationSeconds >= 4.8 && side.holdDurationSeconds <= 5.2);
+});
+
 test("a foot that is never lifted reports null, never zero", () => {
   const { frames } = balanceSequence({ supportSide: "left", holdFrames: 0 });
   const test3 = run(frames);
@@ -147,6 +172,44 @@ test("a lift too small to count does not start the clock", () => {
   assert.equal(side.valid, false);
   assert.equal(side.holdDurationMs, null);
   assert.ok(side.invalidReasons.includes(REASON.NO_VALID_POSITION));
+});
+
+test("an insufficient right-leg lift does not complete", () => {
+  const { frames } = balanceSequence({
+    supportSide: "right",
+    holdFrames: 90,
+    liftRatio: BALANCE.minLiftRatio / 2,
+  });
+
+  const side = run(frames, { supportSide: "right" }).finish();
+
+  assert.equal(side.supportSide, "right");
+  assert.equal(side.valid, false);
+  assert.equal(side.holdDurationMs, null);
+  assert.ok(side.invalidReasons.includes(REASON.NO_VALID_POSITION));
+});
+
+test("low-confidence right-leg landmarks remain unavailable rather than succeeding", () => {
+  const { frames } = balanceSequence({ supportSide: "right", holdFrames: 120 });
+  const damaged = frames.map((frame) => ({
+    ...frame,
+    keypoints: {
+      ...frame.keypoints,
+      right_hip: { ...frame.keypoints.right_hip, score: 0.05 },
+      right_ankle: { ...frame.keypoints.right_ankle, score: 0.05 },
+    },
+  }));
+
+  const side = run(damaged, { supportSide: "right" }).finish();
+
+  assert.equal(side.supportSide, "right");
+  assert.equal(side.valid, false);
+  assert.equal(side.holdDurationMs, null);
+  assert.ok(side.quality.reasonCounts[REASON.LOW_CONFIDENCE] > 0);
+  assert.ok(
+    side.invalidReasons.includes(REASON.LOW_CONFIDENCE) ||
+      side.invalidReasons.includes(REASON.TOO_FEW_USABLE_FRAMES)
+  );
 });
 
 test("a brief lift that does not survive the stabilisation window is not timed", () => {

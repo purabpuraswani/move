@@ -120,6 +120,12 @@ class MobilityNeedTests(unittest.TestCase):
 
         self.assertTrue(any("Difference" in item or "difference" in item for item in entry["evidence"]))
 
+    def test_notable_measured_asymmetry_becomes_a_medium_mobility_need(self):
+        state = shoulder_state(135.9, 178.3, difference=42.4)
+        entry = assess_mobility_need(state)
+
+        self.assertEqual(entry["level"], "MEDIUM")
+
     def test_only_one_usable_side_lowers_confidence(self):
         state = shoulder_state(30, None)
         entry = assess_mobility_need(state)

@@ -253,21 +253,10 @@ class ScenarioBMobilityLimitedTests(unittest.TestCase):
         self.assertEqual(needs["functional_movement_need"]["level"], "NOT_ASSESSED")
         self.assertIsNone(needs["stability_need"]["score"])
 
-        physio = _findings(self.result, "physio")
-        not_assessed = {entry["movement"] for entry in physio["not_assessed_movements"]}
-        assessed = {entry["movement"] for entry in physio["assessed_movements"]}
+        self.assertNotIn("physio", self.result["selected_agents"])
 
-        self.assertEqual(not_assessed, {"ftsst", "balance"})
-        self.assertEqual(assessed, {"shoulder"})
-
-    def test_the_plan_offered_says_it_is_precautionary_not_a_finding(self):
-        physio = _findings(self.result, "physio")
-
-        self.assertEqual(physio["selection_mode"], "conservative_starter")
-
-        for entry in physio["plan"]["exercises"]:
-            self.assertEqual(entry["difficulty"], "beginner")
-            self.assertIn("could not measure", entry["rationale"])
+    def test_no_plan_is_offered_for_unmeasured_movement_domains(self):
+        self.assertFalse(self.result["updated_user_state"]["exercise_history"]["available"])
 
     def test_nothing_in_the_run_claims_an_impairment(self):
         text = str(self.result["agent_results"]).lower()
@@ -392,14 +381,9 @@ class SpecialistsAreDifferentTests(unittest.TestCase):
             exercise_results=[],
             **_clients("d4"),
         )
-        physio = _findings(result, "physio")
-
-        for entry in physio["not_assessed_movements"]:
-            self.assertEqual(entry["status"], "skipped")
-            self.assertNotIn("movement", entry.get("reasons", []))
-
-        self.assertNotIn("stability_need", physio["need_levels"].keys() - {"stability_need"})
-        self.assertEqual(physio["need_levels"]["stability_need"], "NOT_ASSESSED")
+        self.assertNotIn("physio", result["selected_agents"])
+        needs = _state(MOBILITY_LIMITED, _assessment(shoulder=(118, 122)))["current_needs"]["data"]
+        self.assertEqual(needs["stability_need"]["level"], "NOT_ASSESSED")
 
     def test_5_behaviour_tracks_adherence_evidence(self):
         state = _state(OFFICE_WORKER)

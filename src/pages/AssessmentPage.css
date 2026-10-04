@@ -955,6 +955,16 @@
     padding: 14px 16px;
   }
 
+  .assess-header__actions {
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .assess-header__actions .assess-btn--quiet {
+    padding: 6px 8px;
+    font-size: 0.76rem;
+  }
+
   .assess-main {
     padding: 20px 14px 48px;
     padding: 16px 14px 48px;
@@ -1417,19 +1427,10 @@
    below it. */
 
 @media (min-width: 900px) {
-  /* One viewport tall, and only while a camera check is on screen. The
-     intro, safety and results screens are ordinary documents and keep
-     scrolling; :has(.assess-camera--hidden) backs this out again for
-     the in-check instruction screens, where there is no camera to hold
-     in view and the text may legitimately run long. */
-  .assess-page:has(.assess-main--split):not(:has(.assess-camera--hidden)) {
-    height: 100vh;
-    height: 100dvh;
-  }
-
   .assess-main--split {
-    /* Sized for a workstation, not an article. */
-    flex: 1 1 auto;
+    /* Keep assessment states in normal document flow. The camera workspace
+       must not shrink just because the controls below it are tall. */
+    flex: 0 0 auto;
     min-height: 0;
     padding-top: 14px;
     padding-bottom: 16px;
@@ -1437,16 +1438,10 @@
   }
 
   .assess-workspace {
-    /* Takes the leftover height after the panel below has taken its
-       own. The floor keeps the camera readable for a full-body check
-       (one-leg stand, sit-to-stand); if the viewport cannot afford it,
-       the page scrolls rather than shrinking the camera further. */
-    flex: 1 1 auto;
-    min-height: 240px;
-    /* The camera preview is absolutely positioned, so the camera column
-       has no intrinsic height; without this the row would be sized by
-       whichever .mp4 is loaded. */
-    max-height: 560px;
+     /* Size from the camera and demo instead of the remaining viewport. */
+     flex: 0 0 auto;
+     min-height: 0;
+     max-height: none;
   }
 
   /* Natural height, and never squeezed: every readiness control stays
@@ -1473,9 +1468,11 @@
   }
 
   .assess-workspace > .assess-camera > .assess-camera__frame {
+    flex: 0 0 auto;
     max-width: 100%;
     max-height: none;
     width: auto;
+    height: clamp(300px, 38vh, 360px);
     aspect-ratio: 4 / 3;
     margin: 0;
   }
@@ -1491,9 +1488,16 @@
 
   /* contain, so a demonstration is letterboxed rather than cropped. */
   .assess-workspace > .assess-demo-container--video > .assess-demo-video {
-    max-height: none;
+    flex: 0 0 auto;
+    max-height: 360px;
     aspect-ratio: auto;
     object-fit: contain;
+  }
+
+  /* A hidden camera is still mounted while a check's instructions or setup
+     state is rendered. It must not leave an empty media row above the panel. */
+  .assess-main--split:has(.assess-camera--hidden) .assess-workspace {
+    display: none;
   }
 
   /* Secondary to seeing yourself: same words, less air. */

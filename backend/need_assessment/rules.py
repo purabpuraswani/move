@@ -83,6 +83,12 @@ def assess_mobility_need(user_state: dict) -> dict:
             "threshold for calling out an asymmetry."
         )
 
+    notable_asymmetry = (
+        len(usable) == 2
+        and isinstance(difference, (int, float))
+        and difference >= SHOULDER_ASYMMETRY_NOTABLE_DEG
+    )
+
     if lowest < SHOULDER_HIGH_NEED_BELOW_DEG:
         level = "HIGH"
         score = 1.0 - lowest / SHOULDER_HIGH_NEED_BELOW_DEG * 0.5
@@ -93,6 +99,11 @@ def assess_mobility_need(user_state: dict) -> dict:
             / (SHOULDER_MEDIUM_NEED_BELOW_DEG - SHOULDER_HIGH_NEED_BELOW_DEG)
             * 0.25
         )
+    elif notable_asymmetry:
+        # Reuse the existing asymmetry marker as a domain need when both
+        # sides were measured adequately; do not invent a second threshold.
+        level = "MEDIUM"
+        score = 0.25
     else:
         level = "LOW"
         score = max(0.0, 0.25 - (lowest - SHOULDER_MEDIUM_NEED_BELOW_DEG) / 360)

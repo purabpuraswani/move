@@ -212,6 +212,7 @@ def extract_assessment_tests(assessment_doc) -> dict:
         test_id: {
             "status": (tests.get(test_id) or {}).get("status", "not_started"),
             "measurements": (tests.get(test_id) or {}).get("measurements"),
+            "setup": (tests.get(test_id) or {}).get("setup"),
             "quality": (tests.get(test_id) or {}).get("quality"),
             "invalidReasons": (tests.get(test_id) or {}).get("invalid_reasons"),
             "attempts": (tests.get(test_id) or {}).get("attempts"),
