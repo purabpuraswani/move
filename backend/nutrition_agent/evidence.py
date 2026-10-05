@@ -19,6 +19,12 @@ from need_assessment.rules import (
     MEAL_PATTERN_KNOWN_VALUES,
     PROCESSED_FOOD_KNOWN_VALUES,
 )
+from nutrition_library.check_in import (
+    EATING_OUT_KNOWN_VALUES,
+    GOAL_VALUES,
+    MEALS_PER_DAY,
+    NUTRITION_GOAL,
+)
 from orchestration.evidence import (
     KNOWN,
     MISSING,
@@ -74,6 +80,24 @@ def build_nutrition_evidence_view(user_state: dict, *, food_log_entries: list = 
             "processed_food_frequency",
             _vocabulary_value(data.get("processed_food_frequency"), PROCESSED_FOOD_KNOWN_VALUES),
             label="Processed food frequency",
+        ),
+        # The Nutrition & Lifestyle check-in answers. The goal is a preference,
+        # carried as context so the agent can honour what the user asked to work
+        # on, and it is never counted as a nutrition finding.
+        "meals_per_day": signal(
+            "meals_per_day",
+            _number(data.get(MEALS_PER_DAY)),
+            label="Meals per day",
+        ),
+        "eating_out_frequency": signal(
+            "eating_out_frequency",
+            _vocabulary_value(data.get("eating_out_frequency"), EATING_OUT_KNOWN_VALUES),
+            label="Eating out frequency",
+        ),
+        "nutrition_goal": signal(
+            NUTRITION_GOAL,
+            _vocabulary_value(data.get(NUTRITION_GOAL), GOAL_VALUES),
+            label="Stated nutrition goal",
         ),
     }
 

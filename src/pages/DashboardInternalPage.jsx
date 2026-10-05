@@ -896,7 +896,7 @@ function DashboardInternalPage() {
             {planHistory?.available ? (
               <>
                 <PlanHistoryTable
-                  title="Physiotherapy"
+                  title="Exercise & Movement (physio domain)"
                   plans={
                     planHistory.plan_history
                       ?.physio

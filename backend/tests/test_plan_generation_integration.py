@@ -22,6 +22,7 @@ is this project's own test double for the tool layer and nothing else.
 """
 
 import ast
+import re
 import unittest
 from pathlib import Path
 
@@ -495,17 +496,47 @@ class LatestEndpointReturnsThePersistedPlan(unittest.TestCase):
 
     def test_no_internal_identifier_leaks_into_the_response(self):
         response = serialise(run(build_state(PARTIAL_SESSION)))
-        text = repr(response)
 
-        for forbidden in (
+        # Checked as keys and as values, not as substrings of the whole
+        # repr: `plan_id` and `plan_ids` are MoveWell's own stable,
+        # published domain identifiers (they name a plan version a user can
+        # hold on to), and a substring search cannot tell them apart from a
+        # Mongo `_id`. What must not appear is an actual internal
+        # identifier, so that is what this checks.
+        keys = set()
+        values = set()
+
+        def collect(value):
+            if isinstance(value, dict):
+                for key, nested in value.items():
+                    keys.add(key)
+                    collect(nested)
+            elif isinstance(value, (list, tuple)):
+                for nested in value:
+                    collect(nested)
+            elif isinstance(value, str):
+                values.add(value)
+
+        collect(response)
+
+        for forbidden_key in (
             "workflow_id",
             "request_id",
             "agent_run_id",
             "tool_call_id",
             "mcp_session_id",
             "_id",
+            "user_id",
         ):
-            self.assertNotIn(forbidden, text)
+            self.assertNotIn(forbidden_key, keys)
+
+        # A 24-character hex string is what a Mongo ObjectId looks like when
+        # it is stringified, which is how it would leak.
+        for value in values:
+            self.assertIsNone(
+                re.fullmatch(r"[0-9a-f]{24}", value),
+                f"response contains something shaped like a Mongo ObjectId: {value}",
+            )
 
 
 if __name__ == "__main__":

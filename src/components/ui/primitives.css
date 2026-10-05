@@ -1,0 +1,98 @@
+/**
+ * Styles for the shared primitives in primitives.jsx.
+ *
+ * Kept beside them so the class names and the markup that uses them are read
+ * together. Everything here is built on the tokens in src/index.css.
+ */
+
+.mw-page-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+}
+
+.mw-page-title { margin-top: 2px; }
+.mw-page-lead { margin-top: 2px; }
+.mw-page-actions { margin-top: var(--space-3); }
+
+/* Empty state ------------------------------------------------------------- */
+.mw-empty-icon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.mw-empty-why { max-width: 58ch; }
+
+.mw-empty--warn {
+  background: var(--warn-soft);
+  border-color: var(--warn-line);
+}
+
+/* Detail drawer ----------------------------------------------------------- */
+.mw-details {
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.mw-details > summary {
+  cursor: pointer;
+  list-style: none;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mw-details > summary::-webkit-details-marker { display: none; }
+
+.mw-details > summary::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-right: 1.6px solid currentColor;
+  border-bottom: 1.6px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform var(--dur-fast) var(--ease);
+}
+
+.mw-details[open] > summary::before { transform: rotate(45deg); }
+
+.mw-details-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-top: var(--space-4);
+  animation: mw-fade var(--dur) var(--ease) both;
+}
+
+/* Field rows -------------------------------------------------------------- */
+.mw-field-row {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+
+.mw-field-key {
+  flex: 0 0 auto;
+  min-width: 96px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.mw-field-value { color: var(--ink); }
+
+.mw-field-row--warn .mw-field-value { color: var(--warn); }
+
+@media (max-width: 560px) {
+  .mw-field-row { flex-direction: column; gap: 2px; }
+  .mw-field-key { min-width: 0; }
+}

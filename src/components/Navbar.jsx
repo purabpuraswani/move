@@ -12,7 +12,7 @@ function Navbar() {
           </div>
 
           <span>
-            Move<span>Well</span> AI
+            Move<span>Well</span>
           </span>
         </Link>
 

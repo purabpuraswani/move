@@ -17,23 +17,19 @@ import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 
 import OnboardingPage from "./pages/OnboardingPage";
-import Dashboard from "./pages/Dashboard";
 import AssessmentPage from "./pages/AssessmentPage";
 import HistoryPage from "./pages/HistoryPage";
 import ReportsPage from "./pages/ReportsPage";
 import ReportReviewPage from "./pages/ReportReviewPage";
 import PlanPage from "./pages/PlanPage";
 import ProgressPage from "./pages/ProgressPage";
+import ProfilePage from "./pages/ProfilePage";
+import NutritionCheckInPage from "./pages/NutritionCheckInPage";
+import TodayPage from "./pages/TodayPage";
+import ResultsPage from "./pages/ResultsPage";
 import ExercisePage from "./pages/ExercisePage";
 import DashboardInternalPage from "./pages/DashboardInternalPage";
 import SpecialistDetailPage from "./pages/SpecialistDetailPage";
-
-// DEPRECATED. The legacy guidance path (Wellness Guide / Care Navigator,
-// backend/agents/ + /api/guidance). It is kept reachable so an existing
-// bookmark does not break, but it is no longer part of the MoveWell journey:
-// the plan a user is given comes from the Orchestrator via /plan. Nothing in
-// the primary flow links here.
-import GuidancePage from "./pages/GuidancePage";
 
 function App() {
 
@@ -79,11 +75,34 @@ function App() {
             the backend releases only to the owner of the token on the request.
             Hiding a route in the browser protects nothing by itself. */}
 
+        {/* TODAY is the home of the product: how am I doing, what matters now,
+            what should I do today. /dashboard is kept as an alias so every
+            existing link and bookmark still lands on it. */}
+        <Route
+          path="/today"
+          element={
+            <RequireAuth>
+              <TodayPage />
+            </RequireAuth>
+          }
+        />
+
         <Route
           path="/dashboard"
           element={
             <RequireAuth>
-              <Dashboard />
+              <TodayPage />
+            </RequireAuth>
+          }
+        />
+
+        {/* YOU is the person's own information: profile, health, reports, past
+            sessions, and the nutrition check-in. /profile stays as an alias. */}
+        <Route
+          path="/you"
+          element={
+            <RequireAuth>
+              <ProfilePage />
             </RequireAuth>
           }
         />
@@ -111,6 +130,18 @@ function App() {
           element={
             <RequireAuth>
               <AssessmentPage />
+            </RequireAuth>
+          }
+        />
+
+        {/* Where the assessment journey ends: the score, what matters most, the
+            team it brought in, and the plan. A reassessment lands here too,
+            which is why this screen says whether the plan actually changed. */}
+        <Route
+          path="/results"
+          element={
+            <RequireAuth>
+              <ResultsPage />
             </RequireAuth>
           }
         />
@@ -165,6 +196,29 @@ function App() {
           }
         />
 
+        {/* The user's own profile, editable section by section, and the
+            nutrition check-in that gives the nutrition specialist something to
+            work from. Both read and write the same profile document the
+            onboarding form maintains, so a change here is input to the next
+            plan review — not a second copy of the user. */}
+        <Route
+          path="/profile"
+          element={
+            <RequireAuth>
+              <ProfilePage />
+            </RequireAuth>
+          }
+        />
+
+        <Route
+          path="/nutrition-check-in"
+          element={
+            <RequireAuth>
+              <NutritionCheckInPage />
+            </RequireAuth>
+          }
+        />
+
         {/* Performing one exercise from the plan. This is what makes
             src/exerciseAssessment/ reachable: without a route there was no
             way for a user to run those engines, and no exercise result was
@@ -194,17 +248,6 @@ function App() {
           element={
             <RequireAuth>
               <SpecialistDetailPage />
-            </RequireAuth>
-          }
-        />
-
-        {/* DEPRECATED, kept only so an existing bookmark still resolves.
-            Superseded by /plan. Not linked from anywhere in the app. */}
-        <Route
-          path="/guidance"
-          element={
-            <RequireAuth>
-              <GuidancePage />
             </RequireAuth>
           }
         />

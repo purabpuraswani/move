@@ -50,7 +50,13 @@ def _object_id(value, label: str = "exercise result id") -> ObjectId:
         raise ExerciseResultNotFoundError(f"{label} is not a valid id") from None
 
 
-def save_exercise_result(user_id: str, document: dict, *, plan_id: str = None) -> dict:
+def save_exercise_result(
+    user_id: str,
+    document: dict,
+    *,
+    plan_id: str = None,
+    item_id: str = None,
+) -> dict:
     """Store one validated Exercise Result (exercise_assessment.schema's
     output) for the authenticated user.
 
@@ -63,6 +69,12 @@ def save_exercise_result(user_id: str, document: dict, *, plan_id: str = None) -
     adherence can later be computed per-plan; a result with no known plan
     (a user doing an exercise on their own) is still stored, with
     plan_id=None — never fabricated.
+
+    `item_id` is optional and links the result to the specific plan item
+    that asked for it. For an exercise item that is the exercise library id
+    (the same identifier the unified plan publishes as `item_id`), which is
+    what makes "this exact plan item was performed" answerable later rather
+    than only "this exercise was performed at some point".
     """
 
     now = datetime.now(timezone.utc)
@@ -71,6 +83,7 @@ def save_exercise_result(user_id: str, document: dict, *, plan_id: str = None) -
         **document,
         "user_id": user_id,
         "plan_id": plan_id,
+        "item_id": item_id,
         "recorded_at": now,
     }
 
@@ -184,5 +197,6 @@ def serialise_exercise_result(document: dict) -> dict:
         "measurements": document.get("measurements"),
         "errors": document.get("errors", []),
         "planId": document.get("plan_id"),
+        "itemId": document.get("item_id"),
         "recordedAt": _isoformat(document.get("recorded_at")),
     }

@@ -16,7 +16,7 @@ function LandingPage() {
 
             <div className="eyebrow">
               <span className="pulse-dot"></span>
-              AI-powered movement & lifestyle intelligence
+              Movement and lifestyle coaching, in one place
             </div>
 
             <h1>
@@ -26,9 +26,11 @@ function LandingPage() {
             </h1>
 
             <p className="hero-description">
-              MoveWell AI combines computer vision, machine learning and
-              personalized AI agents to understand your movement patterns
-              and help you build a healthier, more active lifestyle.
+              Tell MoveWell about yourself, then do three movement checks on
+              your own device — an arm and shoulder raise, five sit-to-stands
+              and a single-leg stand. Your measurements become one MoveWell
+              Score you can follow over time, and one plan of concrete actions
+              built by five specialists.
             </p>
 
             <div className="hero-buttons">
@@ -44,22 +46,22 @@ function LandingPage() {
 
             <div className="hero-trust">
               <div className="trust-item">
-                <strong>MoveNet</strong>
-                <span>Pose analysis</span>
+                <strong>Three checks</strong>
+                <span>on your own device</span>
               </div>
 
               <div className="trust-divider"></div>
 
               <div className="trust-item">
-                <strong>ML</strong>
-                <span>Risk assessment</span>
+                <strong>One score</strong>
+                <span>progress over time</span>
               </div>
 
               <div className="trust-divider"></div>
 
               <div className="trust-item">
-                <strong>AI Agents</strong>
-                <span>Personal guidance</span>
+                <strong>Five specialists</strong>
+                <span>one plan</span>
               </div>
             </div>
 
@@ -74,13 +76,13 @@ function LandingPage() {
 
               <div className="analysis-header">
                 <div>
-                  <span className="small-label">LIVE ANALYSIS</span>
-                  <h3>Movement Assessment</h3>
+                  <span className="small-label">MOVEWELL ASSESSMENT</span>
+                  <h3>Your movement checks</h3>
                 </div>
 
                 <div className="live-indicator">
                   <span></span>
-                  Live
+                  Preview
                 </div>
               </div>
 
@@ -132,13 +134,13 @@ function LandingPage() {
                 <div className="scan-line"></div>
 
                 <div className="measurement measurement-one">
-                  <span>ROM</span>
-                  <strong>82</strong>
+                  <span>MOVEMENT CHECKS</span>
+                  <strong>3</strong>
                 </div>
 
                 <div className="measurement measurement-two">
-                  <span>SYMMETRY</span>
-                  <strong>91</strong>
+                  <span>SPECIALISTS</span>
+                  <strong>5</strong>
                 </div>
 
               </div>
@@ -146,27 +148,27 @@ function LandingPage() {
               <div className="analysis-stats">
 
                 <div className="stat">
-                  <span>Mobility</span>
+                  <span>Shoulder raise</span>
                   <div className="progress">
-                    <div style={{ width: "82%" }}></div>
+                    <div style={{ width: "100%" }}></div>
                   </div>
-                  <strong>82%</strong>
+                  <strong>1</strong>
                 </div>
 
                 <div className="stat">
-                  <span>Stability</span>
+                  <span>Sit-to-stand</span>
                   <div className="progress">
-                    <div style={{ width: "76%" }}></div>
+                    <div style={{ width: "100%" }}></div>
                   </div>
-                  <strong>76%</strong>
+                  <strong>2</strong>
                 </div>
 
                 <div className="stat">
-                  <span>Consistency</span>
+                  <span>Single-leg stand</span>
                   <div className="progress">
-                    <div style={{ width: "88%" }}></div>
+                    <div style={{ width: "100%" }}></div>
                   </div>
-                  <strong>88%</strong>
+                  <strong>3</strong>
                 </div>
 
               </div>
@@ -174,16 +176,16 @@ function LandingPage() {
             </div>
 
             <div className="floating-card floating-score">
-              <span>Movement Score</span>
-              <strong>84</strong>
-              <small>Good movement profile</small>
+              <span>MoveWell Score</span>
+              <strong>One number</strong>
+              <small>that follows your progress</small>
             </div>
 
             <div className="floating-card floating-ai">
               <div className="ai-icon">✦</div>
               <div>
-                <span>MoveWell AI</span>
-                <small>Personalized guidance ready</small>
+                <span>Safety review</span>
+                <small>Checks every plan first</small>
               </div>
             </div>
 
@@ -199,7 +201,7 @@ function LandingPage() {
         <div className="section-heading">
 
           <span className="section-tag">
-            INTELLIGENT WELLNESS
+            WHAT YOU GET
           </span>
 
           <h2>
@@ -209,9 +211,9 @@ function LandingPage() {
           </h2>
 
           <p>
-            MoveWell AI brings together movement analysis, lifestyle
-            information and evidence-grounded AI to create a personalized
-            wellness experience.
+            MoveWell measures three movement checks, turns them into a score
+            with the areas behind it, and works out what matters most right
+            now — then brings in the specialists for it.
           </p>
 
         </div>
@@ -221,45 +223,50 @@ function LandingPage() {
           <div className="feature-card">
             <div className="feature-number">01</div>
             <div className="feature-icon">⌁</div>
-            <h3>Movement Analysis</h3>
+            <h3>Three movement checks</h3>
             <p>
-              Analyze movement through webcam-based pose estimation
-              using MoveNet and extract meaningful movement characteristics.
+              Do an arm and shoulder raise, five sit-to-stands and a
+              single-leg stand on your own device, with your camera. MoveWell
+              measures how you move in each one.
             </p>
             <div className="feature-tags">
-              <span>ROM</span>
-              <span>Symmetry</span>
-              <span>Stability</span>
+              <span>Shoulder raise</span>
+              <span>Sit-to-stand ×5</span>
+              <span>Single-leg stand</span>
             </div>
           </div>
 
           <div className="feature-card featured-card">
             <div className="feature-number">02</div>
             <div className="feature-icon">◈</div>
-            <h3>AI Risk Assessment</h3>
+            <h3>Your MoveWell Score</h3>
             <p>
-              Combine movement and lifestyle parameters with machine
-              learning to build a personalized sedentary-lifestyle profile.
+              Your measurements come together as one MoveWell Score, with the
+              areas behind it. It is a way of following your progress over
+              time — not a medical measurement and not a diagnosis.
             </p>
             <div className="feature-tags">
-              <span>ML</span>
-              <span>Personalized</span>
-              <span>Data-driven</span>
+              <span>One number</span>
+              <span>The areas behind it</span>
+              <span>Over time</span>
             </div>
           </div>
 
           <div className="feature-card">
             <div className="feature-number">03</div>
             <div className="feature-icon">✦</div>
-            <h3>Specialist AI Agents</h3>
+            <h3>Five specialists, one plan</h3>
             <p>
-              Get personalized guidance from dedicated AI assistants
-              focused on movement, fitness, yoga and ergonomics.
+              MoveWell works out what matters most right now, then your five
+              specialists — movement, nutrition, habits, recovery and safety —
+              build one plan of concrete actions together.
             </p>
             <div className="feature-tags">
-              <span>Physio</span>
-              <span>Yoga</span>
-              <span>Fitness</span>
+              <span>Movement</span>
+              <span>Nutrition</span>
+              <span>Habits</span>
+              <span>Recovery</span>
+              <span>Safety</span>
             </div>
           </div>
 
@@ -278,9 +285,9 @@ function LandingPage() {
           </span>
 
           <h2>
-            From movement to
+            From three checks to
             <br />
-            <span>meaningful action.</span>
+            <span>one plan you can follow.</span>
           </h2>
 
         </div>
@@ -291,37 +298,38 @@ function LandingPage() {
 
           <div className="process-step">
             <div className="process-icon">01</div>
-            <h3>Assess</h3>
+            <h3>Your profile</h3>
             <p>
-              Complete a short lifestyle questionnaire and perform
-              simple movement assessments through your webcam.
+              Answer a short set of questions about your movement, your daily
+              habits and what you would like to change.
             </p>
           </div>
 
           <div className="process-step">
             <div className="process-icon">02</div>
-            <h3>Understand</h3>
+            <h3>Three checks</h3>
             <p>
-              MoveNet extracts movement features while ML models
-              analyze your lifestyle and movement profile.
+              Do an arm and shoulder raise, five sit-to-stands and a
+              single-leg stand on your own device. MoveWell measures each one.
             </p>
           </div>
 
           <div className="process-step">
             <div className="process-icon">03</div>
-            <h3>Personalize</h3>
+            <h3>Your team</h3>
             <p>
-              AI agents use your profile and trusted health knowledge
-              to create relevant recommendations.
+              MoveWell works out what matters most right now — mobility,
+              stability, functional movement, daily habits, nutrition or
+              activity — and brings in the specialists for it.
             </p>
           </div>
 
           <div className="process-step">
             <div className="process-icon">04</div>
-            <h3>Improve</h3>
+            <h3>Follow and adapt</h3>
             <p>
-              Follow personalized movement and lifestyle suggestions
-              and track your progress over time.
+              Do the actions in your plan, record what you did, and the next
+              assessment adapts the plan around it.
             </p>
           </div>
 
@@ -330,7 +338,7 @@ function LandingPage() {
       </section>
 
 
-      {/* AGENTS */}
+      {/* TEAM */}
       <section id="about" className="agent-section">
 
         <div className="agent-container">
@@ -348,15 +356,15 @@ function LandingPage() {
             </h2>
 
             <p>
-              MoveWell is a wellness platform that brings movement
-              assessment, lifestyle signals and specialist guidance
-              together in one place. It helps you understand where to
-              start, choose achievable actions and learn from your
-              progress over time.
+              MoveWell is one system for movement and lifestyle. It measures
+              three movement checks with you, turns them into a score and the
+              areas behind it, and works out what matters most right now. Then
+              five specialists build one plan of concrete actions — and the
+              safety review checks that plan before you see it.
             </p>
 
             <Link to="/signup" className="primary-button">
-              Explore MoveWell
+              Start with three checks
               <span>→</span>
             </Link>
 
@@ -364,8 +372,8 @@ function LandingPage() {
               <div className="project-pillar">
                 <div className="pillar-icon">01</div>
                 <div>
-                  <strong>Understand first</strong>
-                  <span>Use movement and lifestyle context before suggesting change.</span>
+                  <strong>Measure first</strong>
+                  <span>Three checks on your own device, before anything is suggested.</span>
                 </div>
               </div>
 
@@ -373,7 +381,7 @@ function LandingPage() {
                 <div className="pillar-icon">02</div>
                 <div>
                   <strong>Make it personal</strong>
-                  <span>Receive guidance shaped around your needs, pace and routine.</span>
+                  <span>One plan shaped around your needs, your pace and your routine.</span>
                 </div>
               </div>
 
@@ -381,7 +389,7 @@ function LandingPage() {
                 <div className="pillar-icon">03</div>
                 <div>
                   <strong>Improve safely</strong>
-                  <span>Track what you do and adapt recommendations over time.</span>
+                  <span>A safety review checks every plan before it is shown to you.</span>
                 </div>
               </div>
             </div>
@@ -390,38 +398,51 @@ function LandingPage() {
 
           <div className="agent-cards">
 
+            {/* The five specialists the product actually has. Each card names
+                the specialist and the coach role it plays, and there is no
+                sixth: a role the product cannot field is never promised. */}
+
             <div className="agent-card">
-              <div className="agent-avatar physio">P</div>
+              <div className="agent-avatar physio">E</div>
               <div>
-                <strong>Physiotherapy</strong>
-                <span>Movement & mobility</span>
+                <strong>Exercise &amp; Movement</strong>
+                <span>Your movement coach — mobility, stability and daily activity</span>
               </div>
               <span className="agent-arrow">↗</span>
             </div>
 
             <div className="agent-card">
-              <div className="agent-avatar yoga">Y</div>
+              <div className="agent-avatar fitness">N</div>
               <div>
-                <strong>Yoga & Mobility</strong>
-                <span>Flexibility & recovery</span>
+                <strong>Nutrition &amp; Lifestyle</strong>
+                <span>Your nutrition coach — eating patterns and hydration</span>
               </div>
               <span className="agent-arrow">↗</span>
             </div>
 
             <div className="agent-card">
-              <div className="agent-avatar fitness">F</div>
+              <div className="agent-avatar ergo">B</div>
               <div>
-                <strong>Fitness</strong>
-                <span>Activity & movement</span>
+                <strong>Behaviour &amp; Adherence</strong>
+                <span>Your habit coach — routines that hold up in a normal week</span>
               </div>
               <span className="agent-arrow">↗</span>
             </div>
 
             <div className="agent-card">
-              <div className="agent-avatar ergo">E</div>
+              <div className="agent-avatar yoga">R</div>
               <div>
-                <strong>Ergonomics</strong>
-                <span>Workplace wellness</span>
+                <strong>Recovery &amp; Care</strong>
+                <span>Your recovery coach — rest, sleep and pacing</span>
+              </div>
+              <span className="agent-arrow">↗</span>
+            </div>
+
+            <div className="agent-card">
+              <div className="agent-avatar physio">S</div>
+              <div>
+                <strong>Safety &amp; Practitioner Recommendation</strong>
+                <span>Safety review — checks your plan before you see it</span>
               </div>
               <span className="agent-arrow">↗</span>
             </div>
@@ -449,11 +470,11 @@ function LandingPage() {
         </h2>
 
         <p>
-          Let MoveWell AI help you understand it.
+          Three checks, one MoveWell Score, and one plan you can follow.
         </p>
 
         <Link to="/signup" className="cta-button">
-          Get started for free
+          Start your assessment
           <span>→</span>
         </Link>
 
@@ -466,16 +487,16 @@ function LandingPage() {
         <div className="footer-brand">
           <div className="brand-icon">M</div>
           <span>
-            Move<span>Well</span> AI
+            Move<span>Well</span>
           </span>
         </div>
 
         <p>
-          Intelligent movement. Personalized wellness.
+          Movement, lifestyle and one plan that adapts.
         </p>
 
         <span className="copyright">
-          © 2026 MoveWell AI
+          © 2026 MoveWell
         </span>
 
       </footer>

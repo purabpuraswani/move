@@ -36,6 +36,8 @@ runs) gets a Progress Agent result with `findings["nutrition_progress"]
 is None`, never a guessed value.
 """
 
+from orchestration.pose_boundary import find_pose_or_media_violation
+
 REQUIRED_FIELDS = (
     "workflow_id",
     "request_id",
@@ -55,6 +57,7 @@ REQUIRED_FIELDS = (
     "nutrition_period_previous",
     "nutrition_period_current",
 )
+
 
 
 class ProgressAgentInputValidationError(ValueError):
@@ -160,20 +163,11 @@ def validate_progress_agent_input(payload) -> None:
         if not isinstance(payload[key], list):
             _fail(f"{key} must be a list")
 
-    # Same second line of defence every other agent input contract applies:
-    # nothing shaped like raw pose/frame/video data may cross this boundary.
-    forbidden_substrings = (
-        "keypoint", "landmark", "skeleton", "rawframe", "video", "image",
-        "base64", "dataurl",
-    )
-    serialised = str(payload).lower()
-    # "image_plane" is legitimate protocol definition metadata (e.g. camera_image_plane_projection,
-    # downward_vertical_image_plane) describing projection geometry, not raw image data.
-    sanitized = serialised.replace("image_plane", "").replace("camera_image", "")
+    # Same second line of defence every other agent input contract applies,
+    # from one shared implementation (orchestration/pose_boundary.py): nothing
+    # shaped like raw pose/frame/video data may cross this boundary, while the
+    # scalar quality summaries a real assessment carries still pass.
+    violation = find_pose_or_media_violation(payload)
 
-    for term in forbidden_substrings:
-        if term in sanitized:
-            _fail(
-                f"Progress Agent input appears to contain {term!r} — "
-                "refusing to build an input that might carry raw media data"
-            )
+    if violation:
+        _fail(f"Progress Agent input {violation}")

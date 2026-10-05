@@ -365,7 +365,7 @@ class SpecialistsAreDifferentTests(unittest.TestCase):
             for c in build_specialists_team(
                 _state(OFFICE_WORKER), safety_result={"status": "ALLOW"}
             )
-            if c["id"] == "nutrition"
+            if c["id"] == "nutrition_lifestyle"
         )
 
         self.assertEqual(card["evidence_status"], STATUS_INSUFFICIENT_EVIDENCE)

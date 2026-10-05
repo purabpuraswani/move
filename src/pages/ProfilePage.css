@@ -1,0 +1,63 @@
+/**
+ * YOU — layout only.
+ *
+ * Every colour, radius, shadow and rhythm on this page comes from the tokens
+ * and the shared classes in src/index.css (mw-card, mw-btn, mw-badge, mw-field,
+ * mw-input, mw-label, mw-help, mw-error, mw-success, mw-meta, mw-section,
+ * mw-stack, mw-row, mw-empty, mw-details). What is here is only the two shapes
+ * the design system does not already have: the stack of field rows inside a
+ * section, and the width an input should take when it holds one number.
+ */
+
+.you-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.you-field {
+  max-width: 420px;
+}
+
+.you-number {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.you-number .mw-input {
+  max-width: 150px;
+}
+
+.you-unit {
+  color: var(--ink-faint);
+  font-size: 13px;
+}
+
+/* Values the server derives rather than accepts, set apart from the ones the
+   person can change. */
+.you-derived {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+.you-saved {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+@media (max-width: 480px) {
+  .you-field {
+    max-width: none;
+  }
+
+  .you-number .mw-input {
+    max-width: none;
+    flex: 1 1 auto;
+  }
+}

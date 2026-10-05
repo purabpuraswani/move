@@ -69,7 +69,7 @@ function SignupPage() {
           </div>
 
           <span>
-            Move<span>Well</span> AI
+            Move<span>Well</span>
           </span>
 
         </Link>
@@ -78,7 +78,7 @@ function SignupPage() {
         <div className="auth-visual-content">
 
           <span className="section-tag">
-            PERSONALIZED WELLNESS
+            YOUR FIRST ASSESSMENT
           </span>
 
           <h1>
@@ -88,10 +88,9 @@ function SignupPage() {
           </h1>
 
           <p>
-            MoveWell AI combines movement analysis,
-            lifestyle information and intelligent
-            wellness guidance to help you understand
-            your body better.
+            MoveWell measures three movement checks on your own
+            device, turns them into one score you can follow,
+            and builds one plan of concrete actions with you.
           </p>
 
 
@@ -99,17 +98,17 @@ function SignupPage() {
 
             <div>
               <span>✓</span>
-              <p>AI-powered movement assessment</p>
+              <p>Three movement checks on your own device</p>
             </div>
 
             <div>
               <span>✓</span>
-              <p>Personalized wellness insights</p>
+              <p>One MoveWell Score, with the areas behind it</p>
             </div>
 
             <div>
               <span>✓</span>
-              <p>Guidance from specialized AI assistants</p>
+              <p>Five specialists, working on one plan</p>
             </div>
 
           </div>
@@ -142,7 +141,7 @@ function SignupPage() {
               M
             </div>
 
-            Move<span>Well</span> AI
+            Move<span>Well</span>
 
           </Link>
 
@@ -162,7 +161,8 @@ function SignupPage() {
             </h2>
 
             <p>
-              Start your personalized wellness journey.
+              It starts with a short profile, then your three
+              movement checks and your first MoveWell Score.
             </p>
 
           </div>
@@ -257,10 +257,10 @@ function SignupPage() {
               />
 
               <span>
-                I agree to the MoveWell AI terms and
-                understand that this platform provides
-                wellness information and is not a
-                replacement for professional medical advice.
+                I agree to the MoveWell terms and
+                understand that MoveWell shows me my own
+                measurements and is not a replacement for
+                professional medical advice.
               </span>
 
             </label>
@@ -328,8 +328,10 @@ function SignupPage() {
           {/* Disclaimer */}
 
           <p className="health-disclaimer">
-            MoveWell AI provides general wellness insights
-            and does not diagnose or treat medical conditions.
+            MoveWell helps you understand and act on your own
+            measurements. It does not diagnose or treat medical
+            conditions, and the safety review checks recommendations
+            before they are shown to you.
           </p>
 
         </div>

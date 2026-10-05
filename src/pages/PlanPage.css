@@ -1,457 +1,147 @@
 /**
  * The plan screen.
  *
- * Uses the same tokens as the rest of the application (src/index.css) so this
- * reads as the same product as the assessment and history screens, not a
- * bolted-on section.
+ * Built only from the design system in src/index.css: the layout classes
+ * (`.mw-main`, `.mw-stack`, `.mw-grid--team`), the card and button classes, and
+ * the tokens. There is nothing here that restates a palette — a colour in this
+ * file would be a second place the identity lives, and the two would drift.
+ *
+ * The classes below are the page's own composition: where the reading order
+ * breathes, and how the plan's quiet parts (the version line, the one-line
+ * safety note, the summary) sit against the parts that carry actions.
  */
 
-.plan-page {
-  min-height: 100vh;
-
-  background: var(--bg);
-
-  color: var(--dark);
-
-  font-family: "DM Sans", system-ui, sans-serif;
-}
-
 .plan-main {
-  max-width: var(--content-max);
-
-  margin: 0 auto;
-
-  padding: 38px 24px 90px;
+  padding-top: var(--space-6);
 }
 
-.plan-breadcrumb {
-  margin-bottom: 20px;
+.plan-flow {
+  gap: var(--space-6);
 }
 
-.page-back-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 36px;
-  color: var(--green);
-  font-size: 13px;
-  font-weight: 600;
-  padding: 8px 14px;
-  border: 1px solid rgba(53, 209, 139, 0.28);
-  border-radius: 10px;
-  background: rgba(53, 209, 139, 0.12);
-  text-decoration: none;
-  transition:
-    background 0.2s ease,
-    border-color 0.2s ease,
-    color 0.2s ease,
-    transform 0.2s ease;
+.plan-version {
+  margin-top: var(--space-1);
 }
 
-.page-back-link:hover {
-  color: var(--mint);
-  border-color: rgba(101, 232, 237, 0.4);
-  background: rgba(53, 209, 139, 0.2);
-  transform: translateX(-2px);
-}
-
-.page-back-link:focus-visible {
-  outline: 2px solid var(--cyan);
-  outline-offset: 2px;
-}
-
-.plan-intro {
-  margin-bottom: 26px;
-}
-
-.plan-eyebrow {
-  display: block;
-
-  color: var(--green);
-
-  font-size: 11px;
-
-  font-weight: 700;
-
-  letter-spacing: 1.4px;
-
-  text-transform: uppercase;
-
-  margin-bottom: 8px;
-}
-
-.plan-title {
-  margin: 0 0 10px;
-
-  font-size: 30px;
-
-  font-weight: 700;
-}
-
-.plan-lead {
-  margin: 0;
-
-  max-width: 58ch;
-
-  color: var(--dark-soft);
-
-  line-height: 1.6;
-}
-
-.plan-safety {
-  margin: 0 0 24px;
-
-  padding: 12px 16px;
-
-  border-left: 3px solid var(--green);
-
-  background: var(--green-light);
-
-  border-radius: var(--radius-sm);
-
-  color: var(--dark);
-
-  font-size: 14px;
-}
-
-/* Top-level Today at a Glance summary */
-.plan-today-glance {
-  margin-bottom: 28px;
-  padding: 24px;
-  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-  border: 1px solid #e2e8f0;
-  border-radius: var(--radius-md, 12px);
-  box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.04);
-}
-
-.plan-today-header {
-  margin-bottom: 18px;
-}
-
-.plan-today-eyebrow {
-  display: block;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 1.2px;
-  text-transform: uppercase;
-  color: var(--green, #10b981);
-  margin-bottom: 4px;
-}
-
-.plan-today-title {
-  margin: 0 0 6px;
-  font-size: 22px;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.plan-today-lead {
-  margin: 0;
-  font-size: 14px;
-  line-height: 1.55;
-  color: #475569;
-}
-
-.plan-today-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 16px;
-}
-
-.plan-today-card {
+/* The focus areas, as the server's own words in chips. A list, because that is
+   what it is; the chips inside are the design system's. */
+.plan-focus-chips {
   display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: 16px;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
-}
-
-.plan-today-card:hover {
-  border-color: #cbd5e1;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-}
-
-.plan-today-card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.plan-today-card-badge {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  padding: 2px 8px;
-  border-radius: 999px;
-}
-
-.plan-today-card-badge--movement {
-  background: #ecfdf5;
-  color: #059669;
-}
-
-.plan-today-card-badge--nutrition {
-  background: #fef3c7;
-  color: #b45309;
-}
-
-.plan-today-card-badge--behaviour {
-  background: #e0e7ff;
-  color: #4338ca;
-}
-
-.plan-today-card-stat {
-  font-size: 11px;
-  font-weight: 600;
-  color: #64748b;
-}
-
-.plan-today-card-title {
-  margin: 0 0 4px;
-  font-size: 16px;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.plan-today-card-desc {
-  margin: 0 0 14px;
-  font-size: 13px;
-  line-height: 1.5;
-  color: #475569;
-  flex: 1;
-}
-
-.plan-today-card-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #2563eb;
-  text-decoration: none;
-  transition: color 0.15s ease;
-}
-
-.plan-today-card-link:hover {
-  color: #1d4ed8;
-  text-decoration: underline;
-}
-
-@media (max-width: 640px) {
-  .plan-today-glance {
-    padding: 16px;
-  }
-
-  .plan-today-grid {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-}
-
-.plan-section {
-  margin-bottom: 22px;
-
-  padding: 22px;
-
-  background: var(--surface);
-
-  border: 1px solid var(--border);
-
-  border-radius: var(--radius-md);
-}
-
-.plan-section--empty {
-  background: transparent;
-
-  border-style: dashed;
-}
-
-.plan-section-title {
-  margin: 0 0 6px;
-
-  font-size: 18px;
-
-  font-weight: 700;
-}
-
-.plan-section-blurb {
-  margin: 0 0 14px;
-
-  color: var(--muted);
-
-  font-size: 13px;
-}
-
-.plan-goal {
-  margin: 0 0 14px;
-
-  color: var(--dark-soft);
-
-  line-height: 1.6;
-}
-
-.plan-items {
-  margin: 0;
-
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
   padding: 0;
-
   list-style: none;
 }
 
-.plan-item {
-  padding: 10px 0;
-
-  border-bottom: 1px solid var(--border);
-
-  font-size: 15px;
+.plan-synthesis-focus {
+  margin-top: 0;
 }
 
-.plan-item:last-child {
-  border-bottom: none;
+/* --------------------------------------------------------------- the safety --- */
+
+.plan-safety {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  border-color: var(--warn-line);
+  background: var(--warn-soft);
 }
 
-.plan-adaptation {
-  margin: 16px 0 0;
-
-  padding: 12px 14px;
-
-  background: var(--bg);
-
-  border-radius: var(--radius-sm);
-
-  color: var(--dark-soft);
-
-  font-size: 13px;
-
-  line-height: 1.6;
+.plan-safety-head {
+  gap: var(--space-2);
 }
 
-.plan-adaptation-label {
-  display: block;
-
-  margin-bottom: 4px;
-
-  color: var(--green);
-
-  font-size: 11px;
-
-  font-weight: 700;
-
-  letter-spacing: 1px;
-
-  text-transform: uppercase;
+.plan-safety-title {
+  margin: 0;
 }
 
-.plan-meta {
-  margin: 14px 0 0;
+.plan-safety-message {
+  color: var(--ink);
+}
 
-  color: var(--muted);
+.plan-safety-reason {
+  margin: 0;
+}
 
+/* When the review changed nothing there is nothing to act on, so it is a line
+   of meta text rather than a card — and it is never repeated further down. */
+.plan-safety-quiet {
+  margin: 0;
+}
+
+/* --------------------------------------------------------------- the team ----- */
+
+.plan-team-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+}
+
+.plan-team-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.plan-team-card-icon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.plan-team-card-info {
+  min-width: 0;
+}
+
+.plan-team-card-title {
+  margin: 0;
+  font: 700 15px/1.3 Manrope, sans-serif;
+  letter-spacing: -0.2px;
+  color: var(--ink);
+}
+
+.plan-team-card-role {
+  margin: 2px 0 0;
   font-size: 12px;
+  color: var(--ink-faint);
 }
 
-.plan-empty {
-  margin: 0 0 14px;
-
-  color: var(--muted);
-
-  line-height: 1.6;
+.plan-team-card-reason {
+  margin: 0;
+  flex: 1;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-soft);
 }
 
-.plan-status {
-  color: var(--muted);
+.plan-team-card-actions {
+  display: flex;
+  gap: var(--space-2);
 }
 
-.plan-error {
-  padding: 12px 16px;
+/* --------------------------------------------------------------- the summary --- */
 
-  border-radius: var(--radius-sm);
+.plan-synthesis {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
 
-  background: #fbeceb;
+.plan-synthesis-title {
+  margin: 0;
+}
 
-  color: var(--danger);
-
-  font-size: 14px;
+.plan-synthesis-next {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--accent-line);
 }
 
 .plan-actions {
-  display: flex;
-
-  flex-wrap: wrap;
-
-  gap: 10px;
-
-  margin-top: 22px;
-}
-
-.plan-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 42px;
-  padding: 10px 18px;
-  border: 1px solid transparent;
-  border-radius: 11px;
-  background: linear-gradient(135deg, var(--green-bright), var(--green));
-  box-shadow: 0 8px 18px rgba(53, 209, 139, 0.16);
-  color: #052117;
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 800;
-  line-height: 1.2;
-  cursor: pointer;
-  transition:
-    transform 0.2s ease,
-    box-shadow 0.2s ease,
-    filter 0.2s ease;
-}
-
-.plan-button:hover:not(:disabled) {
-  filter: brightness(1.08);
-  box-shadow: 0 10px 22px rgba(53, 209, 139, 0.24);
-  transform: translateY(-1px);
-}
-
-.plan-button:focus-visible {
-  outline: 2px solid var(--cyan);
-  outline-offset: 3px;
-}
-
-.plan-button:disabled {
-  opacity: 0.6;
-
-  cursor: default;
-  box-shadow: none;
-}
-
-.plan-button--quiet {
-  border-color: var(--border);
-  background: rgba(101, 232, 237, 0.06);
-  box-shadow: none;
-  color: var(--dark-soft);
-}
-
-.plan-button--quiet:hover:not(:disabled) {
-  border-color: rgba(101, 232, 237, 0.35);
-  background: rgba(101, 232, 237, 0.11);
-  color: var(--mint);
-  box-shadow: none;
-}
-
-.plan-item--action {
-  display: flex;
-
-  align-items: center;
-
-  justify-content: space-between;
-
-  gap: 12px;
+  padding-top: var(--space-2);
 }
 
 @media (max-width: 560px) {
@@ -460,588 +150,7 @@
     flex-direction: column;
   }
 
-  .plan-actions .plan-button {
+  .plan-actions .mw-btn {
     width: 100%;
   }
-}
-
-.plan-item-start {
-  flex: none;
-
-  padding: 6px 16px;
-
-  border: 1px solid var(--green);
-
-  border-radius: 999px;
-
-  background: var(--surface);
-
-  color: var(--green);
-
-  font-family: inherit;
-
-  font-size: 13px;
-
-  font-weight: 600;
-
-  cursor: pointer;
-}
-
-.plan-item-start:hover {
-  background: var(--green-light);
-}
-
-/* --------------------------------------------------------------------
-   "No plan was created this time" -- the state where the workflow ran
-   against real evidence and honestly produced nothing. The list below is
-   what could not be measured, in Need Assessment's own words, so it is
-   styled as information the user can act on rather than as an error.
-   -------------------------------------------------------------------- */
-
-.plan-missing-title {
-  margin: 1.25rem 0 0.5rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #5b6472;
-}
-
-.plan-missing {
-  margin: 0 0 0.5rem;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 0.625rem;
-}
-
-.plan-missing-item {
-  display: grid;
-  gap: 0.1875rem;
-  padding: 0.625rem 0.75rem;
-  border-left: 3px solid #d6dbe4;
-  background: #f7f8fa;
-  border-radius: 0 6px 6px 0;
-}
-
-.plan-missing-name {
-  font-weight: 600;
-  color: #1f2733;
-}
-
-.plan-missing-reason {
-  font-size: 0.875rem;
-  line-height: 1.45;
-  color: #5b6472;
-}
-
-/* The plan's version, stated plainly so the plan reads as something that
-   evolves rather than a one-off document. */
-.plan-version {
-  margin: 0.5rem 0 0;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #46536b;
-}
-
-/* --------------------------------------------------------------------
-   Assessment in Progress (Partial State)
-   -------------------------------------------------------------------- */
-
-.plan-section--partial {
-  background: linear-gradient(135deg, var(--surface) 0%, var(--surface-soft) 100%);
-  border: 1px solid rgba(101, 232, 237, 0.2);
-  border-radius: var(--radius-md, 12px);
-  padding: 24px;
-  margin-bottom: 24px;
-  box-shadow: var(--shadow-soft);
-  color: var(--dark);
-}
-
-.plan-partial-badge {
-  display: inline-block;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 1.2px;
-  text-transform: uppercase;
-  color: #062117;
-  background: var(--green-bright);
-  padding: 3px 10px;
-  border-radius: 999px;
-  margin-bottom: 10px;
-}
-
-.plan-partial-checklist {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin: 18px 0;
-}
-
-.plan-check-row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 12px 16px;
-  border-radius: 8px;
-  background: rgba(7, 17, 15, 0.46);
-  border: 1px solid var(--border);
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-
-.plan-check-row--done {
-  border-color: rgba(53, 209, 139, 0.58);
-  background: rgba(53, 209, 139, 0.08);
-}
-
-.plan-check-row--pending {
-  border-color: var(--border);
-  opacity: 0.88;
-}
-
-.plan-check-badge {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  font-size: 14px;
-  font-weight: 700;
-  flex-shrink: 0;
-}
-
-.plan-check-row--done .plan-check-badge {
-  background: var(--green);
-  color: #062117;
-}
-
-.plan-check-row--pending .plan-check-badge {
-  background: rgba(168, 243, 207, 0.14);
-  color: var(--dark-soft);
-}
-
-.plan-check-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.plan-check-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--dark);
-}
-
-.plan-check-sub {
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.plan-check-row--done .plan-check-sub {
-  color: var(--green-bright);
-  font-weight: 500;
-}
-
-/* Your MoveWell Team Overview */
-.plan-team-section {
-  margin-top: 36px;
-  margin-bottom: 36px;
-  background: #ffffff;
-  border-radius: 16px;
-  border: 1px solid #e2e8f0;
-  padding: 28px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-}
-
-.plan-team-header {
-  margin-bottom: 20px;
-}
-
-.plan-team-eyebrow {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #0284c7;
-  display: block;
-  margin-bottom: 4px;
-}
-
-.plan-team-title {
-  font-size: 20px;
-  font-weight: 700;
-  color: #0f172a;
-  margin: 0 0 6px;
-}
-
-.plan-team-lead {
-  font-size: 14px;
-  color: #64748b;
-  margin: 0;
-  line-height: 1.5;
-}
-
-/* Six specialists, so the row count is fixed rather than fitted: with
-   auto-fit and a 260px minimum, the ~1156px content area fitted FOUR
-   columns, which left the second row as two cards and a large gap. Three
-   explicit columns give 3 + 3 with no empty cell.
-   align-items: start keeps each card at its natural content height, so a
-   longer programme does not stretch its neighbours. */
-.plan-team-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
-  margin-top: 20px;
-  align-items: start;
-}
-
-/* Tablet: two columns, three rows. */
-@media (min-width: 700px) {
-  .plan-team-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-/* Desktop: the 3 x 2 the six specialists are meant to form. */
-@media (min-width: 1100px) {
-  .plan-team-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-.plan-team-card {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  transition: all 0.15s ease;
-}
-
-.plan-team-card:hover {
-  border-color: #0284c7;
-  background: #ffffff;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.07);
-}
-
-.plan-team-card-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-
-.plan-team-card-icon {
-  font-size: 24px;
-  line-height: 1;
-}
-
-.plan-team-card-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.plan-team-card-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: #0f172a;
-  margin: 0;
-}
-
-.plan-team-card-subtitle {
-  font-size: 12px;
-  color: #64748b;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.plan-team-card-badge {
-  display: inline-block;
-  align-self: flex-start;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 3px 8px;
-  border-radius: 9999px;
-  margin-bottom: 8px;
-}
-
-.plan-team-card-badge--active {
-  background: #dcfce7;
-  color: #166534;
-  border: 1px solid #bbf7d0;
-}
-
-.plan-team-card-badge--evaluated {
-  background: #f1f5f9;
-  color: #475569;
-  border: 1px solid #cbd5e1;
-}
-
-.plan-team-card-badge--not-assessed {
-  background: #fef3c7;
-  color: #92400e;
-  border: 1px solid #fde68a;
-}
-
-.plan-team-card-reason {
-  font-size: 12px;
-  color: #475569;
-  line-height: 1.4;
-  margin: 0 0 14px;
-  flex: 1;
-}
-
-.plan-team-card-link {
-  font-size: 13px;
-  font-weight: 600;
-  color: #0284c7;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.plan-team-card-link:hover {
-  text-decoration: underline;
-}
-
-
-/* Recommended exercises on a specialist card: image, prescription and the
-   existing completion control. Reference only — there is no Start button
-   here, because the camera-guided session belongs to the Movement panel
-   and the exercise page. */
-.plan-exercise-ref-list {
-  list-style: none;
-  margin: 12px 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.plan-exercise-ref {
-  display: flex;
-  gap: 10px;
-  padding: 10px;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-}
-
-.plan-exercise-ref--done {
-  border-color: #bbf7d0;
-  background: #f6fefa;
-}
-
-.plan-exercise-ref-image {
-  flex: 0 0 72px;
-  width: 72px;
-  height: 72px;
-  object-fit: contain;
-  background: #ffffff;
-  border-radius: 8px;
-}
-
-.plan-exercise-ref-body {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.plan-exercise-ref-name {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: #0f172a;
-}
-
-.plan-exercise-ref-meta {
-  margin: 0;
-  font-size: 11.5px;
-  color: #64748b;
-}
-
-.plan-exercise-ref-label {
-  font-weight: 600;
-  color: #475569;
-}
-
-.plan-exercise-ref-safety {
-  margin: 2px 0 0;
-  font-size: 11px;
-  line-height: 1.35;
-  color: #92400e;
-}
-
-.plan-exercise-ref-check {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 6px;
-  font-size: 12px;
-  color: #475569;
-}
-
-.plan-exercise-ref-check input {
-  width: 15px;
-  height: 15px;
-  accent-color: #16a34a;
-  cursor: pointer;
-}
-
-.plan-exercise-ref-check input:disabled {
-  cursor: not-allowed;
-}
-
-.plan-exercise-ref-check label {
-  cursor: pointer;
-}
-
-/* Dark MoveWell treatment for workflow-generated summary sections. */
-.plan-safety {
-  background: rgba(245, 195, 107, 0.1);
-  border-left-color: var(--amber);
-  color: var(--dark-soft);
-}
-
-.plan-today-glance,
-.plan-team-section {
-  background: linear-gradient(135deg, var(--surface) 0%, var(--surface-soft) 100%);
-  border-color: var(--border);
-  box-shadow: var(--shadow-soft);
-}
-
-.plan-today-title,
-.plan-today-card-title,
-.plan-team-title,
-.plan-team-card-title,
-.plan-exercise-ref-name {
-  color: var(--dark);
-}
-
-.plan-today-lead,
-.plan-today-card-desc,
-.plan-team-lead,
-.plan-team-card-subtitle,
-.plan-exercise-ref-meta,
-.plan-exercise-ref-check {
-  color: var(--dark-soft);
-}
-
-.plan-today-card,
-.plan-team-card,
-.plan-exercise-ref {
-  background: rgba(7, 17, 15, 0.46);
-  border-color: var(--border);
-}
-
-.plan-today-card:hover,
-.plan-team-card:hover {
-  border-color: rgba(101, 232, 237, 0.35);
-  background: rgba(16, 42, 34, 0.8);
-  box-shadow: none;
-}
-
-.plan-today-card-stat {
-  color: var(--muted);
-}
-
-.plan-today-card-link,
-.plan-team-card-link {
-  color: var(--cyan);
-}
-
-.plan-today-card-link:hover,
-.plan-team-card-link:hover {
-  color: var(--mint);
-}
-
-.plan-today-card-badge--movement {
-  background: rgba(53, 209, 139, 0.14);
-  color: var(--green-bright);
-}
-
-.plan-today-card-badge--nutrition {
-  background: rgba(245, 195, 107, 0.14);
-  color: var(--amber);
-}
-
-.plan-today-card-badge--behaviour {
-  background: rgba(101, 232, 237, 0.12);
-  color: var(--cyan);
-}
-
-.plan-team-eyebrow {
-  color: var(--cyan);
-}
-
-.plan-team-card-badge--active {
-  background: rgba(53, 209, 139, 0.14);
-  color: var(--green-bright);
-  border-color: rgba(53, 209, 139, 0.35);
-}
-
-.plan-team-card-badge--evaluated {
-  background: rgba(168, 243, 207, 0.1);
-  color: var(--dark-soft);
-  border-color: var(--border);
-}
-
-.plan-team-card-badge--not-assessed {
-  background: rgba(245, 195, 107, 0.14);
-  color: var(--amber);
-  border-color: rgba(245, 195, 107, 0.35);
-}
-
-.plan-team-card-reason {
-  color: var(--dark-soft);
-}
-
-.plan-exercise-ref--done {
-  border-color: rgba(53, 209, 139, 0.4);
-  background: rgba(53, 209, 139, 0.08);
-}
-
-.plan-exercise-ref-image {
-  background: #102a22;
-}
-
-.plan-exercise-ref-label {
-  color: var(--dark-soft);
-}
-
-.plan-exercise-ref-safety {
-  color: var(--amber);
-}
-
-.plan-exercise-ref-check input {
-  accent-color: var(--green);
-}
-
-.plan-error {
-  background: rgba(255, 142, 131, 0.1);
-  border: 1px solid rgba(255, 142, 131, 0.25);
-}
-
-.plan-missing-title {
-  color: var(--dark-soft);
-}
-
-.plan-missing-item {
-  border-left-color: var(--amber);
-  background: rgba(245, 195, 107, 0.08);
-}
-
-.plan-missing-name {
-  color: var(--dark);
-}
-
-.plan-missing-reason,
-.plan-version {
-  color: var(--muted);
 }

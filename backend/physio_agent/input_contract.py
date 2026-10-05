@@ -24,6 +24,7 @@ already use.
 """
 
 from need_assessment.schema import NEED_DIMENSIONS
+from orchestration.pose_boundary import find_pose_or_media_violation
 
 REQUIRED_FIELDS = (
     "workflow_id",
@@ -227,18 +228,12 @@ def validate_physio_agent_input(payload) -> None:
     ):
         _fail("current_needs must be null or an object")
 
-    # A second line of defence, mirroring assessments/schema.py's and
-    # exercise_assessment/schema.py's own discipline: nothing shaped like
-    # raw pose/frame data may cross this boundary, however it got here.
-    forbidden_substrings = ("keypoint", "landmark", "skeleton", "rawframe", "video", "image", "base64", "dataurl")
-    serialised = str(payload).lower()
-    # "image_plane" is legitimate protocol definition metadata (e.g. camera_image_plane_projection,
-    # downward_vertical_image_plane) describing projection geometry, not raw image data.
-    sanitized = serialised.replace("image_plane", "").replace("camera_image", "")
+    # A second line of defence, shared with every other agent input contract
+    # (orchestration/pose_boundary.py): nothing shaped like raw pose/frame data
+    # may cross this boundary, however it got here. Scalar summaries such as
+    # the assessment's own meanKeypointScore are legitimate and pass; a
+    # keypoint sequence does not.
+    violation = find_pose_or_media_violation(payload)
 
-    for term in forbidden_substrings:
-        if term in sanitized:
-            _fail(
-                f"Physio Agent input appears to contain {term!r} — refusing "
-                "to build an input that might carry pose/frame data"
-            )
+    if violation:
+        _fail(f"Physio Agent input {violation}")

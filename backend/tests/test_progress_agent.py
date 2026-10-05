@@ -7,6 +7,8 @@ stable+low-adherence.
 
 import unittest
 
+from datetime import datetime, timedelta, timezone
+
 from orchestration.ids import TraceContext, start_workflow
 from progress_agent.agent import run_progress_agent
 from progress_agent.input_contract import (
@@ -16,6 +18,16 @@ from progress_agent.input_contract import (
 )
 from progress_agent.schema import ProgressFindingsValidationError, validate_progress_findings
 from progress_agent.tool_client import InProcessProgressToolClient, ProgressToolClient
+
+# A completion timestamp that is genuinely recent, relative to whatever
+# "now" is when this suite runs. These tests are about what the Progress
+# Agent concludes from a *current* assessment; a hard-coded calendar date
+# silently became a "stale assessment" case once enough real time passed,
+# which is not what any of them is testing.
+RECENT_COMPLETED_AT = (
+    datetime.now(timezone.utc) - timedelta(days=3)
+).strftime("%Y-%m-%dT%H:%M:%SZ")
+
 
 
 def _balance_doc(hold, completed_at="2026-01-01T00:00:00Z"):
@@ -68,12 +80,37 @@ class InputContractTests(unittest.TestCase):
         with self.assertRaises(ProgressAgentInputValidationError):
             validate_progress_agent_input(payload)
 
-    def test_forbidden_media_substring_rejected(self):
+    def test_forbidden_media_data_is_rejected(self):
+        # Pose/media DATA is refused; prose that merely mentions it is not.
+        # The old rule refused the word, and the browser sends
+        # `quality.meanKeypointScore` with every real assessment, so this
+        # contract used to refuse the product's own normal input.
         with self.assertRaises(ProgressAgentInputValidationError):
             build_progress_agent_input(
                 workflow_id="wf", request_id="req", agent_run_id="run",
-                current_needs={"note": "contains a keypoint reference"},
+                baseline_assessment={"keypoints": [[0.1, 0.2]]},
             )
+
+    def test_a_real_assessment_quality_summary_is_accepted(self):
+        payload = build_progress_agent_input(
+            workflow_id="wf", request_id="req", agent_run_id="run",
+            baseline_assessment={
+                "tests": {
+                    "shoulder": {
+                        "quality": {"meanKeypointScore": 0.71, "framesSeen": 188}
+                    }
+                }
+            },
+            current_assessment={
+                "tests": {
+                    "shoulder": {
+                        "quality": {"meanKeypointScore": 0.8, "longestPoseLossMs": 40}
+                    }
+                }
+            },
+        )
+
+        validate_progress_agent_input(payload)  # must not raise
 
     def test_exercise_results_must_be_a_list(self):
         with self.assertRaises(ProgressAgentInputValidationError):
@@ -159,7 +196,7 @@ class RunProgressAgentTests(unittest.TestCase):
         client, trace = _client()
         result = run_progress_agent(
             baseline_assessment=_balance_doc(40),
-            current_assessment=_balance_doc(60, completed_at="2026-09-05T00:00:00Z"),
+            current_assessment=_balance_doc(60, completed_at=RECENT_COMPLETED_AT),
             tool_client=client,
             parent_trace=trace,
         )
@@ -204,7 +241,7 @@ class RunProgressAgentTests(unittest.TestCase):
         ]
         result = run_progress_agent(
             baseline_assessment=_balance_doc(40),
-            current_assessment=_balance_doc(60, completed_at="2026-09-05T00:00:00Z"),
+            current_assessment=_balance_doc(60, completed_at=RECENT_COMPLETED_AT),
             current_plan=plan,
             exercise_results=exercise_results,
             tool_client=client,
@@ -237,7 +274,7 @@ class RunProgressAgentTests(unittest.TestCase):
         ]
         result = run_progress_agent(
             baseline_assessment=_balance_doc(50),
-            current_assessment=_balance_doc(50, completed_at="2026-09-05T00:00:00Z"),
+            current_assessment=_balance_doc(50, completed_at=RECENT_COMPLETED_AT),
             current_plan=plan,
             exercise_results=exercise_results,
             tool_client=client,
@@ -256,7 +293,7 @@ class RunProgressAgentTests(unittest.TestCase):
         ]
         result = run_progress_agent(
             baseline_assessment=_balance_doc(60),
-            current_assessment=_balance_doc(45, completed_at="2026-09-05T00:00:00Z"),
+            current_assessment=_balance_doc(45, completed_at=RECENT_COMPLETED_AT),
             current_plan=plan,
             exercise_results=exercise_results,
             tool_client=client,
@@ -277,7 +314,7 @@ class RunProgressAgentTests(unittest.TestCase):
         ]
         result = run_progress_agent(
             baseline_assessment=_balance_doc(50),
-            current_assessment=_balance_doc(50, completed_at="2026-09-05T00:00:00Z"),
+            current_assessment=_balance_doc(50, completed_at=RECENT_COMPLETED_AT),
             current_plan=plan,
             exercise_results=exercise_results,
             tool_client=client,
@@ -294,7 +331,7 @@ class RunProgressAgentTests(unittest.TestCase):
         client1, trace1 = _client()
         client2, trace2 = _client()
         baseline = _balance_doc(40)
-        current = _balance_doc(60, completed_at="2026-09-05T00:00:00Z")
+        current = _balance_doc(60, completed_at=RECENT_COMPLETED_AT)
 
         result1 = run_progress_agent(baseline_assessment=baseline, current_assessment=current, tool_client=client1, parent_trace=trace1)
         result2 = run_progress_agent(baseline_assessment=baseline, current_assessment=current, tool_client=client2, parent_trace=trace2)
@@ -307,7 +344,7 @@ class RunProgressAgentTests(unittest.TestCase):
         client, trace = _client()
         result = run_progress_agent(
             baseline_assessment=_balance_doc(40),
-            current_assessment=_balance_doc(60, completed_at="2026-09-05T00:00:00Z"),
+            current_assessment=_balance_doc(60, completed_at=RECENT_COMPLETED_AT),
             current_plan=None,
             tool_client=client,
             parent_trace=trace,

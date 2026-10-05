@@ -1,0 +1,122 @@
+/**
+ * The results screen: the score is the hero, everything else supports it.
+ */
+
+.results-main { display: flex; flex-direction: column; gap: var(--space-6); }
+
+.results-score {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-7) var(--space-5);
+  text-align: center;
+}
+
+.results-focus {
+  font-size: 15px;
+  color: var(--ink-soft);
+}
+
+.results-focus strong { color: var(--ink); }
+
+.results-change {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.results-score .mw-empty { width: 100%; max-width: 520px; text-align: left; }
+
+/* Domain tiles ------------------------------------------------------------ */
+.results-domain { display: flex; flex-direction: column; gap: 4px; }
+
+.results-domain-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.results-domain-value {
+  font: 800 34px/1 Manrope, sans-serif;
+  letter-spacing: -1px;
+  color: var(--ink);
+}
+
+.results-domain-change {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.results-domain-change.is-up { color: var(--accent); }
+.results-domain-change.is-down { color: var(--warn); }
+.results-domain-change.is-unchanged { color: var(--ink-faint); }
+
+/* Opportunities list ------------------------------------------------------ */
+.results-opportunities {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+/* Plan summary ------------------------------------------------------------ */
+.results-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.results-changes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+.results-change-row {
+  display: flex;
+  gap: var(--space-3);
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+
+.results-change-label {
+  flex: 0 0 auto;
+  min-width: 96px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.results-plan-actions { margin-top: var(--space-5); }
+
+/* Team detail list -------------------------------------------------------- */
+.results-team-detail { display: flex; flex-direction: column; gap: var(--space-3); }
+
+.results-team-detail-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 200px) auto 1fr;
+  gap: var(--space-3);
+  align-items: baseline;
+  font-size: 13.5px;
+}
+
+.results-team-detail-name { font-weight: 600; }
+.results-team-detail-reason { color: var(--ink-soft); }
+
+@media (max-width: 640px) {
+  .results-domain-value { font-size: 28px; }
+  .results-team-detail-row { grid-template-columns: 1fr; gap: 4px; }
+  .results-change-row { flex-direction: column; gap: 2px; }
+}

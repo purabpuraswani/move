@@ -56,6 +56,7 @@ def _database_error() -> HTTPException:
 def create_exercise_result(
     payload: dict = Body(...),
     plan_id: str | None = Body(None),
+    item_id: str | None = Body(None),
     current_user: dict = Depends(get_current_user)
 ):
     """Validate and store one completed exercise's performance result.
@@ -66,6 +67,9 @@ def create_exercise_result(
     outlive the request. `plan_id` is optional: pass the plan_id from the
     User State's exercise_history record this result is performing against,
     if known, so the Progress Agent can later compute adherence per-plan.
+    `item_id` is optional too: it names the specific plan item the user was
+    working through, which is how a recorded session can be tied back to the
+    action that asked for it rather than only to the exercise in general.
     """
 
     try:
@@ -86,7 +90,9 @@ def create_exercise_result(
     user_id = str(current_user["_id"])
 
     try:
-        saved = save_exercise_result(user_id, document, plan_id=plan_id)
+        saved = save_exercise_result(
+            user_id, document, plan_id=plan_id, item_id=item_id
+        )
 
     except PyMongoError:
         raise _database_error() from None

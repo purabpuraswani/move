@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "node --test \"src/**/__tests__/**/*.test.js\""
+    "test": "node --test \"src/**/__tests__/**/*.test.js\"",
+    "test:render": "vite build --config vite.render-check.config.js --logLevel warn && node node_modules/.render-check/renderPlanUI.js"
   },
   "dependencies": {
     "@tensorflow-models/pose-detection": "^2.1.3",

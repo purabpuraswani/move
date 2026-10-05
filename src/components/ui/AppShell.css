@@ -1,0 +1,163 @@
+/**
+ * The shell's chrome: a calm top bar, the four sections, and a mobile tab bar.
+ *
+ * The top bar is a surface, not a header graphic — it does not scroll away,
+ * because on a long plan screen the section you are in is worth keeping.
+ */
+
+.shell {
+  min-height: 100vh;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+}
+
+.shell-bar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: rgba(246, 244, 240, 0.88);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+}
+
+.shell-bar-inner {
+  width: min(100% - (var(--content-gutter) * 2), var(--content-max));
+  margin-inline: auto;
+  min-height: var(--nav-height);
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+}
+
+.shell-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.shell-brand-mark {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font: 800 13px Manrope, sans-serif;
+}
+
+.shell-brand-name {
+  font: 700 16px Manrope, sans-serif;
+  letter-spacing: -0.3px;
+}
+
+.shell-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-inline: auto;
+}
+
+.shell-nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: var(--radius-pill);
+  color: var(--ink-soft);
+  font-size: 14px;
+  font-weight: 600;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+
+.shell-nav-link svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.shell-nav-link:hover { background: var(--surface); color: var(--ink); }
+
+.shell-nav-link.is-active {
+  background: var(--surface);
+  color: var(--accent-ink);
+  box-shadow: var(--shadow-sm);
+}
+
+.shell-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-left: auto;
+}
+
+.shell-back,
+.shell-logout {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  padding: 6px 10px;
+  border-radius: var(--radius-pill);
+}
+
+.shell-back:hover,
+.shell-logout:hover { background: var(--surface); color: var(--ink); }
+
+.shell-main { flex: 1; }
+
+/* Mobile tab bar ---------------------------------------------------------- */
+.shell-tabbar { display: none; }
+
+@media (max-width: 860px) {
+  .shell-nav { display: none; }
+
+  .shell-bar-actions .shell-back { display: none; }
+
+  .shell-tabbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 2px;
+    padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(14px);
+    border-top: 1px solid var(--border);
+  }
+
+  .shell-tab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 7px 0 5px;
+    border-radius: var(--radius-md);
+    color: var(--ink-faint);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .shell-tab svg {
+    width: 22px;
+    height: 22px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .shell-tab.is-active { color: var(--accent); background: var(--accent-soft); }
+
+  /* Room for the bar, so the last card is never under it. */
+  .shell { padding-bottom: 72px; }
+}

@@ -1,32 +1,124 @@
-import React, { Component, useEffect, useState } from "react";
+/**
+ * One specialist's page — one of the five coaches, opened up.
+ *
+ * The page reads the matching section out of the server's `unified_plan`, so it
+ * shows exactly what the plan screen shows for this specialist and nothing that
+ * the server did not send: why they are involved, what they are focused on, what
+ * they decided, the actions themselves, what has been recorded, and the next
+ * step. There is no per-specialist copy in this file — no default rationale, no
+ * fallback recommendation list, no "clinical focus" paragraph shown to everybody
+ * whatever their evidence. A specialist who was not assessed gets the server's
+ * own empty state and the action that would assess it.
+ *
+ * The page is arranged the way a person reads a coach, not the way a system
+ * reports one: who this is, why they are here, what they are working on, what
+ * they decided, what to do, what it produced, and what happens next. The audit
+ * trail — the evidence behind the decision, what is still unknown, the plan
+ * version and why it was adapted — lives behind one "View details".
+ *
+ * An unrecognised specialist in the URL is reported as unrecognised, with a link
+ * back to the plan, rather than being silently redirected to one of the five and
+ * showing that one's evidence under the wrong heading.
+ */
+
+import { Component, useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import AppNavigation from "../components/AppNavigation.jsx";
-import { getExerciseImage } from "../movementDemos/exerciseImages.js";
-import FoodLogPanel from "../components/FoodLogPanel.jsx";
-import BehaviourActionPanel from "../components/BehaviourActionPanel.jsx";
-import { fetchLatestWorkflow } from "../services/workflow";
+
+import AppShell from "../components/ui/AppShell.jsx";
 import {
-  toArray,
-  safeDisplayValue,
-  normalizeEvidence,
-  normalizeRecommendation,
-  normalizeRecommendations,
-  isPlainRenderable,
-} from "../services/specialistData.js";
+  PrimaryButton,
+  SectionHeader,
+  StatusBadge,
+  EmptyState,
+  DetailDrawer,
+} from "../components/ui/primitives.jsx";
+import BehaviourActionPanel from "../components/BehaviourActionPanel.jsx";
+import FoodLogPanel from "../components/FoodLogPanel.jsx";
+import PlanActionItem from "../components/PlanActionItem.jsx";
+import useExerciseCompletion from "../hooks/useExerciseCompletion.js";
+import { fetchLatestWorkflow } from "../services/workflow";
+import { identityFor, statusWording } from "../services/specialistIdentity.js";
+import { safeDisplayValue, toArray } from "../services/specialistData.js";
+import {
+  actionOf,
+  canonicalSpecialistId,
+  collaboration,
+  emptyStateOf,
+  habitGoals,
+  itemActions,
+  sectionFor,
+  sectionPlanId,
+  teamCards,
+} from "../services/unifiedPlan.js";
+
 import "./SpecialistDetailPage.css";
 
-export {
-  toArray,
-  safeDisplayValue,
-  normalizeEvidence,
-  normalizeRecommendation,
-  normalizeRecommendations,
-  isPlainRenderable,
-};
+/* -------------------------------------------------------------------------
+   Reading the server's section without adding anything to it
+   ------------------------------------------------------------------------- */
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ERROR BOUNDARY (PHASE 13)
-// ─────────────────────────────────────────────────────────────────────────────
+/** The per-item rows the server sent, minus the ones that only say there is
+ * nothing there yet. `NOT_RECORDED` and `NOT_ENOUGH_DATA` are real values, but
+ * printing the phrase "nothing recorded" against every item is the repetition
+ * this screen exists to avoid — the section says it once, in its own words. */
+function usefulRows(rows) {
+  return toArray(rows)
+    .filter((row) => row && safeDisplayValue(row.label) && safeDisplayValue(row.value))
+    .filter((row) => !/nothing recorded|not enough|no .*recorded/i.test(String(row.value)))
+    .map((row) => ({ label: safeDisplayValue(row.label), value: safeDisplayValue(row.value) }));
+}
+
+/**
+ * A line of the server's tracking or progress wording, or null when it is one of
+ * the two values that mean "there is nothing to report here": the screen should
+ * say nothing rather than print `NOT_RECORDED` or `NOT_ENOUGH_DATA` in words.
+ */
+function usefulText(status, value) {
+  if (status === "NOT_RECORDED" || status === "NOT_ENOUGH_DATA") return null;
+
+  const text = safeDisplayValue(value);
+
+  if (!text) return null;
+  if (/^nothing recorded|^no .*recorded yet|not enough .* to compare/i.test(text)) return null;
+
+  return text;
+}
+
+function Rows({ rows }) {
+  const list = usefulRows(rows);
+
+  if (!list.length) return null;
+
+  return (
+    <dl className="specialist-rows">
+      {list.map((row, index) => (
+        <div className="specialist-row" key={`${row.label}-${index}`}>
+          <dt className="specialist-row-label">{row.label}</dt>
+          <dd className="specialist-row-value">{row.value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** The constraints from somewhere else that apply to this specialist's domain.
+ * A constraint whose `applies_to` names this specialist IS the collaboration —
+ * there is nothing to infer and nothing to add when it does not. */
+function constraintsFor(plan, specialistId) {
+  return toArray(plan?.constraints).filter((constraint) => {
+    if (!constraint || !constraint.source || constraint.source === specialistId) return false;
+
+    const applies = Array.isArray(constraint.applies_to)
+      ? constraint.applies_to
+      : [constraint.applies_to];
+
+    return applies.includes(specialistId);
+  });
+}
+
+/* -------------------------------------------------------------------------
+   The page
+   ------------------------------------------------------------------------- */
 
 export class SpecialistErrorBoundary extends Component {
   constructor(props) {
@@ -45,661 +137,459 @@ export class SpecialistErrorBoundary extends Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="specialist-detail-page">
-          <AppNavigation backTo="/dashboard" backLabel="← Dashboard" />
-          <main className="specialist-detail-main">
-            <div className="specialist-card-panel specialist-error-fallback" role="alert">
-              <div className="specialist-hero-avatar" style={{ margin: "0 auto 16px" }}>
-                ⚠️
-              </div>
-              <h2 className="specialist-panel-title" style={{ justifyContent: "center" }}>
-                Unable to display specialist details right now
-              </h2>
-              <p className="specialist-reason-text" style={{ textAlign: "center", marginBottom: "24px" }}>
-                There was a problem preparing this specialist&rsquo;s recommendations. Your assessment and health data remain safely saved.
+        <AppShell backTo="/plan" backLabel="Your plan">
+          <div className="mw-main specialist-main">
+            <div className="mw-card specialist-error-fallback" role="alert">
+              <h1 className="mw-h2">This specialist could not be shown</h1>
+              <p className="mw-lede">
+                There was a problem preparing this specialist&rsquo;s page. Your
+                assessment, answers and recorded sessions are unaffected.
               </p>
-              <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
-                <Link to="/dashboard" className="specialist-secondary-btn">
-                  ← Back to Dashboard
-                </Link>
-                <Link to="/plan" className="specialist-action-btn">
-                  See Full MoveWell Plan →
+              <div className="mw-row">
+                <Link className="mw-btn mw-btn--primary" to="/plan">
+                  Back to your plan
                 </Link>
               </div>
             </div>
-          </main>
-        </div>
+          </div>
+        </AppShell>
       );
     }
+
     return this.props.children;
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SPECIALIST METADATA CONFIGURATION
-// ─────────────────────────────────────────────────────────────────────────────
-
-const SPECIALIST_CONFIGS = {
-  exercise: {
-    id: "exercise_activity",
-    alias: "exercise",
-    name: "Exercise & Physical Activity Specialist",
-    title: "Exercise & Physical Activity",
-    subtitle: "Daily Walking, Step Volume & Sedentary Habit Pacing",
-    icon: "🏃",
-    focus: "Optimizing overall daily physical activity, stepping volume, and interrupting prolonged sedentary periods.",
-    defaultReason: "Evaluates your daily walking steps, sitting duration, and weekly activity frequency.",
-    inactiveMessage: "No specific physical activity intervention is currently required based on your current evidence.",
-    defaultEvidence: [
-      "Daily stepping volume compared to active baseline (5,000 steps)",
-      "Daily sedentary desk / sitting duration",
-      "Weekly structured exercise frequency",
-    ],
-    defaultRecommendations: [
-      "Target 6,000 to 8,000 steps per day with brisk walking intervals",
-      "Take a 2-minute movement or standing break every 60 minutes of sitting",
-      "Accumulate at least 150 minutes of moderate physical activity weekly",
-    ],
-  },
-  physio: {
-    id: "physio",
-    alias: "physio",
-    name: "Physiotherapy & Movement Specialist",
-    title: "Physiotherapy & Movement",
-    subtitle: "Mobility, Balance & Corrective Exercise Prescription",
-    icon: "🧑‍⚕️",
-    focus: "Musculoskeletal assessment, mobility restoration, joint safety, and progressive corrective exercise programming.",
-    defaultReason: "Calibrated directly from your camera-tracked movement assessments (shoulder elevation, sit-to-stand, and single-leg balance).",
-    inactiveMessage: "No specific movement intervention is currently required.",
-    defaultEvidence: [
-      "Upper-body shoulder abduction and flexion angles",
-      "Chair sit-to-stand power and completion cadence",
-      "Single-leg standing balance hold duration",
-    ],
-    defaultRecommendations: [
-      "Targeted mobility drills for restricted joints",
-      "Progressive functional lower-body strength movements",
-      "Single-leg static and dynamic stability training",
-    ],
-  },
-  nutrition: {
-    id: "nutrition",
-    alias: "nutrition",
-    name: "Nutrition & Lifestyle Specialist",
-    title: "Nutrition & Lifestyle",
-    subtitle: "Dietary Quality, Hydration & Authentic Meal Evidence",
-    icon: "🍎",
-    focus: "Balanced dietary patterns, adequate protein distribution, optimal hydration, and whole-food nutrition.",
-    defaultReason: "Evaluates dietary needs, meal consistency, and authentic food logging evidence.",
-    inactiveMessage: "No specific dietary intervention is currently required based on your nutrition profile.",
-    defaultEvidence: [
-      "Reported dietary variety and nutritional focus areas",
-      "Authentic meal logs recorded in your food journal",
-      "Hydration and regular meal timing",
-    ],
-    defaultRecommendations: [
-      "Include a lean protein source in every main meal",
-      "Consume at least 2 litres of water throughout the active day",
-      "Prioritize diverse colourful vegetables and dietary fiber",
-    ],
-  },
-  recovery: {
-    id: "recovery",
-    alias: "recovery",
-    name: "Recovery & Care Specialist",
-    title: "Recovery & Care",
-    subtitle: "Sleep Hygiene, Rest Days & Fatigue Management",
-    icon: "🌙",
-    focus: "Sleep quality, restorative rest intervals, tissue recovery, and daily fatigue management.",
-    defaultReason: "Monitors sleep duration, perceived sleep quality, physical workload, and post-movement fatigue.",
-    inactiveMessage: "Sleep duration and rest recovery patterns meet current activity demands.",
-    defaultEvidence: [
-      "Nightly sleep duration (threshold: 7+ hours restorative sleep)",
-      "Sleep quality rating and sleep consistency",
-      "Post-exercise fatigue markers and rest intervals",
-    ],
-    defaultRecommendations: [
-      "Maintain consistent sleep and wake times within a 30-minute window",
-      "Schedule at least 1 full active recovery or rest day between intense sessions",
-      "Implement a 30-minute screen-free wind-down routine before bedtime",
-    ],
-  },
-  behaviour: {
-    id: "behaviour",
-    alias: "behaviour",
-    name: "Behaviour & Adherence Specialist",
-    title: "Behaviour & Adherence",
-    subtitle: "Habit Formation, Pacing & Routine Consistency",
-    icon: "🧠",
-    focus: "Building resilient micro-habits, cognitive pacing, overcoming adherence friction, and long-term compliance.",
-    defaultReason: "Assesses adherence barriers, routine consistency, and readiness for behavioral habit stacking.",
-    inactiveMessage: "No habit intervention is currently required based on your routine evidence.",
-    defaultEvidence: [
-      "Daily habit completion logs and friction reports",
-      "Consistency rate across weekly scheduled sessions",
-      "Reported barriers and personal motivators",
-    ],
-    defaultRecommendations: [
-      "Pair your movement routine with an existing anchor habit (e.g. after morning coffee)",
-      "Start with a micro-commitment of just 5 minutes when motivation is low",
-      "Track your habit check-ins daily to maintain your momentum streak",
-    ],
-  },
-  safety: {
-    id: "safety",
-    alias: "safety",
-    name: "Safety & Clinical Escalation Specialist",
-    title: "Safety & Clinical Escalation",
-    subtitle: "Clinical Gatekeeping, Contraindications & Red Flags",
-    icon: "🛡️",
-    focus: "Authoritative clinical gatekeeper evaluating medical context, movement contraindications, and red flags before any plan reaches you.",
-    defaultReason: "Evaluates clinical safety guidelines, confirmed medical reports, pain thresholds, and exercise contraindications.",
-    inactiveMessage: "Safety Gate screening passed — no clinical contraindications or escalations detected.",
-    defaultEvidence: [
-      "Confirmed clinical findings and medical report lab values",
-      "Symptom red flags and acute contraindications",
-      "Physiological load thresholds and exercise difficulty ceilings",
-    ],
-    defaultRecommendations: [
-      "All prescribed movements strictly operate within verified safe biomechanical ranges",
-      "Immediate referral flags are continuously monitored for clinical symptoms",
-      "No exercise exceeds your confirmed physiological readiness ceiling",
-    ],
-  },
-};
-
-const ALIAS_MAP = {
-  exercise: "exercise",
-  exercise_activity: "exercise",
-  activity: "exercise",
-  physio: "physio",
-  movement: "physio",
-  nutrition: "nutrition",
-  recovery: "recovery",
-  sleep: "recovery",
-  behaviour: "behaviour",
-  behavior: "behaviour",
-  habits: "behaviour",
-  safety: "safety",
-  clinical: "safety",
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// RECOMMENDATION CARD COMPONENT (PROPERTY-BY-PROPERTY RENDERING)
-// ─────────────────────────────────────────────────────────────────────────────
-
-export function RecommendationCard({ item, isPhysio = false }) {
-  if (!item) return null;
-
-  // Ensure item is normalized into a safe structure
-  const norm = normalizeRecommendation(item);
-  if (!norm) return null;
-
-  const safeTitle = safeDisplayValue(norm.title);
-  const safeAction = safeDisplayValue(norm.action);
-  const safeWhy = safeDisplayValue(norm.why);
-  const safeTarget = safeDisplayValue(norm.target);
-  const safeAdherence = safeDisplayValue(norm.adherence);
-  const safeSafetyNotes = toArray(norm.safetyNotes)
-    .map((s) => safeDisplayValue(s))
-    .filter(Boolean);
-
-  // Simple string recommendation
-  if (norm.isSimpleString || (!safeAction && !safeWhy && norm.sets == null && norm.repetitions == null && norm.durationSeconds == null)) {
-    return (
-      <li className="specialist-rec-item specialist-rec-item--simple">
-        <span className="specialist-rec-text">{safeTitle}</span>
-      </li>
-    );
-  }
-
-  const hasDosage =
-    norm.sets != null || norm.repetitions != null || norm.durationSeconds != null;
-
-  const image = isPhysio ? getExerciseImage(norm.id) : null;
-
-  return (
-    <li className="specialist-rec-item specialist-rec-card">
-      {image ? (
-        <img className="specialist-rec-image" src={image.src} alt={image.alt} />
-      ) : null}
-      <div className="specialist-rec-content">
-        <div className="specialist-rec-header">
-          <h4 className="specialist-rec-title">{safeTitle}</h4>
-          {safeTarget && (
-            <span className="specialist-rec-target-badge">{safeTarget}</span>
-          )}
-          {norm.difficulty != null && (
-            <span className="specialist-rec-diff-badge">Level {safeDisplayValue(norm.difficulty)}</span>
-          )}
-        </div>
-
-        {safeAction && (
-          <p className="specialist-rec-action">
-            <strong>Action:</strong> {safeAction}
-          </p>
-        )}
-
-        {hasDosage && (
-          <div className="specialist-rec-dosage">
-            {norm.sets != null && (
-              <span>
-                {norm.sets} {norm.sets === 1 ? "set" : "sets"}
-              </span>
-            )}
-            {norm.repetitions != null && <span>• {norm.repetitions} reps</span>}
-            {norm.durationSeconds != null && <span>• {norm.durationSeconds}s hold</span>}
-          </div>
-        )}
-
-        {safeWhy && (
-          <p className="specialist-rec-why">
-            <strong>Why it matters:</strong> {safeWhy}
-          </p>
-        )}
-
-        {safeAdherence && (
-          <p className="specialist-rec-adherence">
-            <span className="specialist-rec-adherence-label">Status:</span> {safeAdherence}
-          </p>
-        )}
-
-        {safeSafetyNotes.length > 0 && (
-          <div className="specialist-rec-safety">
-            <span className="specialist-rec-safety-icon" aria-hidden="true">
-              ⚠️
-            </span>
-            <span>{safeSafetyNotes.join(" ")}</span>
-          </div>
-        )}
-      </div>
-
-      {/* No "Start exercise" here any more: this card is a
-          recommendation, a reference and a completion control. The
-          camera-guided session is started from the Movement panel on My
-          Plan, which is the one place that owns execution. */}
-    </li>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// MAIN SPECIALIST DETAIL PAGE COMPONENT
-// ─────────────────────────────────────────────────────────────────────────────
-
-function SpecialistDetailPageInner() {
+/**
+ * The page itself. `workflow` is optional and exists so the page can be
+ * rendered against a known plan — the same server shape — without reaching for
+ * the network. In the product it is never passed and the plan is fetched on
+ * mount, exactly as before.
+ */
+export function SpecialistDetailPageInner({ workflow: providedWorkflow = null }) {
   const { specialistType } = useParams();
   const navigate = useNavigate();
 
-  const normalizedKey = ALIAS_MAP[specialistType?.toLowerCase()] || "physio";
-  const config = SPECIALIST_CONFIGS[normalizedKey] || SPECIALIST_CONFIGS.physio;
+  const canonical = canonicalSpecialistId(specialistType);
 
-  const [workflow, setWorkflow] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [workflow, setWorkflow] = useState(providedWorkflow);
+  const [state, setState] = useState(providedWorkflow ? "ready" : "loading");
+
+  const completion = useExerciseCompletion();
 
   useEffect(() => {
-    let mounted = true;
-    fetchLatestWorkflow()
-      .then((data) => {
-        if (mounted) {
+    if (!providedWorkflow) {
+      let mounted = true;
+
+      fetchLatestWorkflow()
+        .then((data) => {
+          if (!mounted) return;
           setWorkflow(data);
-          setLoading(false);
-        }
-      })
-      .catch(() => {
-        if (mounted) {
-          setLoading(false);
-        }
-      });
-    return () => {
-      mounted = false;
-    };
-  }, []);
+          setState("ready");
+        })
+        .catch(() => {
+          if (mounted) setState("error");
+        });
 
-  // Look up live data for this specialist from specialists_team if present
-  const rawTeam = workflow?.specialists_team;
-  const teamList = Array.isArray(rawTeam)
-    ? rawTeam
-    : typeof rawTeam === "object" && rawTeam !== null
-    ? Object.values(rawTeam)
-    : [];
+      return () => {
+        mounted = false;
+      };
+    }
 
-  const findLiveSpecialist = (key, cfg) =>
-    teamList.find(
-      (s) =>
-        s?.id === cfg.id ||
-        s?.id === key ||
-        s?.alias === key ||
-        (typeof s?.title === "string" && s.title.toLowerCase().includes(key))
+    return undefined;
+  }, [providedWorkflow]);
+
+  /** Follow the action the server put on an item: its route when there is one,
+   * the anchor it names otherwise. Nothing here decides where an action goes. */
+  const handleAction = useCallback(
+    (action) => {
+      if (!action) return;
+
+      if (action.route) {
+        navigate(action.route);
+        return;
+      }
+
+      if (action.anchor && typeof document !== "undefined") {
+        document.querySelector(action.anchor)?.scrollIntoView({ behavior: "smooth" });
+      }
+    },
+    [navigate],
+  );
+
+  /** The recording panels, for the two sections whose actions are records rather
+   * than a route: a habit completed, a meal logged. */
+  const renderSectionExtra = useCallback((target) => {
+    const kinds = new Set(
+      itemActions(target)
+        .map((item) => actionOf(item)?.kind)
+        .filter(Boolean),
     );
 
-  const statusFor = (live) =>
-    live?.status || (workflow?.available ? "EVALUATED_NOT_REQUIRED" : "NOT_ASSESSED");
-
-  const liveSpecialist = findLiveSpecialist(normalizedKey, config);
-
-  const status = statusFor(liveSpecialist);
-
-  const statusLabel =
-    safeDisplayValue(liveSpecialist?.status_label) ||
-    (status === "ACTIVE"
-      ? "Active in Your Plan"
-      : "Not activated");
-
-  const isActive = status === "ACTIVE";
-  const isEvaluatedNotRequired = status === "EVALUATED_NOT_REQUIRED";
-  const isNotAssessed = status === "NOT_ASSESSED";
-  const isInactive = !isActive;
-
-  // Safeguard reason: always a safe string
-  const rawReason = liveSpecialist?.reason || config.defaultReason;
-  const reason = safeDisplayValue(rawReason) || config.defaultReason;
-  const inactiveReason =
-    isInactive
-      ? `Current assessment did not identify a ${config.title.toLowerCase()} need requiring a specialist-specific intervention.`
-      : reason;
-
-  // Normalize evidence safely
-  let rawEvidence = liveSpecialist?.evidence ?? config.defaultEvidence;
-  if (rawEvidence && typeof rawEvidence === "object" && !Array.isArray(rawEvidence)) {
-    if (Array.isArray(rawEvidence.evidence)) {
-      rawEvidence = rawEvidence.evidence;
-    } else if (Array.isArray(rawEvidence.items)) {
-      rawEvidence = rawEvidence.items;
+    if (kinds.has("complete_habit")) {
+      return (
+        <BehaviourActionPanel goals={habitGoals(target)} planId={sectionPlanId(target)} />
+      );
     }
-  }
-  const evidenceList = normalizeEvidence(rawEvidence);
 
-  // Evidence states the specialists report alongside their findings.
-  // Both are optional: a card from an older persisted run simply has
-  // neither, and renders exactly as it did before.
-  const missingInformation = toArray(liveSpecialist?.missing_information)
-    .concat(toArray(liveSpecialist?.missing_safety_information))
-    .filter(Boolean);
-  const notAssessedMovements = toArray(liveSpecialist?.not_assessed_movements).filter(
-    (entry) => entry && entry.label
-  );
-
-  // Normalize recommendations safely
-  let rawRecommendations = liveSpecialist?.recommendations;
-  if (rawRecommendations && typeof rawRecommendations === "object" && !Array.isArray(rawRecommendations)) {
-    if (Array.isArray(rawRecommendations.recommendations)) {
-      rawRecommendations = rawRecommendations.recommendations;
-    } else if (Array.isArray(rawRecommendations.items)) {
-      rawRecommendations = rawRecommendations.items;
-    } else {
-      rawRecommendations = Object.values(rawRecommendations);
+    if (kinds.has("log_nutrition")) {
+      return <FoodLogPanel planAvailable planId={sectionPlanId(target)} />;
     }
+
+    return null;
+  }, []);
+
+  /* No specialist by that name ------------------------------------------- */
+
+  if (!canonical) {
+    return (
+      <AppShell backTo="/plan" backLabel="Your plan">
+        <div className="mw-main specialist-main">
+          <div className="mw-stack mw-enter">
+            <div className="mw-card specialist-error-fallback" role="alert">
+              <h1 className="mw-h1">No specialist by that name</h1>
+              <p className="mw-lede">
+                MoveWell has five specialists — Exercise &amp; Movement,
+                Nutrition &amp; Lifestyle, Behaviour &amp; Adherence, Recovery
+                &amp; Care, and Safety &amp; Practitioner Recommendation. This
+                link does not name one of them, so there is nothing to show
+                rather than something guessed at.
+              </p>
+              <div className="mw-row">
+                <Link className="mw-btn mw-btn--primary" to="/plan">
+                  See your plan
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </AppShell>
+    );
   }
-  const rawRecArray = toArray(rawRecommendations);
-  const recommendationsList = rawRecArray.length > 0
-    ? normalizeRecommendations(rawRecArray)
-    : isActive
-    ? normalizeRecommendations(config.defaultRecommendations)
-    : [];
 
-  // Focus description
-  const rawFocus = liveSpecialist?.focus || config.focus;
-  const focus = safeDisplayValue(rawFocus) || config.focus;
+  /* Loading -------------------------------------------------------------- */
 
-  // Domain specifics
-  const isPhysio = normalizedKey === "physio";
-  const isNutrition = normalizedKey === "nutrition";
-  const isBehaviour = normalizedKey === "behaviour";
-  const isExercise = normalizedKey === "exercise";
+  if (state === "loading") {
+    return (
+      <AppShell backTo="/plan" backLabel="Your plan">
+        <div className="mw-main specialist-main">
+          <p className="mw-lede mw-loading">Loading this specialist…</p>
+        </div>
+      </AppShell>
+    );
+  }
 
-  // Physio: extract rich programme exercises if available
-  const movementSpecialist = toArray(workflow?.specialists).find(
-    (s) => s?.title === "Movement" || (s?.programme && s.programme.length > 0)
+  /* Ready ---------------------------------------------------------------- */
+
+  const section = sectionFor(workflow, canonical);
+  const card = teamCards(workflow).find((entry) => entry.id === canonical) || null;
+  const plan = workflow?.unified_plan || null;
+
+  const identity = identityFor(canonical, section?.title || card?.title);
+  const teamStatus = section?.team_status || card?.team_status;
+  const wording = statusWording(teamStatus, section?.team_status_label || card?.team_status_label);
+
+  const actions = itemActions(section);
+  const emptyState = emptyStateOf(section);
+  const missing = toArray(section?.missing).map(safeDisplayValue).filter(Boolean);
+  const evidence = toArray(section?.evidence).map(safeDisplayValue).filter(Boolean);
+
+  const tracking = section?.tracking || null;
+  const progress = section?.progress || null;
+  const trackingLabel = usefulText(tracking?.status, tracking?.label);
+  const progressLabel = usefulText(progress?.direction, progress?.label);
+  const progressRows = usefulRows(progress?.rows);
+  const progressMeta = progress?.plan_version
+    ? `Plan version ${safeDisplayValue(progress.plan_version)}`
+    : null;
+
+  const involved = Boolean(section?.selected);
+  const constraints = involved && section ? constraintsFor(plan, section.specialist) : [];
+
+  /** This specialist's own step in the collaboration flow. `participated` is the
+   * server's word for whether it contributed this cycle — the page uses it to
+   * say "not part of this plan" rather than presenting a quiet domain as a
+   * decision. */
+  const collaborationStep =
+    collaboration(workflow)?.steps?.find(
+      (step) => step.kind === "specialist" && step.specialist === section?.specialist,
+    ) || null;
+  const contributed = collaborationStep ? Boolean(collaborationStep.participated) : involved;
+
+  const hasDetails = Boolean(
+    evidence.length || missing.length || progressMeta || progress?.adaptation_reason,
   );
-  const physioProgramme = normalizeRecommendations(
-    toArray(movementSpecialist?.programme)
-  );
 
-  // Behaviour: extract structured habit goals for BehaviourActionPanel
-  const behaviourSpecialist = toArray(workflow?.specialists).find(
-    (s) => s?.title === "Behaviour" || s?.title === "Daily habits"
-  );
-  const behaviourFocusItems = toArray(behaviourSpecialist?.focus_items);
-  const behaviourGoals = behaviourFocusItems.length > 0
-    ? behaviourFocusItems
-        .filter((item) => item && (item.topic_id || item.id || item.name || item.title))
-        .map((item, i) => ({
-          topicId: safeDisplayValue(item.topic_id || item.id) || `topic_${i}`,
-          name: safeDisplayValue(item.name || item.title || item.action) || `Habit ${i + 1}`,
-          action: safeDisplayValue(item.action || item.why) || "",
-        }))
-    : recommendationsList.map((r, i) => ({
-        topicId: safeDisplayValue(r.id) || `topic_${i}`,
-        name: safeDisplayValue(r.title) || `Habit ${i + 1}`,
-        action: safeDisplayValue(r.action || r.why) || "",
-      }));
+  const accentClass = identity.accent ? `specialist-accent-${identity.accent}` : "specialist-accent-none";
 
   return (
-    <div className="specialist-detail-page">
-      <AppNavigation backTo="/dashboard" backLabel="← Dashboard" />
-
-      <main className="specialist-detail-main">
-        {/* Breadcrumb navigation */}
-        <nav className="specialist-breadcrumb" aria-label="Breadcrumb">
-          <Link to="/dashboard">Dashboard</Link>
-          <span className="specialist-breadcrumb-sep">/</span>
-          <Link to="/dashboard#specialists">Specialists</Link>
-          <span className="specialist-breadcrumb-sep">/</span>
-          <span aria-current="page">{safeDisplayValue(config.title)}</span>
-        </nav>
-
-        {/* Hero Card */}
-        <header className="specialist-header-card">
-          <div className="specialist-hero-avatar" aria-hidden="true">
-            {config.icon}
-          </div>
-          <div className="specialist-hero-content">
-            <div className="specialist-hero-top">
-              <span className="specialist-hero-role">{safeDisplayValue(config.subtitle)}</span>
-              <span
-                className={`specialist-badge specialist-badge--${
-                  isActive
-                    ? "active"
-                    : isNotAssessed
-                    ? "not-assessed"
-                    : "evaluated"
-                }`}
-              >
-                {statusLabel}
+    <AppShell backTo="/plan" backLabel="Your plan">
+      <div className="mw-main specialist-main">
+        <div className={`mw-stack mw-enter ${accentClass}`}>
+          {/* Who this is */}
+          <header className="mw-card mw-card--tint specialist-header">
+            {identity.icon ? (
+              <span className="specialist-header-icon" aria-hidden="true">
+                {identity.icon}
               </span>
-            </div>
-            <h1 className="specialist-hero-title">{safeDisplayValue(config.name)}</h1>
-            <p className="specialist-hero-desc">{focus}</p>
-            <div className="specialist-focus-box">
-              <strong>Clinical Focus:</strong> {focus}
-            </div>
-          </div>
-        </header>
-
-        {/* Detail Grid */}
-        <div className="specialist-grid">
-          {/* Clinical Rationale Panel */}
-          <section className="specialist-card-panel" aria-labelledby="decision-heading">
-            <h2 id="decision-heading" className="specialist-panel-title">
-              📋 Agent Decision & Rationale
-            </h2>
-            <p className="specialist-reason-text">{isInactive ? inactiveReason : reason}</p>
-          </section>
-
-          {/* Evidence Panel */}
-          <section className="specialist-card-panel" aria-labelledby="evidence-heading">
-            <h2 id="evidence-heading" className="specialist-panel-title">
-              🔍 Evidence & Assessment Data Used
-            </h2>
-            {evidenceList.length > 0 ? (
-              <ul className="specialist-evidence-list">
-                {evidenceList.map((itemStr, idx) => (
-                  <li key={idx} className="specialist-evidence-item">
-                    <span className="specialist-evidence-icon" aria-hidden="true">
-                      ✓
-                    </span>
-                    <span className="specialist-evidence-text">{safeDisplayValue(itemStr)}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="specialist-reason-text">
-                No additional evidence is currently available.
-              </p>
-            )}
-
-            {/*
-              What this specialist still needs. The backend reports it
-              (missing_information) instead of filling the gap with
-              general advice, so the screen has to show it -- otherwise an
-              unanswered question looks the same as a reviewed finding.
-            */}
-            {missingInformation.length > 0 ? (
-              <div className="specialist-missing-block">
-                <h3 className="specialist-missing-title">Not yet known</h3>
-                <ul className="specialist-evidence-list">
-                  {missingInformation.map((itemStr, idx) => (
-                    <li key={idx} className="specialist-evidence-item">
-                      <span className="specialist-evidence-icon" aria-hidden="true">
-                        ?
-                      </span>
-                      <span className="specialist-evidence-text">
-                        {safeDisplayValue(itemStr)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
             ) : null}
 
-            {notAssessedMovements.length > 0 ? (
-              <div className="specialist-missing-block">
-                <h3 className="specialist-missing-title">Movement checks not measured</h3>
-                <ul className="specialist-evidence-list">
-                  {notAssessedMovements.map((entry, idx) => (
-                    <li key={idx} className="specialist-evidence-item">
-                      <span className="specialist-evidence-icon" aria-hidden="true">
-                        ?
-                      </span>
-                      <span className="specialist-evidence-text">
-                        {safeDisplayValue(entry?.label)} — not measured. This is not a
-                        result, and nothing has been assumed from it.
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-          </section>
+            <div className="specialist-header-body">
+              <span className="mw-eyebrow">Your MoveWell team</span>
+              <h1 className="mw-h1 specialist-header-name">{identity.coach}</h1>
+              <p className="mw-meta">{identity.canonical}</p>
+              {identity.role ? <p className="mw-lede specialist-header-role">{identity.role}</p> : null}
 
-          {/* Actionable Plan / Recommendations */}
-          <section className="specialist-card-panel" aria-labelledby="recommendations-heading">
-            <h2 id="recommendations-heading" className="specialist-panel-title">
-              🎯 Recommendations & Guidance
-            </h2>
-
-            {/* Inactive state fallback */}
-            {isInactive ? (
-              <div className="specialist-empty-state">
-                <div className="specialist-empty-icon" aria-hidden="true">
-                  ℹ️
-                </div>
-                <p className="specialist-empty-text">
-                  <strong>Status:</strong> Not activated
-                </p>
-                <p className="specialist-reason-text" style={{ marginTop: "8px" }}>
-                  <strong>Why:</strong> No relevant constraint or need was identified from the current assessment and user state.
-                </p>
-                <p className="specialist-reason-text" style={{ marginTop: "8px" }}>
-                  <strong>Evidence:</strong> {evidenceList.length > 0 ? evidenceList.slice(0, 2).join(" • ") : "No specialist-specific evidence was required."}
-                </p>
-                <p className="specialist-reason-text" style={{ marginTop: "8px" }}>
-                  <strong>Contribution:</strong> No specialist-specific modification was added to the current MoveWell plan.
-                </p>
-              </div>
-            ) : (
-              <>
-                {/* Physio Rich Programme rendering */}
-                {isPhysio && physioProgramme.length > 0 ? (
-                  <div>
-                    <p className="specialist-reason-text" style={{ marginBottom: "16px" }}>
-                      The Physiotherapy specialist has selected the following exercises based on your camera-tracked movement metrics:
-                    </p>
-                    <ul className="specialist-rec-list" style={{ marginBottom: "20px" }}>
-                      {physioProgramme.map((ex, idx) => (
-                        <RecommendationCard
-                          key={ex.id || `physio_${idx}`}
-                          item={ex}
-                          isPhysio={true}
-                        />
-                      ))}
-                    </ul>
-                  </div>
-                ) : recommendationsList.length > 0 ? (
-                  <ul className="specialist-rec-list">
-                    {recommendationsList.map((rec, idx) => (
-                      <RecommendationCard
-                        key={rec.id || `rec_${idx}`}
-                        item={rec}
-                        isPhysio={isPhysio}
-                      />
-                    ))}
-                  </ul>
+              <div className="mw-row specialist-header-status">
+                <StatusBadge label={wording.label} tone={wording.tone} />
+                {involved ? (
+                  <span className="mw-meta">In your plan</span>
                 ) : (
-                  <p className="specialist-reason-text">
-                    No specific recommendations are currently available.
-                  </p>
+                  <span className="mw-meta">Not part of this plan</span>
                 )}
-              </>
-            )}
-          </section>
+              </div>
+            </div>
+          </header>
 
-          {/* Interactive Tools for Nutrition or Behaviour */}
-          {isNutrition && (
-            <section className="specialist-card-panel" aria-labelledby="nutrition-log-heading">
-              <h2 id="nutrition-log-heading" className="specialist-panel-title">
-                🥗 Log a Meal for Nutrition Review
-              </h2>
-              <FoodLogPanel
-                planAvailable={Boolean(workflow?.available)}
-                planId={workflow?.id || null}
-              />
-            </section>
-          )}
+          {state === "error" ? (
+            <div className="mw-card" role="alert">
+              <h2 className="mw-h3">This specialist could not be loaded</h2>
+              <p className="mw-lede">
+                There was a problem reaching the service. Nothing you have
+                recorded has been changed.
+              </p>
+              <div className="mw-row">
+                <Link className="mw-btn" to="/plan">
+                  Back to your plan
+                </Link>
+              </div>
+            </div>
+          ) : null}
 
-          {isBehaviour && (
-            <section className="specialist-card-panel" aria-labelledby="behaviour-panel-heading">
-              <h2 id="behaviour-panel-heading" className="specialist-panel-title">
-                🧠 Today&rsquo;s Habit Check-in
-              </h2>
-              <BehaviourActionPanel
-                goals={behaviourGoals}
-                planId={workflow?.id || null}
-              />
-            </section>
-          )}
+          {state === "ready" && !section ? (
+            <div className="mw-card">
+              <h2 className="mw-h3">Nothing has been prepared for this specialist yet</h2>
+              <p className="mw-lede">
+                No plan has been prepared for this account yet, so this
+                specialist has no finding to show. Preparing your plan will let
+                it review your own evidence.
+              </p>
+              <div className="mw-row">
+                <Link className="mw-btn mw-btn--primary" to="/plan">
+                  Go to your plan
+                </Link>
+              </div>
+            </div>
+          ) : null}
+
+          {section ? (
+            <>
+              {/* Why this specialist is involved */}
+              {section.short_reason ? (
+                <section className="mw-section" aria-label="Why this specialist is involved">
+                  <SectionHeader
+                    title={
+                      contributed
+                        ? "Why this specialist is involved"
+                        : "Why this specialist is not involved"
+                    }
+                  />
+                  <div className="mw-card">
+                    <p className="mw-lede">{safeDisplayValue(section.short_reason)}</p>
+                  </div>
+                </section>
+              ) : null}
+
+              {/* What they are working on */}
+              {section.current_focus ? (
+                <section className="mw-section" aria-label="Current focus">
+                  <SectionHeader title={identity.focusLabel || "Current focus"} />
+                  <div className="mw-card mw-card--tint">
+                    <p className="mw-lede">{safeDisplayValue(section.current_focus)}</p>
+                  </div>
+                </section>
+              ) : null}
+
+              {/* What they decided */}
+              {section.decision ? (
+                <section className="mw-section" aria-label="What MoveWell decided">
+                  <SectionHeader title="What MoveWell decided" />
+                  <div className="mw-card">
+                    <p className="mw-lede">{safeDisplayValue(section.decision)}</p>
+                  </div>
+                </section>
+              ) : null}
+
+              {/* What to do */}
+              {actions.length || (emptyState && !actions.length) ? (
+                <section
+                  className="mw-section"
+                  aria-label="Your actions"
+                  id={`specialist-${section.specialist}`}
+                >
+                  <SectionHeader
+                    title="Your actions"
+                    hint={
+                      actions.length
+                        ? `${actions.length} ${actions.length === 1 ? "action" : "actions"} from this specialist`
+                        : null
+                    }
+                  />
+
+                  {actions.length ? (
+                    <>
+                      <ul className="specialist-action-list">
+                        {actions.map((item, index) => (
+                          <PlanActionItem
+                            key={`${item.item_id || item.kind || "item"}-${item.position ?? index}`}
+                            item={item}
+                            onAction={handleAction}
+                            completion={completion}
+                          />
+                        ))}
+                      </ul>
+                      {renderSectionExtra(section)}
+                    </>
+                  ) : emptyState ? (
+                    <EmptyState
+                      title={safeDisplayValue(emptyState.message) || "Nothing here yet"}
+                      action={
+                        emptyState.action?.label ? (
+                          <PrimaryButton
+                            onClick={() => handleAction(emptyState.action)}
+                            disabled={!emptyState.action.route && !emptyState.action.anchor}
+                          >
+                            {emptyState.action.label}
+                          </PrimaryButton>
+                        ) : null
+                      }
+                    />
+                  ) : null}
+                </section>
+              ) : null}
+
+              {/* What it has produced so far */}
+              {trackingLabel || progressLabel || progressRows.length ? (
+                <section className="mw-section" aria-label="Result and progress">
+                  <SectionHeader title="Result and progress" />
+
+                  <div className="mw-card specialist-progress">
+                    {trackingLabel ? (
+                      <div className="specialist-progress-block">
+                        <h3 className="specialist-block-title">Recorded so far</h3>
+                        <p className="mw-lede">{trackingLabel}</p>
+                        {tracking?.summary ? (
+                          <p className="mw-meta">{safeDisplayValue(tracking.summary)}</p>
+                        ) : null}
+                        <Rows rows={tracking?.rows} />
+                      </div>
+                    ) : null}
+
+                    {progressLabel ? (
+                      <div className="specialist-progress-block">
+                        <h3 className="specialist-block-title">Where that is going</h3>
+                        <p className="mw-lede">{progressLabel}</p>
+                      </div>
+                    ) : null}
+
+                    {progressRows.length ? (
+                      <div className="specialist-progress-block">
+                        <Rows rows={progressRows} />
+                      </div>
+                    ) : null}
+                  </div>
+                </section>
+              ) : null}
+
+              {/* What happens next */}
+              {section.next_step ? (
+                <section className="mw-section" aria-label="Next">
+                  <SectionHeader title="Next" />
+                  <div className="mw-card">
+                    <p className="mw-lede">{safeDisplayValue(section.next_step)}</p>
+                  </div>
+                </section>
+              ) : null}
+
+              {/* Where another specialist's decision reaches into this one.
+                  Shown only when the server says it applies here. */}
+              {constraints.length ? (
+                <section className="mw-section specialist-collab">
+                  <ul className="specialist-collab-list">
+                    {constraints.map((constraint, index) => {
+                      const source = identityFor(constraint.source).coach;
+
+                      return (
+                        <li
+                          className="mw-card specialist-collab-item"
+                          key={`${constraint.source}-${constraint.type || index}`}
+                        >
+                          <p className="specialist-collab-line">
+                            Working with <strong>{source}</strong>
+                          </p>
+                          {constraint.reason ? (
+                            <p className="mw-lede">{safeDisplayValue(constraint.reason)}</p>
+                          ) : null}
+                          {toArray(constraint.actions).length ? (
+                            <DetailDrawer label="What was asked of it">
+                              <ul className="specialist-plain-list">
+                                {toArray(constraint.actions)
+                                  .map(safeDisplayValue)
+                                  .filter(Boolean)
+                                  .map((line, lineIndex) => (
+                                    <li key={`${line}-${lineIndex}`}>{line}</li>
+                                  ))}
+                              </ul>
+                            </DetailDrawer>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+              ) : null}
+
+              {/* Everything that is not the first thing a person needs. */}
+              {hasDetails ? (
+                <DetailDrawer label="View details">
+                  {evidence.length ? (
+                    <div className="specialist-detail-block">
+                      <h3 className="specialist-block-title">What this was based on</h3>
+                      <ul className="specialist-plain-list">
+                        {evidence.map((line, index) => (
+                          <li key={`${line}-${index}`}>{line}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
+                  {missing.length ? (
+                    <div className="specialist-detail-block">
+                      <h3 className="specialist-block-title">What is not known yet</h3>
+                      <ul className="specialist-plain-list specialist-plain-list--quiet">
+                        {missing.map((line, index) => (
+                          <li key={`${line}-${index}`}>{line}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
+                  {progressMeta || progress?.adaptation_reason ? (
+                    <div className="specialist-detail-block">
+                      <h3 className="specialist-block-title">This plan</h3>
+                      {progressMeta ? <p className="mw-meta">{progressMeta}</p> : null}
+                      {progress?.adaptation_reason ? (
+                        <p className="mw-meta">{safeDisplayValue(progress.adaptation_reason)}</p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </DetailDrawer>
+              ) : null}
+            </>
+          ) : null}
         </div>
-
-        {/* Navigation Actions */}
-        <div className="specialist-nav-bar">
-          <button
-            type="button"
-            className="specialist-secondary-btn"
-            onClick={() => navigate("/dashboard")}
-          >
-            ← Back to Dashboard
-          </button>
-          <button
-            type="button"
-            className="specialist-action-btn"
-            onClick={() => navigate("/plan")}
-          >
-            See full MoveWell plan →
-          </button>
-        </div>
-
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }
 

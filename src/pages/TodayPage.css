@@ -1,0 +1,185 @@
+/**
+ * The Today screen.
+ *
+ * Built only from the design system in src/index.css: the layout classes
+ * (`.mw-main`, `.mw-stack`, `.mw-grid--team`), the card, button and badge
+ * classes, and the tokens. There is no colour literal in this file — a hex
+ * value here would be a second place the identity lives, and the two would
+ * drift.
+ *
+ * What is here is this page's own composition: the rhythm between the day's
+ * blocks, how the score dial sits in its card, and how the movers, the five
+ * coach cards and the recorded lines read. The action cards inside "Today's
+ * focus" are the plan screen's component (PlanActionItem) and keep its styles.
+ */
+
+.today-flow {
+  gap: var(--space-6);
+}
+
+/* --------------------------------------------------------------- the score --- */
+
+.today-score-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.today-score-message {
+  text-align: center;
+}
+
+.today-score-focus {
+  margin: 0;
+  font-size: 14.5px;
+  color: var(--ink-soft);
+}
+
+.today-score-focus strong {
+  color: var(--ink);
+}
+
+/* The change since the previous assessment: a comparison, never a judgement. */
+.today-change {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--accent-ink);
+}
+
+/* The method disclosure is the card's only left-aligned part. */
+.today-score .mw-details {
+  width: 100%;
+  text-align: left;
+}
+
+/* --------------------------------------------------------------- the focus --- */
+
+.today-focus-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.today-focus-coach {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.today-focus-list {
+  /* Self-sufficient: the list's own layout, whatever the plan screen does
+     with the same class. */
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* ------------------------------------------------------------- the progress --- */
+
+.today-progress-values {
+  margin: 0;
+  font: 700 22px/1.2 Manrope, sans-serif;
+  letter-spacing: -0.4px;
+  color: var(--ink);
+}
+
+.today-movers {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* ---------------------------------------------------------------- the team --- */
+
+.today-team-item {
+  display: flex;
+  min-width: 0;
+}
+
+.today-team-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+}
+
+.today-team-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.today-team-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.today-team-name {
+  font: 700 15px/1.3 Manrope, sans-serif;
+  letter-spacing: -0.2px;
+  color: var(--ink);
+}
+
+.today-team-role {
+  display: block;
+}
+
+/* One line, in the server's own words. A longer reason is cut off here and
+   nowhere else — the sentence itself is never rewritten. */
+.today-team-reason {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.today-team-card:hover .today-team-name {
+  color: var(--accent);
+}
+
+/* --------------------------------------------------------------- the plan --- */
+
+.today-plan-count {
+  margin: 0;
+  font: 700 16px/1.4 Manrope, sans-serif;
+  letter-spacing: -0.2px;
+  color: var(--ink);
+}
+
+.today-plan-tracking {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* -------------------------------------------------------------- the safety --- */
+
+/* Only shown when the review changed something. Nothing here is decorative:
+   the border and the tint are the design system's warning pair. */
+.today-safety {
+  border-color: var(--warn-line);
+  background: var(--warn-soft);
+}

@@ -24,6 +24,16 @@ from physio_agent.tool_client import InProcessExerciseToolClient
 from progress_agent.tool_client import InProcessProgressToolClient
 from user_state.schema import build_user_state
 
+# A completion timestamp that is genuinely recent, relative to whatever
+# "now" is when this suite runs. These tests are about what the Progress
+# Agent concludes from a *current* assessment; a hard-coded calendar date
+# silently became a "stale assessment" case once enough real time passed,
+# which is not what any of them is testing.
+RECENT_COMPLETED_AT = (
+    datetime.now(timezone.utc) - timedelta(days=3)
+).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 
 def _need_entry(level):
     return {
@@ -216,7 +226,7 @@ class NutritionClosedLoopTests(unittest.TestCase):
             progress_tool_client=progress_client,
             progress_trigger={"reason": "periodic check"},
             baseline_assessment=_balance_doc(40, "2026-01-01T00:00:00Z"),
-            current_assessment=_balance_doc(40, "2026-09-05T00:00:00Z"),
+            current_assessment=_balance_doc(40, RECENT_COMPLETED_AT),
             **_clients("nonutr"),
         )
         progress_result = next(r for r in result["agent_results"] if r["agent"] == "progress")
@@ -243,7 +253,7 @@ class LowNeedDoesNotBlockProgressTriggeredReviewTests(unittest.TestCase):
             # A real, computed IMPROVED direction — never fabricated —
             # is what makes Progress recommend PROGRESS (-> physio) here.
             baseline_assessment=_balance_doc(40, "2026-01-01T00:00:00Z"),
-            current_assessment=_balance_doc(60, "2026-09-05T00:00:00Z"),
+            current_assessment=_balance_doc(60, RECENT_COMPLETED_AT),
             exercise_results=[],
             **_clients("lowneed"),
         )

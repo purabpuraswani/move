@@ -1,234 +1,204 @@
 /**
- * Food log panel, shown inside the plan screen.
+ * Food log panel, shown inside the plan screen and a nutrition specialist's
+ * page.
+ *
+ * Restyled onto the light design tokens in src/index.css. Every class name the
+ * panel already used is kept; only the values changed, so the panel reads as
+ * part of the same product without its behaviour being touched.
  */
 
 .foodlog {
-  margin-top: 26px;
-
-  padding: 22px;
-
-  background: var(--surface);
-
+  display: flex;
+  flex-direction: column;
+  margin-top: var(--space-4);
+  padding: var(--space-5);
   border: 1px solid var(--border);
-
   border-radius: var(--radius-md);
+  background: var(--surface);
 }
 
 .foodlog-title {
-  margin: 0 0 6px;
-
-  font-size: 18px;
-
-  font-weight: 700;
+  margin: 0;
+  font: 700 17px/1.3 Manrope, sans-serif;
+  letter-spacing: -0.2px;
+  color: var(--ink);
 }
 
 .foodlog-blurb {
-  margin: 0 0 18px;
-  margin: 0 0 14px;
-
-  color: var(--muted);
-
-  font-size: 13px;
-
+  margin: var(--space-1) 0 var(--space-4);
+  font-size: 13.5px;
   line-height: 1.6;
+  color: var(--ink-soft);
 }
 
+/* What logging does and does not claim. Informational, not a warning. */
 .foodlog-coaching-notice {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  margin-bottom: 18px;
-  padding: 10px 12px;
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
-  border-radius: var(--radius-sm, 6px);
-  font-size: 12px;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  padding: var(--space-3);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  font-size: 12.5px;
   line-height: 1.5;
-  color: #166534;
+  color: var(--accent-ink);
 }
 
 .foodlog-notice-icon {
+  flex: none;
   font-size: 14px;
   font-weight: 700;
   line-height: 1;
-  color: #15803d;
-  flex: none;
+  color: var(--accent);
 }
 
 .foodlog-notice-text {
   flex: 1;
 }
 
+.foodlog-form {
+  display: flex;
+  flex-direction: column;
+}
+
 .foodlog-meals {
   display: flex;
-
   flex-wrap: wrap;
-
-  gap: 8px;
-
-  margin-bottom: 18px;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
 }
 
 .foodlog-meal {
-  padding: 8px 16px;
-
-  border: 1px solid var(--border);
-
-  border-radius: 999px;
-
+  padding: 7px 15px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
   background: var(--surface);
-
-  color: var(--dark-soft);
-
+  color: var(--ink-soft);
   font-family: inherit;
-
   font-size: 13px;
-
   cursor: pointer;
 }
 
+.foodlog-meal:hover {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+
 .foodlog-meal--on {
-  border-color: var(--green);
-
-  background: var(--green-light);
-
-  color: var(--green);
-
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
   font-weight: 600;
+}
+
+.foodlog-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: var(--space-3);
 }
 
 .foodlog-label {
   display: block;
-
-  margin-bottom: 6px;
-
   font-size: 13px;
-
   font-weight: 600;
+  color: var(--ink-soft);
 }
 
 .foodlog-optional {
-  color: var(--muted);
-
   font-weight: 400;
+  color: var(--ink-faint);
 }
 
 .foodlog-input {
   width: 100%;
-
   box-sizing: border-box;
-
-  margin-bottom: 16px;
-
   padding: 11px 14px;
-
-  border: 1px solid var(--border);
-
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
-
-  background: var(--bg);
-
-  color: var(--dark);
-
+  background: var(--surface);
+  color: var(--ink);
   font-family: inherit;
-
   font-size: 14px;
+}
+
+.foodlog-input::placeholder {
+  color: var(--ink-faint);
 }
 
 .foodlog-input:focus {
   outline: none;
-
-  border-color: var(--green-bright);
+  border-color: var(--accent);
 }
 
 .foodlog-submit {
-  padding: 11px 20px;
-
-  border: none;
-
-  border-radius: 999px;
-
-  background: var(--green);
-
-  color: #fff;
-
+  align-self: flex-start;
+  margin-top: var(--space-2);
+  padding: 11px 22px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--on-accent);
   font-family: inherit;
-
   font-size: 14px;
-
   font-weight: 600;
-
   cursor: pointer;
 }
 
-.foodlog-submit:disabled {
-  opacity: 0.6;
+.foodlog-submit:hover:not(:disabled) {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
 
-  cursor: default;
+.foodlog-submit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .foodlog-error {
-  margin: 0 0 12px;
-
+  margin: 0 0 var(--space-3);
   color: var(--danger);
-
   font-size: 13px;
 }
 
 .foodlog-saved {
-  margin: 0 0 12px;
-
-  color: var(--green);
-
+  margin: 0 0 var(--space-3);
+  color: var(--accent);
   font-size: 13px;
+  font-weight: 600;
 }
 
 .foodlog-recent {
-  margin-top: 24px;
-
-  padding-top: 18px;
-
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
   border-top: 1px solid var(--border);
 }
 
 .foodlog-recent-title {
-  margin: 0 0 10px;
-
-  font-size: 13px;
-
+  margin: 0 0 var(--space-3);
+  font-size: 11.5px;
   font-weight: 700;
-
-  letter-spacing: 0.6px;
-
+  letter-spacing: 0.07em;
   text-transform: uppercase;
-
-  color: var(--muted);
+  color: var(--ink-faint);
 }
 
 .foodlog-list {
   margin: 0;
-
   padding: 0;
-
   list-style: none;
 }
 
 .foodlog-entry {
   display: flex;
-
   flex-wrap: wrap;
-
-  align-items: baseline;
-
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-
-  padding: 9px 0;
-
-  padding: 10px 0;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
   border-bottom: 1px solid var(--border);
-
   font-size: 14px;
 }
 
@@ -240,75 +210,65 @@
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--space-2);
   flex: 1;
   min-width: 200px;
 }
 
 .foodlog-entry-meal {
-  min-width: 74px;
-
-  color: var(--green);
-
   min-width: 68px;
-  color: var(--green, #10b981);
   font-size: 12px;
-
-  font-weight: 600;
   font-weight: 700;
-  text-transform: uppercase;
   letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
 }
 
 .foodlog-entry-food {
   flex: 1;
   font-weight: 500;
-  color: var(--dark, #0f172a);
+  color: var(--ink);
 }
 
-.foodlog-entry-quantity,
 .foodlog-entry-quantity {
-  color: var(--muted, #64748b);
+  color: var(--ink-faint);
   font-size: 13px;
 }
 
 .foodlog-entry-meta {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   flex: none;
 }
 
 .foodlog-entry-when {
-  color: var(--muted);
-
-  color: var(--muted, #64748b);
+  color: var(--ink-faint);
   font-size: 12px;
 }
 
 .foodlog-entry-status {
+  padding: 2px 8px;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-pill);
   font-size: 11px;
   font-weight: 600;
-  color: #059669;
-  background: #ecfdf5;
-  border: 1px solid #a7f3d0;
-  border-radius: 999px;
-  padding: 2px 8px;
+  color: var(--accent-ink);
+  background: var(--accent-soft);
 }
 
+/* An empty log is not a failure, so it is a quiet box rather than a warning. */
 .foodlog-empty-box {
-  margin-top: 14px;
-  padding: 12px 14px;
-  background: #f8fafc;
-  border: 1px dashed #cbd5e1;
-  border-radius: 8px;
+  margin-top: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
 }
 
 .foodlog-none {
   margin: 0;
-  color: var(--muted, #64748b);
+  color: var(--ink-faint);
   font-size: 13px;
-
-  line-height: 1.6;
   line-height: 1.5;
 }

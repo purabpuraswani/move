@@ -346,6 +346,13 @@ _NUTRITION_FIELDS = (
     "fruit_vegetable_servings",
     "water_glasses_per_day",
     "processed_food_frequency",
+    # Added with the Nutrition & Lifestyle check-in
+    # (nutrition_library/check_in.py). These three had nothing behind them
+    # before: nothing in the product ever asked, so the section stayed
+    # unavailable and the specialist could only report NOT_ASSESSED.
+    "meals_per_day",
+    "eating_out_frequency",
+    "nutrition_goal",
 )
 
 

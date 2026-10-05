@@ -13,6 +13,12 @@ exercise/nutrition/behaviour library lookups — so they are directly
 unit-testable without a database connection.
 """
 
+from datetime import datetime, timezone
+from urllib.parse import quote
+
+from behaviour_agent.adherence import (
+    compute_behaviour_adherence,
+)
 from behaviour_library.catalog import (
     BehaviourTopicNotFoundError,
     get_behaviour_topic_details,
@@ -26,8 +32,31 @@ from activity_agent.evidence import build_activity_view
 from activity_agent.reasoning import assess_activity
 from nutrition_agent.evidence import build_nutrition_evidence_view
 from orchestration.evidence import STATUS_INSUFFICIENT_EVIDENCE
+from orchestration.specialists import (
+    ACTION_COMPLETE_HABIT,
+    ACTION_LOG_NUTRITION,
+    ACTION_START_EXERCISE,
+    ACTION_VIEW_GUIDANCE,
+    BEHAVIOUR_ADHERENCE,
+    EXERCISE_MOVEMENT,
+    NUTRITION_LIFESTYLE,
+    RECOVERY_CARE,
+    SAFETY_PRACTITIONER,
+    SECTION_ACTIVITY_VOLUME,
+    SECTION_EXERCISE_PROGRAMME,
+    SECTION_HABIT_GOALS,
+    SECTION_NUTRITION_GOALS,
+    SECTION_RECOVERY_GUIDANCE,
+    SECTION_SAFETY_GUIDANCE,
+    SPECIALIST_ORDER,
+    SPECIALISTS,
+    definition,
+    route_for,
+)
 from orchestrator.decision import (
+    decide_behaviour_required,
     decide_exercise_activity_required,
+    decide_nutrition_required,
     decide_physio_required,
     decide_recovery_required,
 )
@@ -37,6 +66,7 @@ from recovery_agent.reasoning import assess_recovery
 from safety.gate import _missing_safety_information
 from safety.rules import reported_health_concerns
 from safety.schema import STATUS_TO_LEVEL
+from workflow.score import build_movewell_score, with_previous
 
 # safety/schema.py's SAFETY_STATUSES, translated into a plain-language
 # sentence a non-technical user can act on. These are the only five values
@@ -865,9 +895,26 @@ def _physical_assessment_summary(user_state: dict) -> dict:
 
 
 def serialise_workflow_state(
-    user_state: dict, safety_status=None, safety_result=None
+    user_state: dict,
+    safety_status=None,
+    safety_result=None,
+    tracking: dict = None,
+    previous_score: dict = None,
 ) -> dict:
-    """Build the user-facing workflow response from persisted user state."""
+    """Build the user-facing workflow response from persisted user state.
+
+    `tracking` is this user's already-fetched records (exercise results,
+    behaviour actions, food log entries). It is passed in rather than
+    fetched here because this module reads no database; omitting it means
+    every domain reports its tracking as not recorded, which is exactly what
+    an unavailable record means.
+
+    `unified_plan` is the authoritative plan the plan screen renders. The
+    three `*_plan` summaries and `specialists_team` are kept because other
+    screens and this project's tests read them, and both are derived from
+    the same `user_state` — one source of truth, three views of it, none of
+    which can disagree about what the user's plan contains.
+    """
 
     exercise_plan = _exercise_plan_summary(user_state)
     nutrition_plan = _nutrition_plan_summary(user_state)
@@ -881,6 +928,15 @@ def serialise_workflow_state(
 
     return {
         "generated_at": user_state.get("generatedAt"),
+        # The one number the product is organised around: a restatement of the
+        # need values above, refused when nothing was measured
+        # (workflow/score.py).
+        "movewell_score": with_previous(
+            build_movewell_score(user_state),
+            (previous_score or {}).get("value"),
+            (previous_score or {}).get("recorded_at"),
+            (previous_score or {}).get("domains"),
+        ),
         "exercise_plan": exercise_plan,
         "nutrition_plan": nutrition_plan,
         "behaviour_plan": behaviour_plan,
@@ -891,459 +947,2503 @@ def serialise_workflow_state(
         "specialists_team": build_specialists_team(
             user_state, safety_status=safety_status, safety_result=safety_result
         ),
+        "unified_plan": build_unified_plan(
+            user_state,
+            safety_status=safety_status,
+            safety_result=safety_result,
+            tracking=tracking,
+        ),
         "assessment_summary": _physical_assessment_summary(user_state),
     }
 
 
-def build_specialists_team(user_state: dict = None, safety_status=None, safety_result=None) -> list:
-    user_state = user_state or {}
-    need_profile = _need_profile(user_state) or {}
-    exercise_plan = _exercise_plan_summary(user_state)
-    nutrition_plan = _nutrition_plan_summary(user_state)
-    behaviour_plan = _behaviour_plan_summary(user_state)
+def _status_from(active: bool, evaluated: bool) -> str:
+    """The three selection states a specialist card can be in.
 
-    # 1. Exercise & Physical Activity
-    #
-    # The card shows what the Exercise & Physical Activity specialist
-    # actually reasoned, by calling the same pure function the agent runs
-    # (activity_agent/reasoning.py). It used to hold two fixed paragraphs
-    # that every user saw word for word, whatever their step count; a card
-    # that cannot differ between users is not a specialist.
-    exercise_dec = decide_exercise_activity_required(user_state, need_profile)
-    is_exercise_active = exercise_dec.get("exercise_activity_required", False)
-    exercise_evaluated = exercise_dec.get("evaluated", False)
+    `NOT_ASSESSED` is deliberately its own state and never folded into
+    "nothing needed": the first means this project has no evidence to judge
+    the domain with, the second means it looked and found no need. They are
+    different sentences because they are different facts.
+    """
 
-    activity_domain = assess_activity(build_activity_view(user_state))
-    exercise_recs = (
-        [
-            {
-                "id": item["id"],
-                "title": item["title"],
-                "action": item["action"],
-                "why": item["why"],
-            }
-            for item in activity_domain["activity_recommendations"]
-        ]
-        if is_exercise_active
-        else []
-    )
-    exercise_evidence = activity_domain["evidence_used"] or [
-        "No daily activity answers (steps, sitting time, exercise frequency) recorded yet."
+    if active:
+        return "ACTIVE"
+
+    return "EVALUATED_NOT_REQUIRED" if evaluated else "NOT_ASSESSED"
+
+
+_STATUS_LABELS = {
+    "ACTIVE": "Selected for your plan",
+    "EVALUATED_NOT_REQUIRED": "Reviewed — nothing needed right now",
+    "NOT_ASSESSED": "Not yet assessed",
+}
+
+
+def _status_label(status: str) -> str:
+    return _STATUS_LABELS.get(status, _STATUS_LABELS["NOT_ASSESSED"])
+
+
+def _card_base(specialist_id: str) -> dict:
+    """The fields every specialist card shares, read from the one place the
+    five specialists are defined (orchestration/specialists.py)."""
+
+    spec = definition(specialist_id)
+
+    return {
+        "id": spec["id"],
+        "alias": spec["slug"],
+        "name": spec["name"],
+        "title": spec["title"],
+        "subtitle": spec["subtitle"],
+        "icon": spec["icon"],
+        "focus": spec["focus"],
+        "route": route_for(specialist_id),
+    }
+
+
+_MOVEMENT_DIMENSIONS = (
+    "mobility_need",
+    "stability_need",
+    "functional_movement_need",
+)
+
+
+def _prescription_text(entry: dict) -> str:
+    """The dosage of one prescribed exercise, said the way the plan screen
+    shows it ("2 × 8", "2 × 20s hold"). Built only from the numbers the plan
+    record actually carries."""
+
+    sets = entry.get("sets")
+    repetitions = entry.get("repetitions")
+    duration = entry.get("duration_seconds")
+
+    if sets and repetitions:
+        return f"{sets} × {repetitions}"
+
+    if sets and duration:
+        return f"{sets} × {duration}s hold"
+
+    if repetitions:
+        return f"{repetitions} repetitions"
+
+    if duration:
+        return f"{duration}s hold"
+
+    return None
+
+
+def _movement_evidence_lines(assessed_movements, not_assessed_movements) -> list:
+    """What the camera actually measured, movement by movement, with an
+    unmeasured check listed as unmeasured rather than as a finding."""
+
+    lines = [f"{entry['label']}: measured" for entry in assessed_movements]
+    lines += [
+        f"{entry['label']}: not measured ({entry['status']})"
+        for entry in not_assessed_movements
     ]
-    exercise_missing = (
-        activity_domain["missing_information"]
-        if activity_domain["status"] == STATUS_INSUFFICIENT_EVIDENCE
-        else []
-    )
 
-    exercise_status = (
-        "ACTIVE"
-        if is_exercise_active
-        else ("EVALUATED_NOT_REQUIRED" if exercise_evaluated else "NOT_ASSESSED")
-    )
-    exercise_label = (
-        "Active recommendation included"
-        if is_exercise_active
-        else "Not activated"
-    )
+    return lines
 
-    # 2. Physiotherapy & Movement
-    physio_dec = decide_physio_required(
-        need_profile,
-        # A persisted plan is history, not evidence that the current
-        # assessment still requires Physio. Only current MEDIUM/HIGH needs
-        # make this specialist active in the overview.
-        exercise_plan_exists=True,
-    )
-    is_physio_active = physio_dec.get("physio_required", False)
-    has_physio_eval = any(
+
+def _exercise_movement_card(user_state: dict, need_profile: dict) -> dict:
+    """The one movement specialist, over both kinds of movement evidence.
+
+    Two domain modules feed it and neither is discarded: the activity
+    decision and domain reasoning (self-reported daily volume) and the
+    physiotherapy decision and exercise selection (camera-measured movement
+    needs). Merging them here — rather than in the client — is what makes
+    "Exercise & Movement" one coach rather than two cards a user has to
+    reconcile.
+    """
+
+    activity_decision = decide_exercise_activity_required(user_state, need_profile)
+    activity_active = bool(activity_decision.get("exercise_activity_required"))
+    activity_evaluated = bool(activity_decision.get("evaluated"))
+    activity_domain = assess_activity(build_activity_view(user_state))
+
+    movement_decision = decide_physio_required(need_profile, exercise_plan_exists=True)
+    movement_active = bool(movement_decision.get("physio_required"))
+    movement_evaluated = any(
         isinstance(need_profile.get(dimension), dict)
         and need_profile[dimension].get("level") != "NOT_ASSESSED"
-        for dimension in ("mobility_need", "stability_need", "functional_movement_need")
+        for dimension in _MOVEMENT_DIMENSIONS
     )
-    physio_status = (
-        "ACTIVE"
-        if is_physio_active
-        else ("EVALUATED_NOT_REQUIRED" if has_physio_eval else "NOT_ASSESSED")
-    )
-    physio_label = (
-        "Active recommendation included"
-        if is_physio_active
-        else "Not activated"
-    )
-    physio_reason = (
-        physio_dec.get("reason")
-        if is_physio_active
-        else (
-            physio_dec.get("reason")
-            if physio_dec.get("reason")
-            else (
-                "Current assessment did not identify a movement constraint requiring physiotherapy-specific programming."
-                if has_physio_eval
-                else "Current assessment did not produce a movement need requiring a physiotherapy-specific intervention."
-            )
+
+    plan_record = _latest_plan_record(user_state.get("exercise_history") or {})
+    programme = _programme_entries(plan_record) if plan_record else []
+
+    active = activity_active or movement_active
+    evaluated = activity_evaluated or movement_evaluated
+    status = _status_from(active, evaluated)
+
+    # The reason is whichever of the two movement decisions fired. When
+    # neither fired, both explanations are reported, so "nothing was needed"
+    # and "nothing could be measured" never collapse into one sentence.
+    reason = " ".join(
+        text
+        for text, fired in (
+            (movement_decision.get("reason"), movement_active),
+            (activity_decision.get("reason"), activity_active),
         )
+        if fired and text
     )
+
+    if not active:
+        reason = " ".join(
+            text
+            for text, fired in (
+                (movement_decision.get("reason"), not movement_active),
+                (activity_decision.get("reason"), not activity_active),
+            )
+            if fired and text
+        )
+
     assessed_movements, not_assessed_movements = _movement_evidence(
         (user_state.get("physical_assessment") or {}).get("data")
     )
 
-    # What the camera actually measured, named movement by movement. An
-    # unmeasured check is listed as unmeasured and never as a finding
-    # about the user's movement.
-    physio_evidence = [
-        f"{entry['label']}: measured" for entry in assessed_movements
+    evidence = _movement_evidence_lines(assessed_movements, not_assessed_movements)
+
+    for line in activity_domain["evidence_used"]:
+        if line not in evidence:
+            evidence.append(line)
+
+    if not evidence:
+        evidence = [
+            (need_profile.get("overallSummary") or {}).get("headline")
+            or "No baseline movement check has produced a usable measurement yet."
+        ]
+
+    recommendations = [
+        {
+            "id": item["id"],
+            "title": item["title"],
+            "action": item["action"],
+            "why": item["why"],
+        }
+        for item in activity_domain["activity_recommendations"]
     ] + [
-        f"{entry['label']}: not measured ({entry['status']})"
-        for entry in not_assessed_movements
-    ] or [
-        (need_profile.get("overallSummary") or {}).get("headline")
-        or "No baseline movement check has produced a usable measurement yet."
+        {
+            "id": entry["id"],
+            "title": entry["name"],
+            "action": _prescription_text(entry)
+            or f"Perform {entry['name']} as shown in the demonstration.",
+            "why": entry.get("why"),
+        }
+        for entry in programme
     ]
 
-    # The full prescription for the team card: the same entries the
-    # Movement panel renders (name, focus, dosage, difficulty, safety),
-    # so the card can show what was actually recommended instead of a
-    # single summary line. Built from the stored plan record, not
-    # re-derived, so card and panel cannot disagree.
-    physio_plan_record = _latest_plan_record(user_state.get("exercise_history") or {})
-    physio_programme = _programme_entries(physio_plan_record) if physio_plan_record else []
+    missing = list(activity_domain["missing_information"])
 
-    physio_recs = (
-        [
-            {
-                "id": item.get("id"),
-                "title": item.get("name"),
-                "action": f"Perform {item.get('name')} as part of your movement routine.",
-                "why": "Targets functional mobility and stability identified in assessment.",
-            }
-            for item in exercise_plan.get("exercise_items", [])
-        ]
-        if is_physio_active
-        else []
-    )
-
-    # 3. Nutrition & Lifestyle
-    is_nutrition_active = nutrition_plan.get("available", False)
-    has_nutrition_eval = bool(need_profile.get("nutrition_need"))
-    nutrition_status = (
-        "ACTIVE"
-        if is_nutrition_active
-        else ("EVALUATED_NOT_REQUIRED" if has_nutrition_eval else "NOT_ASSESSED")
-    )
-    nutrition_label = (
-        "Active recommendation included"
-        if is_nutrition_active
-        else "Not activated"
-    )
-    nutrition_reason = (
-        nutrition_plan.get("goal")
-        or "Nutritional guidance tailored to your recorded eating patterns and hydration."
-        if is_nutrition_active
-        else (
-            "Current assessment did not identify a nutrition or lifestyle constraint requiring a specialist-specific intervention."
-            if has_nutrition_eval
-            else "Current assessment did not produce a nutrition need requiring a specialist-specific intervention."
+    for dimension in movement_decision.get("unassessed_dimensions") or ():
+        line = (
+            f"{_DIMENSION_LABELS.get(dimension, dimension)} could not be "
+            "measured"
         )
-    )
-    nutrition_evidence_view = build_nutrition_evidence_view(user_state)
+        if line not in missing:
+            missing.append(line)
 
-    nutrition_recs = (
-        [
+    return {
+        **_card_base(EXERCISE_MOVEMENT),
+        "evaluated": evaluated,
+        "active": active,
+        "plan_included": bool(programme),
+        "status": status,
+        "status_label": _status_label(status),
+        "reason": reason,
+        "evidence": evidence,
+        "assessed_movements": assessed_movements,
+        "not_assessed_movements": not_assessed_movements,
+        "findings": activity_domain["activity_findings"],
+        "progression": activity_domain["progression"],
+        "constraints": activity_domain["constraints"],
+        "missing_information": missing,
+        "confidence": activity_domain["confidence"],
+        "recommendations": recommendations,
+        "exercises": programme,
+        "movement_decision": movement_decision,
+        "activity_decision": activity_decision,
+    }
+
+
+def _nutrition_lifestyle_card(user_state: dict, need_profile: dict) -> dict:
+    decision = decide_nutrition_required(need_profile, user_state)
+    active = bool(decision.get("nutrition_required"))
+
+    level = (need_profile.get("nutrition_need") or {}).get("level")
+    evaluated = active or (level is not None and level != "NOT_ASSESSED")
+
+    plan_record = _latest_plan_record(user_state.get("nutrition_plan") or {})
+    evidence_view = build_nutrition_evidence_view(user_state)
+    goals = _topic_goal_items(plan_record, _nutrition_topic_name) if plan_record else []
+
+    status = _status_from(active, evaluated)
+
+    evidence = list((need_profile.get("nutrition_need") or {}).get("evidence") or [])
+
+    for line in evidence_view["evidence_used"]:
+        if line not in evidence:
+            evidence.append(line)
+
+    return {
+        **_card_base(NUTRITION_LIFESTYLE),
+        "evaluated": evaluated,
+        "active": active,
+        "plan_included": bool(goals),
+        "status": status,
+        "status_label": _status_label(status),
+        "reason": decision.get("reason"),
+        "activated_by": decision.get("activated_by") or [],
+        "report_evidence": decision.get("report_evidence") or [],
+        "evidence": evidence,
+        "evidence_status": evidence_view["status"],
+        "missing_information": evidence_view["missing_information"],
+        "confidence": evidence_view["confidence"],
+        "recommendations": [
             {
-                "id": f"nutrition_{i}",
-                "title": goal,
-                "action": f"Focus on {goal.lower()} in your daily food routine.",
-                "why": "Provides evidence-based dietary balance calibrated with your health profile.",
+                "id": item["topic_id"],
+                "title": item["name"],
+                "action": item["action"],
+                "why": item["why"],
             }
-            for i, goal in enumerate(nutrition_plan.get("goals", []))
-        ]
-        if is_nutrition_active
-        else []
-    )
+            for item in goals
+        ],
+        "goals": goals,
+    }
 
-    # 4. Recovery & Care
-    #
-    # Same change as Exercise above: the card reports the Recovery
-    # specialist's own finding and the constraint it placed on
-    # progression, instead of two fixed sentences about sleep that were
-    # shown to every user regardless of what they reported.
-    recovery_dec = decide_recovery_required(user_state)
-    is_recovery_active = recovery_dec.get("recovery_required", False)
-    recovery_evaluated = recovery_dec.get("evaluated", False)
 
-    recovery_domain = assess_recovery(build_recovery_view(user_state))
-    recovery_recs = (
-        [
+def _behaviour_adherence_card(user_state: dict, need_profile: dict) -> dict:
+    decision = decide_behaviour_required(need_profile)
+    active = bool(decision.get("behaviour_required"))
+
+    level = (need_profile.get("behaviour_need") or {}).get("level")
+    evaluated = level is not None and level != "NOT_ASSESSED"
+
+    plan_record = _latest_plan_record(user_state.get("behaviour") or {})
+    goals = _topic_goal_items(plan_record, _behaviour_topic_name) if plan_record else []
+
+    status = _status_from(active, evaluated)
+
+    return {
+        **_card_base(BEHAVIOUR_ADHERENCE),
+        "evaluated": evaluated,
+        "active": active,
+        "plan_included": bool(goals),
+        "status": status,
+        "status_label": _status_label(status),
+        "reason": decision.get("reason"),
+        "evidence": list((need_profile.get("behaviour_need") or {}).get("evidence") or []),
+        "recommendations": [
+            {
+                "id": item["topic_id"],
+                "title": item["name"],
+                "action": item["action"],
+                "why": item["why"],
+            }
+            for item in goals
+        ],
+        "goals": goals,
+    }
+
+
+def _recovery_care_card(user_state: dict, need_profile: dict) -> dict:
+    decision = decide_recovery_required(user_state)
+    active = bool(decision.get("recovery_required"))
+    evaluated = bool(decision.get("evaluated"))
+
+    domain = assess_recovery(build_recovery_view(user_state))
+
+    status = _status_from(active, evaluated)
+
+    evidence = domain["evidence_used"] or [
+        "No sleep or rest answers recorded yet."
+    ]
+
+    return {
+        **_card_base(RECOVERY_CARE),
+        "evaluated": evaluated,
+        "active": active,
+        "plan_included": False,
+        "status": status,
+        "status_label": _status_label(status),
+        "reason": decision.get("reason"),
+        "evidence": evidence,
+        "findings": domain["recovery_findings"],
+        "recovery_status": domain["recovery_status"],
+        "constraint": domain["constraint"],
+        "missing_information": (
+            domain["missing_information"]
+            if domain["status"] == STATUS_INSUFFICIENT_EVIDENCE
+            else []
+        ),
+        "confidence": domain["confidence"],
+        "recommendations": [
             {
                 "id": item["id"],
                 "title": item["title"],
                 "action": item["action"],
                 "why": item["why"],
             }
-            for item in recovery_domain["recovery_recommendations"]
-        ]
-        if is_recovery_active
-        else []
-    )
-    recovery_evidence = recovery_domain["evidence_used"] or [
-        "No sleep or rest answers recorded yet."
-    ]
-    recovery_missing = (
-        recovery_domain["missing_information"]
-        if recovery_domain["status"] == STATUS_INSUFFICIENT_EVIDENCE
-        else []
-    )
-    recovery_constraint = recovery_domain["constraint"]
+            for item in domain["recovery_recommendations"]
+        ],
+    }
 
-    recovery_status = (
-        "ACTIVE"
-        if is_recovery_active
-        else ("EVALUATED_NOT_REQUIRED" if recovery_evaluated else "NOT_ASSESSED")
-    )
-    recovery_label = (
-        "Active recommendation included"
-        if is_recovery_active
-        else "Not activated"
-    )
 
-    # 5. Behaviour & Adherence
-    is_behaviour_active = behaviour_plan.get("available", False)
-    has_behaviour_eval = bool(need_profile.get("behaviour_need"))
-    behaviour_status = (
-        "ACTIVE"
-        if is_behaviour_active
-        else ("EVALUATED_NOT_REQUIRED" if has_behaviour_eval else "NOT_ASSESSED")
-    )
-    behaviour_label = (
-        "Active recommendation included"
-        if is_behaviour_active
-        else "Not activated"
-    )
-    behaviour_reason = (
-        behaviour_plan.get("goal")
-        or "Adaptive habit routines designed to fit into your existing daily schedule."
-        if is_behaviour_active
-        else (
-            "Current assessment did not identify a behaviour or adherence constraint requiring a specialist-specific intervention."
-            if has_behaviour_eval
-            else "Current assessment did not produce a behaviour need requiring a specialist-specific intervention."
+# Safety's own action codes, said in words a user can act on. Same
+# discipline as SAFETY_STATUS_MESSAGES: a rephrasing of a value the Safety
+# Gate itself produced, never a new safety claim written here.
+_SAFETY_ACTION_WORDING = {
+    "refer_to_professional": (
+        "Talk to a qualified healthcare professional before continuing."
+    ),
+    "block_all_recommendations": (
+        "Recommendations from this run were withheld pending that conversation."
+    ),
+    "add_medical_disclaimer": (
+        "Discuss these recommendations against your confirmed report with a "
+        "healthcare professional."
+    ),
+    "add_professional_discussion_note": (
+        "Mention these recommendations when you next speak to a healthcare "
+        "professional."
+    ),
+}
+
+
+def _safety_action_wording(code: str) -> str:
+    if code in _SAFETY_ACTION_WORDING:
+        return _SAFETY_ACTION_WORDING[code]
+
+    if code.startswith("pause_recommendation:"):
+        paused = code.split(":", 1)[1]
+
+        return (
+            f"Paused for review before you follow it: {_exercise_name(paused)}."
         )
-    )
-    behaviour_recs = (
-        [
-            {
-                "id": f"behaviour_{i}",
-                "title": goal,
-                "action": f"Practice {goal.lower()} consistently.",
-                "why": "Anchoring micro-habits builds durable adherence over time.",
-            }
-            for i, goal in enumerate(behaviour_plan.get("goals", []))
-        ]
-        if is_behaviour_active
-        else []
-    )
 
-    # 6. Safety & Clinical Escalation
+    # An action code this module does not know about is reported as itself
+    # rather than hidden or guessed at.
+    return code.replace("_", " ")
+
+
+def _safety_practitioner_card(
+    user_state: dict, need_profile: dict, *, safety_status=None, safety_result=None
+) -> dict:
     raw_status = safety_status or (safety_result or {}).get("status")
-    has_safety_eval = raw_status is not None
-    safety_code = raw_status or "NOT_ASSESSED"
-    safety_label = (
-        "Safety review completed — CLEAR"
-        if safety_code == "ALLOW"
-        else (
-            "Recommendation modified for safety"
-            if safety_code == "MODIFY"
-            else (
-                "Recommendation paused for safety"
-                if safety_code == "PAUSE"
-                else (
-                    "Referral recommended"
-                    if safety_code == "REFER"
-                    else "Not activated"
-                )
-            )
-        )
-    )
+    code = raw_status or "NOT_ASSESSED"
+    evaluated = raw_status is not None
+
+    safety_code_labels = {
+        "ALLOW": "Reviewed — approved",
+        "MODIFY": "Reviewed — modified",
+        "PAUSE": "Reviewed — paused",
+        "REFER": "Reviewed — referral recommended",
+        "NOT_ASSESSED": "Not yet assessed",
+    }
+
     self_reported_health = (
-        ((user_state.get("medical_context") or {}).get("data") or {}).get("self_reported")
+        ((user_state.get("medical_context") or {}).get("data") or {}).get(
+            "self_reported"
+        )
         if (user_state.get("medical_context") or {}).get("available")
         else None
     )
     reported_concerns = reported_health_concerns(self_reported_health)
-    # confirmed_reports is a container ({"reports": [...]}) that exists
-    # even when empty, so its presence is not evidence of a report. Only a
-    # non-empty reports list counts -- the same test the Orchestrator
-    # applies before handing anything to the Safety Gate.
-    _confirmed_container = (
-        ((user_state.get("medical_context") or {}).get("data") or {}).get("confirmed_reports")
+
+    # confirmed_reports is a container that exists even when empty, so its
+    # presence is not evidence of a report. Only a non-empty reports list
+    # is — the same test the Orchestrator applies before handing anything to
+    # the Safety Gate.
+    container = (
+        ((user_state.get("medical_context") or {}).get("data") or {}).get(
+            "confirmed_reports"
+        )
         if (user_state.get("medical_context") or {}).get("available")
         else None
     )
     confirmed_reports = (
-        _confirmed_container
-        if isinstance(_confirmed_container, dict) and _confirmed_container.get("reports")
+        container
+        if isinstance(container, dict) and container.get("reports")
         else None
     )
 
-    safety_evidence = [
+    actions = list((safety_result or {}).get("actions") or [])
+
+    evidence = [
         "Reported at onboarding: "
         + (
             ", ".join(concern.replace("_", " ") for concern in reported_concerns)
             if reported_concerns
             else "no health conditions reported"
         ),
-        "Confirmed medical report on file: " + ("yes" if confirmed_reports else "no"),
-        "Declared difficulty of every candidate exercise is checked against this "
-        "gate's ceiling before a plan is stored.",
+        "Confirmed medical report on file: "
+        + ("yes" if confirmed_reports else "no"),
+        "Every candidate exercise's declared difficulty is checked against "
+        "this review's ceiling before a plan is stored.",
     ]
-    safety_missing = _missing_safety_information(
+
+    missing = _missing_safety_information(
         need_profile, confirmed_reports, self_reported_health
     )
 
-    safety_reason = (
-        (safety_result or {}).get("reason")
-        or safety_status_message(safety_code)
-        if has_safety_eval
-        else "Safety Gate screens all recommendations before plans are approved."
+    card = {
+        **_card_base(SAFETY_PRACTITIONER),
+        "evaluated": evaluated,
+        # A safety review that happened is always part of the picture, even
+        # when its verdict is ALLOW: the user is entitled to know a review
+        # took place. `constrains_plan` distinguishes a verdict that changed
+        # something from one that did not.
+        "active": evaluated and code != "NOT_ASSESSED",
+        "plan_included": False,
+        "constrains_plan": code in ("MODIFY", "PAUSE", "REFER"),
+        "status": code,
+        "status_label": safety_code_labels.get(code, safety_code_labels["NOT_ASSESSED"]),
+        "level": STATUS_TO_LEVEL.get(code),
+        "reason": (safety_result or {}).get("reason")
+        or safety_status_message(raw_status),
+        "evidence": evidence,
+        "flags": list((safety_result or {}).get("flags") or []),
+        "safety_actions": [
+            {"code": action, "text": _safety_action_wording(action)}
+            for action in actions
+        ],
+        "requires_referral": bool((safety_result or {}).get("requires_referral")),
+        "missing_safety_information": missing,
+        "blocked_recommendation_ids": list(
+            (safety_result or {}).get("blocked_recommendation_ids") or []
+        ),
+        "modified_recommendation_ids": list(
+            (safety_result or {}).get("modified_recommendation_ids") or []
+        ),
+        "recommendations": [],
+    }
+
+    return card
+
+
+def build_specialists_team(user_state: dict = None, safety_status=None, safety_result=None) -> list:
+    """The five specialists, in presentation order — always all five.
+
+    A specialist the Orchestrator did not select is still present, because
+    "this specialist reviewed your evidence and nothing was needed" is
+    information, whereas an absent card is not. Every field is derived from
+    this user's own state: the selection comes from orchestrator/decision.py
+    and each card's evidence from the same pure function that specialist's
+    own agent runs. No per-user sentence is written in this module.
+    """
+
+    user_state = user_state or {}
+    need_profile = _need_profile(user_state) or {}
+
+    cards = {
+        EXERCISE_MOVEMENT: _exercise_movement_card(user_state, need_profile),
+        NUTRITION_LIFESTYLE: _nutrition_lifestyle_card(user_state, need_profile),
+        BEHAVIOUR_ADHERENCE: _behaviour_adherence_card(user_state, need_profile),
+        RECOVERY_CARE: _recovery_care_card(user_state, need_profile),
+        SAFETY_PRACTITIONER: _safety_practitioner_card(
+            user_state,
+            need_profile,
+            safety_status=safety_status,
+            safety_result=safety_result,
+        ),
+    }
+
+    return [cards[specialist_id] for specialist_id in SPECIALIST_ORDER]
+
+
+# ---------------------------------------------------------------------------
+# The unified plan
+# ---------------------------------------------------------------------------
+#
+# ONE plan, assembled server-side, and the only thing the plan screen
+# renders. The five specialists are the internal specialisation; what a
+# person reads is a single list of actions that already had the
+# cross-specialist constraints and the Safety Gate applied to them.
+#
+# Every item carries the identifiers an action needs as *domain* ids — an
+# exercise id from the 20-exercise intervention library, a nutrition or
+# behaviour topic id from its own library — plus the plan id of the record
+# it came from. Never a workflow id, never an agent-run id, never a Mongo
+# _id: those identify a run of this pipeline, not a thing a user does.
+#
+# `actions` here means "the things in your plan", not "the buttons". The
+# button is item["action"], and it is decided here too, so the client never
+# decides what a plan item does. That is what makes the client unable to
+# reconstruct a plan: it has nothing left to reconstruct.
+
+TRACKING_NOT_RECORDED = "NOT_RECORDED"
+TRACKING_RECORDED = "RECORDED"
+TRACKING_COMPLETED = "COMPLETED"
+
+# Which measurement a plan item's own progress is compared on, in the order
+# this project prefers them. All three are "higher is better" for every
+# exercise in the library, so a direction here is a factual comparison of
+# two recorded numbers, not a judgement about the user.
+_PROGRESS_METRICS = (
+    ("repetitions", "Repetitions"),
+    ("durationSeconds", "Hold time"),
+    ("completion", "Share of the target completed"),
+)
+
+_PROGRESS_DIRECTION_WORDING = {
+    "IMPROVING": "Up on your last session",
+    "HOLDING": "The same as your last session",
+    "DECLINING": "Down on your last session",
+    "NOT_ENOUGH_DATA": "Not enough sessions recorded to compare yet",
+    "NOT_RECORDED": "Nothing recorded for this yet",
+}
+
+
+def _tracking_not_recorded(label: str, *, counts_toward_section: bool = False, unit: str = None) -> dict:
+    return {
+        "status": TRACKING_NOT_RECORDED,
+        "label": label,
+        "summary": None,
+        "recorded": 0,
+        "counts_toward_section": counts_toward_section,
+        "unit": unit,
+        "rows": [],
+    }
+
+
+def _iso_text(value):
+    if value is None:
+        return None
+
+    return value.isoformat() if hasattr(value, "isoformat") else str(value)
+
+
+def _sort_key(result: dict):
+    return str(
+        result.get("recorded_at")
+        or result.get("completedAt")
+        or result.get("completed_at")
+        or ""
     )
 
-    team = {
-        "exercise": {
-            "id": "exercise_activity",
-            "alias": "exercise",
-            "name": "Exercise & Physical Activity",
-            "title": "Exercise & Physical Activity",
-            "subtitle": "Build healthier movement and activity routines",
-            "icon": "🏃",
-            "evaluated": exercise_evaluated,
-            "active": is_exercise_active,
-            "status": exercise_status,
-            "status_label": exercise_label,
-            "focus": "Daily walking, step volume & sedentary reduction",
-            "reason": exercise_dec.get("reason"),
-            "evidence": exercise_evidence,
-            "findings": activity_domain["activity_findings"],
-            "progression": activity_domain["progression"],
-            "constraints": activity_domain["constraints"],
-            "missing_information": exercise_missing,
-            "confidence": activity_domain["confidence"],
-            "recommendations": exercise_recs,
-        },
-        "physio": {
-            "id": "physio",
-            "alias": "physio",
-            "name": "Physiotherapy & Movement",
-            "title": "Physiotherapy & Movement",
-            "subtitle": "Exercises matched to your movement assessment",
-            "icon": "🧑‍⚕️",
-            "evaluated": has_physio_eval,
-            "active": is_physio_active,
-            "status": physio_status,
-            "status_label": physio_label,
-            "focus": "Upper-body mobility, balance & functional strength",
-            "reason": physio_reason,
-            # This dict previously repeated "evidence" and
-            # "recommendations"; the later pair won, so the card always
-            # rendered an empty programme and a generic evidence line no
-            # matter what the Physio Agent had selected. One key each now,
-            # carrying the agent's real output.
-            "evidence": physio_evidence,
-            "assessed_movements": assessed_movements,
-            "not_assessed_movements": not_assessed_movements,
-            "recommendations": physio_recs,
-            # What to show on the card itself: the exercises, with the
-            # detail needed to recognise and tick one off.
-            "exercises": physio_programme if is_physio_active else [],
-        },
-        "nutrition": {
-            "id": "nutrition",
-            "alias": "nutrition",
-            "name": "Nutrition & Lifestyle",
-            "title": "Nutrition & Lifestyle",
-            "subtitle": "Everyday nutrition and lifestyle support",
-            "icon": "🍎",
-            "evaluated": has_nutrition_eval,
-            "active": is_nutrition_active,
-            "status": nutrition_status,
-            "status_label": nutrition_label,
-            "focus": "Everyday dietary patterns, hydration & meal regularity",
-            "reason": nutrition_reason,
-            "evidence": (need_profile.get("nutrition_need") or {}).get("evidence", [])
-            or nutrition_evidence_view["evidence_used"],
-            # With nothing answered this is INSUFFICIENT_EVIDENCE plus the
-            # specific questions still unanswered -- not generic advice to
-            # eat well, which would be a recommendation with no evidence.
-            "evidence_status": nutrition_evidence_view["status"],
-            "missing_information": nutrition_evidence_view["missing_information"],
-            "confidence": nutrition_evidence_view["confidence"],
-            "recommendations": nutrition_recs,
-        },
-        "recovery": {
-            "id": "recovery",
-            "alias": "recovery",
-            "name": "Recovery & Care",
-            "title": "Recovery & Care",
-            "subtitle": "Support rest, recovery, and sustainable routines",
-            "icon": "🌙",
-            "evaluated": recovery_evaluated,
-            "active": is_recovery_active,
-            "status": recovery_status,
-            "status_label": recovery_label,
-            "focus": "Restorative sleep, movement spacing & workload pacing",
-            "reason": recovery_dec.get("reason"),
-            "evidence": recovery_evidence,
-            "findings": recovery_domain["recovery_findings"],
-            "constraint": recovery_constraint,
-            "missing_information": recovery_missing,
-            "confidence": recovery_domain["confidence"],
-            "recommendations": recovery_recs,
-        },
-        "behaviour": {
-            "id": "behaviour",
-            "alias": "behaviour",
-            "name": "Behaviour & Adherence",
-            "title": "Behaviour & Adherence",
-            "subtitle": "Build habits that are easier to maintain",
-            "icon": "🧠",
-            "evaluated": has_behaviour_eval,
-            "active": is_behaviour_active,
-            "status": behaviour_status,
-            "status_label": behaviour_label,
-            "focus": "Micro-habit formation, movement breaks & routine consistency",
-            "reason": behaviour_reason,
-            "evidence": (need_profile.get("behaviour_need") or {}).get("evidence", []),
-            "recommendations": behaviour_recs,
-        },
-        "safety": {
-            "id": "safety",
-            "alias": "safety",
-            "name": "Safety & Clinical Escalation",
-            "title": "Safety & Clinical Escalation",
-            "subtitle": "Review recommendations for safety and escalation needs",
-            "icon": "🛡️",
-            "evaluated": has_safety_eval,
-            "active": True,
-            "status": safety_code,
-            "status_label": safety_label,
-            "focus": "Clinical screening, contraindications & exercise boundary safety",
-            "reason": safety_reason,
-            # This line used to claim self-reported conditions were
-            # screened when the gate did not read them at all. The gate now
-            # does read them (safety/rules.py), and this describes exactly
-            # the three inputs it uses -- nothing more.
-            "evidence": safety_evidence,
-            "level": STATUS_TO_LEVEL.get(safety_code),
-            "missing_safety_information": safety_missing,
-            "flags": (safety_result or {}).get("flags", []),
-            "actions": (safety_result or {}).get("actions", []),
-            "requires_referral": (safety_result or {}).get("requires_referral", False),
-            "recommendations": [],
+
+def _public_result(result: dict) -> dict:
+    return {
+        "status": result.get("status"),
+        # Documents written before this field existed were all camera
+        # sessions, so that is what they are reported as.
+        "source": result.get("source") or "camera",
+        "recorded_at": _iso_text(
+            result.get("recorded_at") or result.get("completedAt")
+        ),
+        "measurements": result.get("measurements") or {},
+    }
+
+
+def _measurement_summary(result: dict, entry: dict) -> str:
+    """What one recorded session actually showed, in the plan item's own
+    terms ("8 repetitions of 10, 92% of the target completed"). Built only
+    from the numbers the result carries and the target the plan set; a
+    missing number is left out rather than filled in."""
+
+    measurements = result.get("measurements") or {}
+    pieces = []
+
+    repetitions = measurements.get("repetitions")
+
+    if repetitions is not None:
+        target = entry.get("repetitions")
+        pieces.append(
+            f"{repetitions} repetitions"
+            + (f" of {target}" if target else "")
+        )
+
+    seconds = measurements.get("durationSeconds")
+
+    if seconds is not None:
+        pieces.append(f"{round(seconds)}s held")
+
+    completion = measurements.get("completion")
+
+    if completion is not None:
+        pieces.append(f"{round(completion * 100)}% of the target completed")
+
+    return ", ".join(pieces) or None
+
+
+def _results_for(results, *, plan_id, exercise_id=None, item_id=None) -> list:
+    """The recorded sessions that belong to one plan item, newest first.
+
+    A result recorded against a different plan is not counted here: it
+    happened, but it is not evidence about this plan (the same ownership
+    accounting progress_agent/adherence.py already applies).
+
+    `item_id` is the more precise match when the result carries one — it
+    names the exact plan item the user was working through — but a result
+    recorded without it (an older record, or an exercise started outside
+    the plan) still counts for the exercise it names, rather than being
+    silently dropped.
+    """
+
+    matching = [
+        result
+        for result in (results or [])
+        if isinstance(result, dict)
+        and (exercise_id is None or result.get("exerciseId") == exercise_id)
+        and (item_id is None or result.get("item_id") in (None, item_id))
+        and (plan_id is None or result.get("plan_id") == plan_id)
+    ]
+
+    return sorted(matching, key=_sort_key, reverse=True)
+
+
+def _result_metric(result: dict, metric: str):
+    return (result.get("measurements") or {}).get(metric)
+
+
+def _item_progress(results: list, entry: dict) -> dict:
+    """This item's own recorded history, compared to itself. Never to a
+    norm, never to another person, and never when there is only one
+    session."""
+
+    if not results:
+        return {
+            "direction": "NOT_RECORDED",
+            "label": _PROGRESS_DIRECTION_WORDING["NOT_RECORDED"],
+            "metric": None,
+            "previous": None,
+            "current": None,
+        }
+
+    current = results[0]
+    previous = results[1] if len(results) > 1 else None
+
+    base = {
+        "metric": None,
+        "previous": _public_result(previous) if previous else None,
+        "current": _public_result(current),
+        "recorded": len(results),
+    }
+
+    if previous is None:
+        return {
+            **base,
+            "direction": "NOT_ENOUGH_DATA",
+            "label": _PROGRESS_DIRECTION_WORDING["NOT_ENOUGH_DATA"],
+        }
+
+    for metric, label in _PROGRESS_METRICS:
+        before = _result_metric(previous, metric)
+        after = _result_metric(current, metric)
+
+        if before is None or after is None:
+            continue
+
+        if after > before:
+            direction = "IMPROVING"
+        elif after < before:
+            direction = "DECLINING"
+        else:
+            direction = "HOLDING"
+
+        return {
+            **base,
+            "metric": label,
+            "direction": direction,
+            "label": (
+                f"{_PROGRESS_DIRECTION_WORDING[direction]}: {label.lower()} "
+                f"went from {before:g} to {after:g}"
+            ),
+            "from": before,
+            "to": after,
+        }
+
+    return {
+        **base,
+        "direction": "NOT_ENOUGH_DATA",
+        "label": _PROGRESS_DIRECTION_WORDING["NOT_ENOUGH_DATA"],
+    }
+
+
+def _item_tracking(results: list, entry: dict) -> dict:
+    if not results:
+        return _tracking_not_recorded(
+            "Nothing recorded for this yet.",
+            counts_toward_section=True,
+            unit="session",
+        )
+
+    latest = results[0]
+    completed = sum(1 for result in results if result.get("status") == "completed")
+    source = latest.get("source") or "camera"
+
+    return {
+        "status": TRACKING_COMPLETED if completed else TRACKING_RECORDED,
+        "label": (
+            f"{len(results)} session"
+            + ("s" if len(results) != 1 else "")
+            + f" recorded, {completed} meeting the target"
+        ),
+        "summary": _measurement_summary(latest, entry),
+        "recorded": len(results),
+        "completed": completed,
+        "counts_toward_section": True,
+        "unit": "session",
+        "latest": _public_result(latest),
+        "how_it_was_recorded": (
+            "confirmed by you" if source == "manual_confirmation" else "measured by camera"
+        ),
+        "rows": [],
+    }
+
+
+def _exercise_action(exercise_id: str, plan_id, item_id: str) -> dict:
+    """The button for one exercise item. It opens the existing exercise
+    page, carrying the item's own domain ids so the result can be recorded
+    against the exact plan item that asked for it."""
+
+    route = f"/exercise/{quote(str(exercise_id), safe='')}"
+
+    query = []
+
+    if plan_id:
+        query.append(f"planId={quote(str(plan_id), safe='')}")
+
+    if item_id:
+        query.append(f"itemId={quote(str(item_id), safe='')}")
+
+    if query:
+        route = f"{route}?{'&'.join(query)}"
+
+    return {
+        "kind": ACTION_START_EXERCISE,
+        "label": "Start exercise",
+        "route": route,
+        "panel": None,
+        "recorded_by": "exercise_results",
+    }
+
+
+def _guidance_action(specialist_id: str, label: str = "View guidance") -> dict:
+    return {
+        "kind": ACTION_VIEW_GUIDANCE,
+        "label": label,
+        "route": route_for(specialist_id),
+        "panel": None,
+        "recorded_by": None,
+    }
+
+
+def _withheld_action(safety_status: str) -> dict:
+    label = {
+        "PAUSE": "Paused — see safety guidance",
+        "REFER": "Withheld — see safety guidance",
+    }.get(safety_status, "Not available — see safety guidance")
+
+    return {
+        "kind": "withheld",
+        "label": label,
+        "route": route_for(SAFETY_PRACTITIONER),
+        "panel": None,
+        "recorded_by": None,
+    }
+
+
+def _safety_applied(item: dict, safety_result) -> dict:
+    """Apply this run's Safety Result to one plan item.
+
+    The Orchestrator has already removed blocked recommendations from what
+    was persisted, so this is not a second filter over the same data — it
+    is what carries the safety decision onto the plan a user is reading
+    later, including for a plan stored before this run's verdict existed.
+    A REFER withholds everything, which is what makes a referral affect the
+    plan rather than appear beside it.
+    """
+
+    if not safety_result:
+        return item
+
+    # The Safety specialist's own guidance is never withheld by its own
+    # verdict: a REFER is precisely the case where the user has to be able
+    # to read who to talk to.
+    if item.get("specialist") == SAFETY_PRACTITIONER:
+        return item
+
+    status = safety_result.get("status")
+    item_id = item.get("item_id")
+    reason = safety_result.get("reason")
+
+    blocked = set(safety_result.get("blocked_recommendation_ids") or [])
+    modified = set(safety_result.get("modified_recommendation_ids") or [])
+
+    if status == "REFER" or (item_id and item_id in blocked):
+        item["withheld"] = True
+        item["metadata"]["safety"] = {
+            "withheld": True,
+            "status": status,
+            "reason": reason,
+        }
+        item["action"] = _withheld_action(status)
+        return item
+
+    if item_id and item_id in modified:
+        item["metadata"]["safety"] = {
+            "withheld": False,
+            "status": status,
+            "note": reason,
+        }
+
+    return item
+
+
+def _exercise_programme_items(user_state: dict, results: list) -> list:
+    record = _latest_plan_record(user_state.get("exercise_history") or {})
+
+    if record is None:
+        return []
+
+    plan_id = record.get("plan_id")
+    items = []
+
+    for entry in _programme_entries(record):
+        # The exercise id IS this item's domain id: it is the identifier the
+        # exercise library, the exercise page and the results API all use,
+        # and inventing a second one would be a second source of truth.
+        item_id = entry.get("id")
+        item_results = _results_for(
+            results, plan_id=plan_id, exercise_id=item_id, item_id=item_id
+        )
+
+        items.append(
+            {
+                "specialist": EXERCISE_MOVEMENT,
+                "section": SECTION_EXERCISE_PROGRAMME,
+                "plan_id": plan_id,
+                "item_id": item_id,
+                "kind": "exercise",
+                "title": entry.get("name"),
+                "detail": _prescription_text(entry),
+                "why": entry.get("why"),
+                "target": entry.get("target"),
+                "metadata": {
+                    "exercise_id": item_id,
+                    "difficulty": entry.get("difficulty"),
+                    "sets": entry.get("sets"),
+                    "repetitions": entry.get("repetitions"),
+                    "duration_seconds": entry.get("duration_seconds"),
+                    "progression": entry.get("progression"),
+                    "regression": entry.get("regression"),
+                    "safety_notes": list(entry.get("safety") or []),
+                    "change": entry.get("change"),
+                    "watching_for": list(entry.get("watching") or []),
+                },
+                "action": _exercise_action(item_id, plan_id, item_id),
+                "tracking": _item_tracking(item_results, entry),
+                "progress": _item_progress(item_results, entry),
+            }
+        )
+
+    return items
+
+
+def _activity_volume_items(user_state: dict, results: list) -> list:
+    """Daily-volume guidance. It is a target the user works towards outside
+    the app, so its action is to see how it is tracked rather than a button
+    that pretends to record a walk — MoveWell has no step log."""
+
+    domain = assess_activity(build_activity_view(user_state))
+
+    if domain["status"] == STATUS_INSUFFICIENT_EVIDENCE:
+        return []
+
+    items = []
+
+    for recommendation in domain["activity_recommendations"]:
+        items.append(
+            {
+                "specialist": EXERCISE_MOVEMENT,
+                "section": SECTION_ACTIVITY_VOLUME,
+                "plan_id": None,
+                "item_id": recommendation["id"],
+                "kind": "activity_goal",
+                "title": recommendation["title"],
+                "detail": recommendation["action"],
+                "why": recommendation["why"],
+                "target": (recommendation.get("target") or {}).get("to"),
+                "metadata": {
+                    "target": recommendation.get("target"),
+                    "constraints": domain["constraints"],
+                    "measured_by": "self-reported answers",
+                },
+                "action": _guidance_action(
+                    EXERCISE_MOVEMENT, "See how this is tracked"
+                ),
+                "tracking": _activity_tracking(domain),
+                "progress": _activity_progress(recommendation, domain),
+            }
+        )
+
+    return items
+
+
+def _activity_tracking(domain: dict) -> dict:
+    lines = list(domain["evidence_used"])
+
+    if not lines:
+        return _tracking_not_recorded(
+            "No daily activity answers have been recorded yet."
+        )
+
+    return {
+        "status": TRACKING_RECORDED,
+        "label": "From the answers you gave",
+        "summary": "; ".join(lines),
+        "recorded": len(lines),
+        # These are answers the user gave at onboarding, not records of
+        # activity performed, so they must NOT be added to the section's
+        # session count — that would turn five answers into five sessions.
+        "counts_toward_section": False,
+        "unit": "answer",
+        "rows": [
+            {"label": finding["signal"], "value": finding["finding"]}
+            for finding in domain["activity_findings"]
+        ],
+    }
+
+
+def _activity_progress(recommendation: dict, domain: dict) -> dict:
+    """The volume target this one recommendation proposes, from the domain's
+    own progression entry for that metric. A recommendation with no
+    progression entry says so rather than borrowing another metric's
+    numbers."""
+
+    metric = (recommendation.get("target") or {}).get("metric")
+    entry = next(
+        (
+            row
+            for row in domain["progression"]
+            if row.get("metric") == metric
+        ),
+        None,
+    )
+
+    if entry is None:
+        return {
+            "direction": "NOT_RECORDED",
+            "label": (
+                "This target is held at its current level; there is no "
+                "increase to compare yet."
+            ),
+            "metric": metric,
+            "previous": None,
+            "current": None,
+            "rows": [],
+        }
+
+    return {
+        "direction": "PLANNED",
+        "label": (
+            f"{str(entry['metric']).replace('_', ' ')} target moves from "
+            f"{entry['current']:g} to {entry['next_target']:g}, reviewed after "
+            f"{entry['review_after']}."
+        ),
+        "metric": entry["metric"],
+        "previous": entry["current"],
+        "current": entry["next_target"],
+        "rate": entry["rate"],
+        "review_after": entry["review_after"],
+        "rows": [entry],
+    }
+
+
+def _nutrition_items(user_state: dict, food_log_entries: list) -> list:
+    record = _latest_plan_record(user_state.get("nutrition_plan") or {})
+
+    if record is None:
+        return []
+
+    plan_id = record.get("plan_id")
+    entries = [
+        entry
+        for entry in (food_log_entries or [])
+        if isinstance(entry, dict)
+        and (plan_id is None or entry.get("plan_id") == plan_id)
+    ]
+    days = {_iso_text(entry.get("recorded_at")) or "" for entry in entries}
+    days.discard("")
+
+    if not entries:
+        tracking = _tracking_not_recorded(
+            "Nothing logged against this plan yet. What you log is what this "
+            "plan is reviewed against — nothing is assumed.",
+            counts_toward_section=True,
+            unit="food log entry",
+        )
+    else:
+        tracking = {
+            "status": TRACKING_RECORDED,
+            "label": (
+                f"{len(entries)} food log entr"
+                + ("ies" if len(entries) != 1 else "y")
+                + f" on {len(days)} day" + ("s" if len(days) != 1 else "")
+            ),
+            "summary": None,
+            "recorded": len(entries),
+            "completed": 0,
+            "counts_toward_section": True,
+            "unit": "food log entry",
+            "rows": [],
+        }
+
+    items = []
+
+    for goal in _topic_goal_items(record, _nutrition_topic_name):
+        items.append(
+            {
+                "specialist": NUTRITION_LIFESTYLE,
+                "section": SECTION_NUTRITION_GOALS,
+                "plan_id": plan_id,
+                "item_id": goal["topic_id"],
+                "kind": "nutrition_goal",
+                "title": goal["name"],
+                "detail": goal["action"],
+                "why": goal["why"],
+                "target": None,
+                "metadata": {
+                    "topic_id": goal["topic_id"],
+                    "adherence": goal["adherence"],
+                },
+                # Logging a meal is an action with a real, persisted record
+                # behind it (food_log), so this is a panel the client
+                # already has rather than a route to a page that only talks.
+                "action": {
+                    "kind": ACTION_LOG_NUTRITION,
+                    "label": "Log a meal",
+                    "route": None,
+                    "panel": "food_log",
+                    "recorded_by": "food_log",
+                },
+                "tracking": tracking,
+                "progress": {
+                    "direction": "RECORDED" if entries else "NOT_RECORDED",
+                    "label": (
+                        f"{len(entries)} entr"
+                        + ("ies" if len(entries) != 1 else "y")
+                        + " logged against this plan so far."
+                        if entries
+                        else "Nothing logged against this plan yet."
+                    ),
+                    "metric": None,
+                    "previous": None,
+                    "current": None,
+                    "rows": [],
+                },
+            }
+        )
+
+    return items
+
+
+def _behaviour_items(user_state: dict, behaviour_actions: list) -> list:
+    record = _latest_plan_record(user_state.get("behaviour") or {})
+
+    if record is None:
+        return []
+
+    plan_id = record.get("plan_id")
+    actions = [
+        action
+        for action in (behaviour_actions or [])
+        if isinstance(action, dict)
+        and (plan_id is None or action.get("plan_id") == plan_id)
+    ]
+    today = _iso_text(_now_utc())[:10]
+
+    items = []
+
+    for goal in _topic_goal_items(record, _behaviour_topic_name):
+        topic_id = goal["topic_id"]
+        adherence = compute_behaviour_adherence(actions, topic_id=topic_id)
+        todays = [
+            action
+            for action in actions
+            if action.get("topic_id") == topic_id
+            and str(_iso_text(action.get("recorded_at")) or "").startswith(today)
+        ]
+        latest_today = sorted(todays, key=_sort_key, reverse=True)
+        recorded_today = (
+            latest_today[0].get("status") if latest_today else None
+        )
+
+        if adherence["status"] == "NOT_LOGGED":
+            tracking_row = _tracking_not_recorded(
+                "Nothing recorded for this habit yet.",
+                counts_toward_section=True,
+                unit="habit record",
+            )
+        else:
+            tracking_row = {
+                "status": TRACKING_RECORDED,
+                "label": (
+                    f"{adherence['completed_actions']} completed of "
+                    f"{adherence['recorded_actions']} recorded"
+                ),
+                "summary": (
+                    "; ".join(adherence["notes"])
+                    if adherence.get("notes")
+                    else None
+                ),
+                "recorded": adherence["recorded_actions"],
+                "completed": adherence["completed_actions"],
+                "completion_rate": adherence["completion_rate"],
+                "recorded_today": recorded_today,
+                "counts_toward_section": True,
+                "unit": "habit record",
+                "rows": [],
+            }
+
+        items.append(
+            {
+                "specialist": BEHAVIOUR_ADHERENCE,
+                "section": SECTION_HABIT_GOALS,
+                "plan_id": plan_id,
+                "item_id": topic_id,
+                "kind": "habit_goal",
+                "title": goal["name"],
+                "detail": goal["action"],
+                "why": goal["why"],
+                "target": None,
+                "metadata": {
+                    "topic_id": topic_id,
+                    "adherence": goal["adherence"],
+                    "adherence_status": adherence["status"],
+                },
+                "action": {
+                    "kind": ACTION_COMPLETE_HABIT,
+                    "label": "Complete habit",
+                    "route": None,
+                    "panel": "behaviour_actions",
+                    "recorded_by": "behaviour_log",
+                },
+                "tracking": tracking_row,
+                "progress": {
+                    "direction": adherence["status"],
+                    "label": (
+                        "; ".join(adherence["notes"])
+                        if adherence.get("notes")
+                        else _PROGRESS_DIRECTION_WORDING["NOT_RECORDED"]
+                    ),
+                    "metric": "completion_rate",
+                    "previous": None,
+                    "current": adherence["completion_rate"],
+                    "rows": [],
+                },
+            }
+        )
+
+    return items
+
+
+def _recovery_items(user_state: dict) -> list:
+    """Recovery guidance is advice about rest, not a task MoveWell can
+    observe the completion of — there is no recovery-action record in this
+    application. So each item's action is to open the guidance, and its
+    tracking says plainly that nothing is recorded, rather than offering a
+    button whose press would go nowhere."""
+
+    domain = assess_recovery(build_recovery_view(user_state))
+
+    if domain["status"] == STATUS_INSUFFICIENT_EVIDENCE:
+        return []
+
+    items = []
+
+    for recommendation in domain["recovery_recommendations"]:
+        items.append(
+            {
+                "specialist": RECOVERY_CARE,
+                "section": SECTION_RECOVERY_GUIDANCE,
+                "plan_id": None,
+                "item_id": recommendation["id"],
+                "kind": "recovery_action",
+                "title": recommendation["title"],
+                "detail": recommendation["action"],
+                "why": recommendation["why"],
+                "target": None,
+                "metadata": {
+                    "constraint": domain["constraint"],
+                    "recovery_status": domain["recovery_status"],
+                },
+                "action": _guidance_action(RECOVERY_CARE),
+                "tracking": _tracking_not_recorded(
+                    "MoveWell does not record recovery actions, so nothing "
+                    "here is assumed or scored."
+                ),
+                "progress": {
+                    "direction": "NOT_RECORDED",
+                    "label": (
+                        "Recovery guidance is reviewed from your own answers; "
+                        "there is no completion record to compare."
+                    ),
+                    "metric": None,
+                    "previous": None,
+                    "current": None,
+                    "rows": [],
+                },
+            }
+        )
+
+    return items
+
+
+def _safety_items(safety_result) -> list:
+    """The Safety specialist's own contribution: what it decided and what
+    that means for the plan. Its action is to open the guidance, because
+    the decision itself is the deliverable — there is nothing for the user
+    to tick off."""
+
+    if not safety_result:
+        return []
+
+    status = safety_result.get("status")
+    reason = safety_result.get("reason")
+    actions = list(safety_result.get("actions") or [])
+
+    items = []
+
+    if not actions:
+        items.append(
+            {
+                "specialist": SAFETY_PRACTITIONER,
+                "section": SECTION_SAFETY_GUIDANCE,
+                "plan_id": None,
+                "item_id": None,
+                "kind": "safety_decision",
+                "title": safety_status_message(status),
+                # Deliberately no `detail`: the gate's reason is written about
+                # the user in the third person ("this user reported ..."), and it
+                # is already on the plan's own safety block. Repeating it here
+                # put system prose on the user's own card.
+                "detail": None,
+                "why": None,
+                "target": None,
+                "metadata": {
+                    "status": status,
+                    "level": STATUS_TO_LEVEL.get(status),
+                    "requires_referral": bool(
+                        safety_result.get("requires_referral")
+                    ),
+                },
+                "action": _guidance_action(SAFETY_PRACTITIONER),
+                "tracking": _tracking_not_recorded(
+                    "MoveWell records the outcome of each safety review; it "
+                    "does not score you."
+                ),
+                "progress": {
+                    "direction": status,
+                    "label": safety_status_message(status),
+                    "metric": None,
+                    "previous": None,
+                    "current": None,
+                    "rows": [],
+                },
+            }
+        )
+
+        return items
+
+    for action in actions:
+        items.append(
+            {
+                "specialist": SAFETY_PRACTITIONER,
+                "section": SECTION_SAFETY_GUIDANCE,
+                "plan_id": None,
+                # A safety action code is not a domain item id: nothing else
+                # in the system addresses a plan item by it. It is recorded
+                # in metadata instead of being presented as an id it is not.
+                "item_id": None,
+                "kind": "safety_guidance",
+                "title": _safety_action_wording(action),
+                "detail": reason,
+                "why": None,
+                "target": None,
+                "metadata": {
+                    "action_code": action,
+                    "status": status,
+                    "level": STATUS_TO_LEVEL.get(status),
+                    "requires_referral": bool(
+                        safety_result.get("requires_referral")
+                    ),
+                },
+                "action": _guidance_action(
+                    SAFETY_PRACTITIONER,
+                    "See who to talk to"
+                    if safety_result.get("requires_referral")
+                    else "View guidance",
+                ),
+                "tracking": _tracking_not_recorded(
+                    "MoveWell records the outcome of each safety review; it "
+                    "does not score you."
+                ),
+                "progress": {
+                    "direction": status,
+                    "label": safety_status_message(status),
+                    "metric": None,
+                    "previous": None,
+                    "current": None,
+                    "rows": [],
+                },
+            }
+        )
+
+    return items
+
+
+def _now_utc():
+    return datetime.now(timezone.utc)
+
+
+def _section_focus(
+    user_state: dict, need_profile: dict, specialist_id: str, card: dict
+) -> str:
+    """CURRENT FOCUS, said from what was actually measured.
+
+    Each clause is a need dimension's own level, rephrased by
+    `_LEVEL_WORDING`, or a capability the plan record says it is targeting.
+    An unmeasured dimension is left out here and reported under `missing`
+    instead — it is not a finding and must not read as one.
+    """
+
+    profile = need_profile or {}
+    parts = []
+
+    if specialist_id == EXERCISE_MOVEMENT:
+        for dimension in _MOVEMENT_DIMENSIONS:
+            entry = profile.get(dimension)
+
+            if isinstance(entry, dict) and entry.get("level") != "NOT_ASSESSED":
+                parts.append(
+                    f"{_DIMENSION_LABELS.get(dimension, dimension)}: "
+                    f"{_LEVEL_WORDING.get(entry.get('level'), 'not measured')}"
+                )
+
+        record = _latest_plan_record(user_state.get("exercise_history") or {})
+
+        for capability in (record or {}).get("capabilities_targeted") or []:
+            wording = _CAPABILITY_WORDING.get(capability, capability)
+
+            if wording not in parts:
+                parts.append(wording)
+
+    elif specialist_id == NUTRITION_LIFESTYLE:
+        entry = profile.get("nutrition_need") or {}
+
+        if entry.get("level") != "NOT_ASSESSED":
+            parts.append(
+                "Eating patterns: "
+                f"{_LEVEL_WORDING.get(entry.get('level'), 'not measured')}"
+            )
+
+    elif specialist_id == BEHAVIOUR_ADHERENCE:
+        entry = profile.get("behaviour_need") or {}
+
+        if entry.get("level") != "NOT_ASSESSED":
+            parts.append(
+                "Daily activity habits: "
+                f"{_LEVEL_WORDING.get(entry.get('level'), 'not measured')}"
+            )
+
+    elif specialist_id == RECOVERY_CARE:
+        domain = assess_recovery(build_recovery_view(user_state))
+
+        if domain["recovery_status"] == "CONSTRAINED":
+            parts.append("Rest and workload pacing: being paced down")
+        elif domain["recovery_status"] == "SUPPORTIVE":
+            parts.append("Rest and workload pacing: supporting the current pace")
+
+        # Only this domain's own sleep findings — never the whole evidence
+        # list, which carries programme counts that are not a recovery
+        # focus.
+        for finding in domain["recovery_findings"]:
+            parts.append(finding["finding"])
+
+    elif specialist_id == SAFETY_PRACTITIONER:
+        parts.append(
+            "Review outcome: "
+            + safety_status_message(card.get("status"))
+        )
+
+    return "; ".join(part for part in parts if part) or None
+
+
+def _section_decision(user_state: dict, specialist_id: str, card: dict) -> str:
+    """SPECIALIST DECISION: what the specialist actually decided, in its own
+    recorded words — a plan goal, the changes it made, a constraint it
+    placed, or the safety verdict. None when there is nothing recorded."""
+
+    if specialist_id == EXERCISE_MOVEMENT:
+        record = _latest_plan_record(user_state.get("exercise_history") or {})
+
+        if record is None:
+            return None
+
+        parts = [record.get("goal")] if record.get("goal") else []
+
+        for change in _changes_of(record):
+            parts.append(
+                f"{change['exercise']}: {change['change'].lower()}"
+                + (f" — {change['reason']}" if change.get("reason") else "")
+            )
+
+        if not parts:
+            parts.append(
+                f"{len(record.get('exercise_ids') or [])} exercise(s) selected "
+                "from your movement evidence."
+            )
+
+        return " ".join(parts)
+
+    if specialist_id in (NUTRITION_LIFESTYLE, BEHAVIOUR_ADHERENCE):
+        section_name = (
+            "nutrition_plan"
+            if specialist_id == NUTRITION_LIFESTYLE
+            else "behaviour"
+        )
+        record = _latest_plan_record(user_state.get(section_name) or {})
+
+        if record is None:
+            return card.get("reason")
+
+        parts = [record.get("goal")] if record.get("goal") else []
+        parts.append(
+            f"{len(record.get('topic_ids') or [])} focus area(s) selected."
+        )
+
+        if record.get("adaptation_reason"):
+            parts.append(f"Changed: {record['adaptation_reason']}")
+
+        return " ".join(parts)
+
+    if specialist_id == RECOVERY_CARE:
+        domain = assess_recovery(build_recovery_view(user_state))
+
+        if domain["status"] == STATUS_INSUFFICIENT_EVIDENCE:
+            return None
+
+        if domain["constraint"]["limit_progression"]:
+            return domain["constraint"]["reason"]
+
+        return (
+            "No rest or workload constraint was placed on your plan this "
+            "cycle; the reported rest supports the current pace."
+        )
+
+    if specialist_id == SAFETY_PRACTITIONER:
+        return card.get("reason")
+
+    return None
+
+
+def _section_next_step(user_state: dict, specialist_id: str, card: dict) -> str:
+    status = card.get("status")
+    has_items = bool(card.get("plan_included"))
+
+    if specialist_id == EXERCISE_MOVEMENT:
+        if status == "ACTIVE":
+            return NEXT_REVIEW_MOVEMENT if has_items else (
+                "Prepare your plan from your latest measurements to turn this "
+                "into exercises."
+            )
+
+        if status == "EVALUATED_NOT_REQUIRED":
+            return (
+                "Nothing further is needed from you for movement right now. "
+                "The next assessment re-checks it."
+            )
+
+        return (
+            f"{NEXT_ACTION_ASSESSMENT['label']} so this can be evaluated "
+            "rather than assumed."
+        )
+
+    if specialist_id == NUTRITION_LIFESTYLE:
+        if status == "ACTIVE":
+            return NEXT_REVIEW_NUTRITION
+
+        if status == "EVALUATED_NOT_REQUIRED":
+            return (
+                "Nothing further is needed from you for nutrition right now. "
+                "Your answers are re-read on your next plan review."
+            )
+
+        return (
+            f"{NEXT_ACTION_ONBOARDING['label']} so this can be evaluated "
+            "rather than assumed."
+        )
+
+    if specialist_id == BEHAVIOUR_ADHERENCE:
+        if status == "ACTIVE":
+            return NEXT_REVIEW_BEHAVIOUR
+
+        if status == "EVALUATED_NOT_REQUIRED":
+            return (
+                "Nothing further is needed from you for habits right now. Your "
+                "answers are re-read on your next plan review."
+            )
+
+        return (
+            f"{NEXT_ACTION_ONBOARDING['label']} so this can be evaluated "
+            "rather than assumed."
+        )
+
+    if specialist_id == RECOVERY_CARE:
+        if status == "ACTIVE":
+            return (
+                "Recovery is re-read from your answers and your recorded "
+                "sessions on your next plan review."
+            )
+
+        if status == "EVALUATED_NOT_REQUIRED":
+            return (
+                "Your reported rest did not cross this project's markers for "
+                "treating recovery as a constraint."
+            )
+
+        return (
+            f"{NEXT_ACTION_ONBOARDING['label']} so this can be evaluated "
+            "rather than assumed."
+        )
+
+    if specialist_id == SAFETY_PRACTITIONER:
+        code = card.get("status")
+
+        if code == "REFER":
+            return (
+                "MoveWell recommends talking to a qualified healthcare "
+                "professional before you continue with these recommendations."
+            )
+
+        if code in ("MODIFY", "PAUSE"):
+            return (
+                "Follow the guidance above and raise these recommendations "
+                "with a qualified healthcare professional."
+            )
+
+        if code == "ALLOW":
+            return "Reviewed and approved — nothing further is needed from you."
+
+        missing = card.get("missing_safety_information") or []
+
+        return (
+            "Not yet assessed. " + "; ".join(missing) + "."
+            if missing
+            else "Not yet assessed."
+        )
+
+    return None
+
+
+# ---------------------------------------------------------------------------
+# The plan as a person reads it
+# ---------------------------------------------------------------------------
+#
+# The three helpers below exist because the plan screen was answering
+# engineering questions -- what was this based on, what is not known, what did
+# each specialist record -- instead of the two a user has: *what should I do*
+# and *what is MoveWell doing about it*. None of them invents anything; each one
+# condenses a value the plan already carries.
+#
+# The condensing is deliberately here rather than in the client, for the same
+# reason the plan itself is: a screen that writes its own summary of a
+# specialist's decision will eventually describe a decision that was never made.
+
+# Which measurement dimension a focus area is about, in the words a person uses
+# rather than the Need Profile's key names.
+_FOCUS_AREA_WORDING = {
+    "mobility_need": "Upper-body mobility",
+    "stability_need": "Balance",
+    "functional_movement_need": "Everyday movement",
+}
+
+# A stated nutrition goal, said as a focus area. Only used when the user
+# actually selected one during the check-in.
+_NUTRITION_GOAL_FOCUS = {
+    "balanced_eating": "Balanced eating",
+    "hydration": "Hydration",
+    "healthy_lifestyle": "Healthy lifestyle",
+    "weight_management": "Weight management",
+}
+
+# The compact status a team card shows. Deliberately four words, so five cards
+# can be read at a glance: this is the "who is on my team" question, not the
+# "what did they conclude" one.
+TEAM_STATUS_LABELS = {
+    "ACTIVE": "Active",
+    "NOT_ASSESSED": "Not assessed",
+    "NOT_NEEDED": "Not needed",
+    "REVIEWED": "Reviewed",
+    "MODIFIED": "Reviewed — precautions",
+    "PAUSED": "Paused for safety",
+    "REFERRAL": "Referral recommended",
+}
+
+
+def _team_status(card: dict) -> str:
+    """The compact status for one specialist card."""
+
+    status = card.get("status")
+
+    if card.get("id") == SAFETY_PRACTITIONER:
+        return {
+            "ALLOW": "REVIEWED",
+            "MODIFY": "MODIFIED",
+            "PAUSE": "PAUSED",
+            "REFER": "REFERRAL",
+        }.get(status, "NOT_ASSESSED")
+
+    if status == "ACTIVE":
+        return "ACTIVE"
+
+    if status == "EVALUATED_NOT_REQUIRED":
+        return "NOT_NEEDED"
+
+    return "NOT_ASSESSED"
+
+
+def _stated_nutrition_goal(user_state: dict):
+    """The goal the user chose during the nutrition check-in, or None.
+
+    Read from the nutrition section rather than from the Need Profile, because
+    the Need Profile only carries need *dimensions* — a preference is not a
+    dimension and is never copied into one. Reading it from the wrong place is
+    why the first version of the summary said "eating patterns" for someone who
+    had explicitly said "hydration".
+    """
+
+    section = (user_state or {}).get("nutrition") or {}
+
+    if not section.get("available"):
+        return None
+
+    goal = (section.get("data") or {}).get("nutrition_goal")
+
+    return goal if isinstance(goal, str) and goal in _NUTRITION_GOAL_FOCUS else None
+
+
+def _short_reason(
+    specialist_id: str, card: dict, need_profile: dict, *, nutrition_goal: str = None
+) -> str:
+    """One short sentence saying why this specialist is or is not involved.
+
+    Each branch reads a value the plan already carries and states it in the
+    words a person would use. Where the value is absent, the sentence says the
+    domain was not assessed — it never infers a finding from silence.
+    """
+
+    status = card.get("status")
+    profile = need_profile or {}
+
+    if specialist_id == EXERCISE_MOVEMENT:
+        highlighted = [
+            _FOCUS_AREA_WORDING[dimension]
+            for dimension in _MOVEMENT_DIMENSIONS
+            if isinstance(profile.get(dimension), dict)
+            and profile[dimension].get("level") in ("MEDIUM", "HIGH")
+        ]
+
+        if status == "ACTIVE" and highlighted:
+            return (
+                "Your assessment highlighted "
+                + _join_wording(highlighted)
+                + "."
+            )
+
+        if status == "ACTIVE":
+            return "Your daily activity answers brought movement into your plan."
+
+        if status == "EVALUATED_NOT_REQUIRED":
+            return "Your movement assessment did not show a need right now."
+
+        return "Not assessed yet — this needs a movement assessment."
+
+    if specialist_id == NUTRITION_LIFESTYLE:
+        if status == "ACTIVE":
+            if nutrition_goal:
+                return (
+                    "Your nutrition check-in answers brought this in, focused "
+                    f"on {_NUTRITION_GOAL_FOCUS[nutrition_goal].lower()}."
+                )
+
+            return "Your nutrition check-in answers brought this into your plan."
+
+        if status == "EVALUATED_NOT_REQUIRED":
+            return "Your nutrition answers did not show a need right now."
+
+        return "Not assessed yet — the nutrition check-in has not been completed."
+
+    if specialist_id == BEHAVIOUR_ADHERENCE:
+        if status == "ACTIVE":
+            return "Your daily habits put consistency at the centre of this plan."
+
+        if status == "EVALUATED_NOT_REQUIRED":
+            return "Your reported habits did not show a need right now."
+
+        return "Not assessed yet — the lifestyle questions are unanswered."
+
+    if specialist_id == RECOVERY_CARE:
+        constraint = card.get("constraint") or {}
+
+        if status == "ACTIVE" and constraint.get("limit_progression"):
+            return "Your reported rest is pacing how quickly activity increases."
+
+        if status == "ACTIVE":
+            return "Your reported rest supports the planned volume."
+
+        if status == "EVALUATED_NOT_REQUIRED":
+            return "Your reported rest did not need a change."
+
+        return "Not assessed yet — the sleep questions are unanswered."
+
+    if specialist_id == SAFETY_PRACTITIONER:
+        return {
+            "ALLOW": "Reviewed your plan and approved it.",
+            "MODIFY": "Reviewed your plan and added precautions.",
+            "PAUSE": "Paused part of your plan pending review.",
+            "REFER": "Recommends talking to a healthcare professional first.",
+        }.get(status, "Not yet reviewed.")
+
+    return card.get("reason") or ""
+
+
+def _join_wording(parts) -> str:
+    """"a, b and c" — so a generated sentence reads like a sentence."""
+
+    items = [part for part in parts if part]
+
+    if not items:
+        return ""
+
+    if len(items) == 1:
+        return items[0]
+
+    return ", ".join(items[:-1]) + " and " + items[-1]
+
+
+def _empty_state(
+    specialist_id: str, card: dict, section: dict, items: list
+) -> dict:
+    """What to tell a user when this part of the plan has nothing yet.
+
+    Three questions, always answered together: what is missing, why it matters,
+    and what to do about it. A state with nothing to do is not emitted at all —
+    "nothing recorded yet" with no action beside it is the repetition this
+    screen was rebuilt to remove, and the section's own `next_step` already says
+    what happens. Nor is one emitted for a section that has recorded actions:
+    it is not empty.
+    """
+
+    status = card.get("status")
+
+    if specialist_id == SAFETY_PRACTITIONER:
+        # The safety review is a supervisor, not an action the user can be
+        # missing. "Nothing recorded" would be meaningless here.
+        return None
+
+    if status == "NOT_ASSESSED":
+        return {
+            "kind": "not_assessed",
+            "message": {
+                EXERCISE_MOVEMENT: (
+                    "Complete your movement assessment and MoveWell can build "
+                    "this part of your plan."
+                ),
+                NUTRITION_LIFESTYLE: (
+                    "Complete your nutrition check-in so MoveWell can "
+                    "personalize this part of your plan."
+                ),
+                BEHAVIOUR_ADHERENCE: (
+                    "Answer the lifestyle questions so MoveWell can build a "
+                    "habit plan that fits your week."
+                ),
+                RECOVERY_CARE: (
+                    "Answer the sleep questions so MoveWell can tell whether "
+                    "your recovery needs pacing."
+                ),
+            }.get(specialist_id, "Not assessed yet."),
+            "action": {
+                EXERCISE_MOVEMENT: {
+                    "kind": "start_assessment",
+                    "label": "Start assessment",
+                    "route": "/assessment",
+                },
+                NUTRITION_LIFESTYLE: {
+                    "kind": "nutrition_check_in",
+                    "label": "Complete check-in",
+                    "route": "/nutrition-check-in",
+                },
+                BEHAVIOUR_ADHERENCE: {
+                    "kind": "answer_lifestyle_questions",
+                    "label": "Answer the questions",
+                    "route": "/onboarding",
+                },
+                RECOVERY_CARE: {
+                    "kind": "answer_lifestyle_questions",
+                    "label": "Answer the questions",
+                    "route": "/onboarding",
+                },
+            }.get(specialist_id),
+        }
+
+    if not items:
+        return None
+
+    tracking_status = (section.get("tracking") or {}).get("status")
+
+    if tracking_status != TRACKING_NOT_RECORDED:
+        return None
+
+    if specialist_id == EXERCISE_MOVEMENT:
+        first = next(
+            (item for item in items if item.get("action", {}).get("route")), None
+        )
+
+        return {
+            "kind": "no_records",
+            "message": (
+                "Complete your first session to start tracking your progress."
+            ),
+            "action": (
+                {
+                    "kind": ACTION_START_EXERCISE,
+                    "label": "Start exercise",
+                    "route": first["action"]["route"],
+                }
+                if first
+                else None
+            ),
+        }
+
+    if specialist_id == BEHAVIOUR_ADHERENCE:
+        return {
+            "kind": "no_records",
+            "message": (
+                "Complete your first habit to start your adherence history."
+            ),
+            "action": {
+                "kind": ACTION_COMPLETE_HABIT,
+                "label": "Record a habit",
+                "anchor": f"#specialist-{specialist_id}",
+            },
+        }
+
+    if specialist_id == NUTRITION_LIFESTYLE:
+        return {
+            "kind": "no_records",
+            "message": (
+                "Log your first meal so this plan has something to review."
+            ),
+            "action": {
+                "kind": ACTION_LOG_NUTRITION,
+                "label": "Log a meal",
+                "anchor": f"#specialist-{specialist_id}",
+            },
+        }
+
+    return None
+
+
+def build_plan_summary(
+    need_profile: dict = None,
+    cards: dict = None,
+    plan_sections: dict = None,
+    *,
+    nutrition_goal: str = None,
+) -> dict:
+    """The short summary at the top of the plan, from this plan's own content.
+
+    `focus_areas` names the domains the Orchestrator actually selected this
+    cycle, using the measured need levels and any goal the user stated. A plan
+    with no selected specialist says so instead of inventing a focus, and the
+    `next` line is the one fixed sentence that describes what happens next in
+    this product.
+    """
+
+    profile = need_profile or {}
+    cards = cards or {}
+    plan_sections = plan_sections or {}
+
+    areas = []
+
+    movement_items = plan_sections.get(EXERCISE_MOVEMENT) or []
+
+    if cards.get(EXERCISE_MOVEMENT, {}).get("status") == "ACTIVE":
+        for dimension in _MOVEMENT_DIMENSIONS:
+            entry = profile.get(dimension)
+
+            if isinstance(entry, dict) and entry.get("level") in ("MEDIUM", "HIGH"):
+                wording = _FOCUS_AREA_WORDING[dimension]
+
+                if wording not in areas:
+                    areas.append(wording)
+
+        if any(item.get("section") == SECTION_ACTIVITY_VOLUME for item in movement_items):
+            areas.append("Daily movement")
+
+    if cards.get(NUTRITION_LIFESTYLE, {}).get("status") == "ACTIVE":
+        areas.append(
+            _NUTRITION_GOAL_FOCUS[nutrition_goal] if nutrition_goal else "Eating patterns"
+        )
+
+    if cards.get(BEHAVIOUR_ADHERENCE, {}).get("status") == "ACTIVE":
+        areas.append("Consistency")
+
+    if cards.get(RECOVERY_CARE, {}).get("status") == "ACTIVE":
+        areas.append("Recovery and rest")
+
+    # Four is as many as a sentence can carry before it stops being a summary.
+    areas = areas[:4]
+
+    if areas:
+        headline = (
+            "Your plan is currently focused on "
+            + _join_wording([area.lower() for area in areas])
+            + "."
+        )
+    else:
+        headline = (
+            "Nothing in your plan needs a change right now. Your assessment "
+            "and answers did not show a need MoveWell would build a plan "
+            "around."
+        )
+
+    return {
+        "headline": headline,
+        "focus_areas": areas,
+        "next": (
+            "Complete your activities. MoveWell uses what you record and your "
+            "next assessment to adapt the plan after this one."
+        ),
+    }
+
+
+def build_collaboration(
+    cards: dict,
+    sections: dict,
+    need_profile: dict = None,
+    *,
+    nutrition_goal: str = None,
+) -> dict:
+    """How the five specialists produced ONE plan.
+
+    This is a summary of decisions, from the same values the sections show —
+    never a transcript, never a chain of thought, and never a specialist
+    presented as contributing when it did not. A specialist that was not
+    selected appears with the honest sentence and, where the user can act on it,
+    the action that would assess it.
+    """
+
+    profile = need_profile or {}
+    steps = []
+
+    steps.append(
+        {
+            "kind": "assessment",
+            "title": "Your assessment and answers",
+            "icon": "📋",
+            "participated": True,
+            "summary": _input_summary(cards, profile),
+        }
+    )
+
+    for specialist_id in SPECIALIST_ORDER:
+        card = cards.get(specialist_id) or {}
+        section = sections.get(specialist_id) or {}
+        participated = bool(card.get("active")) if specialist_id != SAFETY_PRACTITIONER else bool(card.get("evaluated"))
+
+        steps.append(
+            {
+                "kind": "specialist",
+                "specialist": specialist_id,
+                "title": card.get("title"),
+                "icon": card.get("icon"),
+                "participated": participated,
+                "summary": _short_reason(
+                    specialist_id, card, profile, nutrition_goal=nutrition_goal
+                ),
+                "action": (section.get("empty_state") or {}).get("action"),
+            }
+        )
+
+    steps.append(
+        {
+            "kind": "synthesis",
+            "title": "MoveWell",
+            "icon": "✨",
+            "participated": True,
+            "summary": (
+                "These were combined into your one MoveWell plan, with the "
+                "safety review applied before anything reached you."
+            ),
+        }
+    )
+
+    return {
+        "title": "How your MoveWell team worked",
+        "intro": (
+            "MoveWell picked the specialists your own evidence called for. "
+            "This is what each of them contributed."
+        ),
+        "steps": steps,
+    }
+
+
+def _input_summary(cards: dict, need_profile: dict) -> str:
+    """What MoveWell looked at, named from what actually exists.
+
+    Read from the cards' own activation sources and the measured need levels,
+    so this cannot claim MoveWell used something it never received.
+    """
+
+    sources = []
+    profile = need_profile or {}
+
+    movement = cards.get(EXERCISE_MOVEMENT) or {}
+    measured_movement = any(
+        isinstance(profile.get(dimension), dict)
+        and profile[dimension].get("level") not in (None, "NOT_ASSESSED")
+        for dimension in _MOVEMENT_DIMENSIONS
+    ) or bool((movement.get("assessed_movements") or []))
+
+    if measured_movement:
+        sources.append("your movement assessment")
+
+    nutrition = cards.get(NUTRITION_LIFESTYLE) or {}
+
+    if "dietary_questionnaire" in (nutrition.get("activated_by") or []):
+        sources.append("your nutrition check-in")
+
+    if "confirmed_medical_report" in (nutrition.get("activated_by") or []):
+        sources.append("the medical report you confirmed")
+
+    behaviour = cards.get(BEHAVIOUR_ADHERENCE) or {}
+    recovery = cards.get(RECOVERY_CARE) or {}
+
+    if (behaviour.get("evidence") or []) or (recovery.get("evidence") or []):
+        sources.append("your lifestyle answers")
+
+    if not sources:
+        return "MoveWell has not received enough information yet to assess you."
+
+    return "MoveWell looked at " + _join_wording(sources) + "."
+
+
+def build_unified_plan(
+    user_state: dict,
+    *,
+    safety_status=None,
+    safety_result=None,
+    tracking: dict = None,
+) -> dict:
+    """The one MoveWell plan: five specialist sections and their items.
+
+    `tracking` carries this user's already-fetched records — the same
+    documents the stores return, not a copy of them:
+
+        {"exercise_results": [...], "behaviour_actions": [...],
+         "food_log_entries": [...]}
+
+    Every key is optional; omitting one means that domain's tracking is
+    reported as not recorded, which is what an absent record means. Nothing
+    in this function reads a database, and nothing in it invents a
+    measurement: what it cannot find, it says it cannot find.
+    """
+
+    tracking = tracking or {}
+    user_state = user_state or {}
+    need_profile = _need_profile(user_state) or {}
+    nutrition_goal = _stated_nutrition_goal(user_state)
+
+    team = build_specialists_team(
+        user_state, safety_status=safety_status, safety_result=safety_result
+    )
+    cards = {card["id"]: card for card in team}
+
+    exercise_results = list(tracking.get("exercise_results") or [])
+    behaviour_actions = list(tracking.get("behaviour_actions") or [])
+    food_log_entries = list(tracking.get("food_log_entries") or [])
+
+    plan_sections = {
+        EXERCISE_MOVEMENT: _exercise_programme_items(user_state, exercise_results)
+        + _activity_volume_items(user_state, exercise_results),
+        NUTRITION_LIFESTYLE: _nutrition_items(user_state, food_log_entries),
+        BEHAVIOUR_ADHERENCE: _behaviour_items(user_state, behaviour_actions),
+        RECOVERY_CARE: _recovery_items(user_state),
+        SAFETY_PRACTITIONER: _safety_items(safety_result),
+    }
+
+    position = 0
+    flat_items = []
+
+    for specialist_id in SPECIALIST_ORDER:
+        for item in plan_sections[specialist_id]:
+            _safety_applied(item, safety_result)
+            position += 1
+            item["position"] = position
+            flat_items.append(item)
+
+    sections = []
+
+    for specialist_id in SPECIALIST_ORDER:
+        card = cards[specialist_id]
+        items = plan_sections[specialist_id]
+        selected = bool(card.get("active")) or bool(items)
+
+        sections.append(
+            {
+                "specialist": specialist_id,
+                "title": card["title"],
+                "subtitle": card["subtitle"],
+                "icon": card["icon"],
+                "route": card["route"],
+                "status": card["status"],
+                "status_label": card["status_label"],
+                # The compact pair the team card shows, and the one sentence it
+                # shows under the name. Condensed server-side so five cards say
+                # five different, true things.
+                "team_status": _team_status(card),
+                "team_status_label": TEAM_STATUS_LABELS.get(
+                    _team_status(card), card["status_label"]
+                ),
+                "short_reason": _short_reason(
+                    specialist_id, card, need_profile, nutrition_goal=nutrition_goal
+                ),
+                # Whether this specialist is part of the plan the user is
+                # reading: the Orchestrator selected it this cycle, or it has
+                # actions in the plan already. "Not selected" is not the same
+                # as "not reviewed", which is what `status` says.
+                "selected": selected,
+                "why_active": card.get("reason") if card.get("active") else None,
+                "why_inactive": None if card.get("active") else card.get("reason"),
+                "current_focus": _section_focus(
+                    user_state, need_profile, specialist_id, card
+                ),
+                "decision": _section_decision(user_state, specialist_id, card),
+                "actions": items,
+                "tracking": _section_tracking(specialist_id, items),
+                "progress": _section_progress(specialist_id, user_state, items),
+                "next_step": _section_next_step(user_state, specialist_id, card),
+                "evidence": list(card.get("evidence") or []),
+                "missing": list(
+                    card.get("missing_information")
+                    or card.get("missing_safety_information")
+                    or []
+                ),
+                "is_safety_supervisor": specialist_id == SAFETY_PRACTITIONER,
+            }
+        )
+
+    # Filled in after the sections exist, because the honest empty state depends
+    # on that section's own tracking status.
+    for section in sections:
+        section["empty_state"] = _empty_state(
+            section["specialist"],
+            cards[section["specialist"]],
+            section,
+            section["actions"],
+        )
+
+    constraints = _plan_constraints(user_state, safety_result)
+
+    plan_ids = {
+        specialist_id: sorted(
+            {
+                item["plan_id"]
+                for item in plan_sections[specialist_id]
+                if item.get("plan_id")
+            }
+        )
+        for specialist_id in SPECIALIST_ORDER
+    }
+
+    versions = [
+        record.get("plan_version")
+        for record in (
+            _latest_plan_record(user_state.get("exercise_history") or {}),
+            _latest_plan_record(user_state.get("nutrition_plan") or {}),
+            _latest_plan_record(user_state.get("behaviour") or {}),
+        )
+        if isinstance(record, dict) and record.get("plan_version")
+    ]
+
+    plan_state_details = plan_state(
+        user_state, plans_available=bool(flat_items)
+    )
+
+    return {
+        "available": bool(flat_items),
+        "plan_id": _current_plan_id(user_state),
+        "plan_ids": plan_ids,
+        "version": max(versions) if versions else None,
+        "generated_at": user_state.get("generatedAt"),
+        "state": plan_state_details,
+        # What this plan is about, in one sentence, and what happens next.
+        "summary": build_plan_summary(
+            need_profile, cards, plan_sections, nutrition_goal=nutrition_goal
+        ),
+        "safety": _safety_block(safety_status, safety_result),
+        "specialists": team,
+        "sections": sections,
+        # The same items, in plan order. `sections[].actions` holds these
+        # very objects -- this is one list read two ways, not a second
+        # derivation, so the two can never disagree.
+        "items": flat_items,
+        "constraints": constraints,
+        # How the selected specialists produced this one plan, from their own
+        # decisions.
+        "collaboration": build_collaboration(
+            cards,
+            {section["specialist"]: section for section in sections},
+            need_profile,
+            nutrition_goal=nutrition_goal,
+        ),
+        "active_specialists": [
+            specialist_id
+            for specialist_id in SPECIALIST_ORDER
+            if cards[specialist_id].get("active")
+        ],
+        "counts": {
+            "selected_specialists": sum(1 for s in sections if s["selected"]),
+            "actions": len(flat_items),
+            "exercises": sum(1 for item in flat_items if item["kind"] == "exercise"),
         },
     }
 
-    return list(team.values())
 
+def _section_tracking(specialist_id: str, items: list) -> dict:
+    """What has actually been recorded for this section, counted from the
+    items' own tracking rather than computed twice.
+
+    Only items whose tracking comes from a real record store are counted —
+    a daily-volume target built from onboarding answers is not a session,
+    and adding it to the session count would inflate what the user has
+    actually done.
+    """
+
+    if not items:
+        return _tracking_not_recorded(
+            "No actions are in this part of your plan yet."
+        )
+
+    counted = [item for item in items if item["tracking"].get("counts_toward_section")]
+    recorded = sum(item["tracking"].get("recorded") or 0 for item in counted)
+    completed = sum(item["tracking"].get("completed") or 0 for item in counted)
+    statuses = {item["tracking"].get("status") for item in counted}
+
+    if TRACKING_COMPLETED in statuses:
+        status = TRACKING_COMPLETED
+    elif TRACKING_RECORDED in statuses:
+        status = TRACKING_RECORDED
+    else:
+        status = TRACKING_NOT_RECORDED
+
+    units = {
+        item["tracking"].get("unit") for item in counted if item["tracking"].get("unit")
+    }
+    unit = units.pop() if len(units) == 1 else "record"
+
+    how = [
+        item["tracking"].get("how_it_was_recorded")
+        for item in items
+        if item["tracking"].get("how_it_was_recorded")
+    ]
+
+    if status == TRACKING_NOT_RECORDED:
+        label = "Nothing recorded for this part of the plan yet."
+    elif status == TRACKING_COMPLETED:
+        label = (
+            f"{completed} of {recorded} recorded {unit}"
+            + ("s" if recorded != 1 else "")
+            + " met the target"
+        )
+    else:
+        label = (
+            f"{recorded} {unit}" + ("s" if recorded != 1 else "") + " recorded so far"
+        )
+
+    return {
+        "status": status,
+        "label": label,
+        "summary": how[0] if how else None,
+        "recorded": recorded,
+        "completed": completed,
+        "rows": [
+            {
+                "label": item["title"],
+                "value": item["tracking"].get("summary")
+                or item["tracking"].get("label"),
+            }
+            for item in items
+        ],
+    }
+
+
+def _section_progress(specialist_id: str, user_state: dict, items: list) -> dict:
+    """Where this part of the plan has got to, from the records and the plan
+    version — never from a score this module made up."""
+
+    section_name = {
+        EXERCISE_MOVEMENT: "exercise_history",
+        NUTRITION_LIFESTYLE: "nutrition_plan",
+        BEHAVIOUR_ADHERENCE: "behaviour",
+    }.get(specialist_id)
+
+    record = (
+        _latest_plan_record(user_state.get(section_name) or {})
+        if section_name
+        else None
+    )
+
+    directions = [item["progress"].get("direction") for item in items]
+    improving = sum(1 for direction in directions if direction == "IMPROVING")
+    declining = sum(1 for direction in directions if direction == "DECLINING")
+
+    if not items:
+        direction = "NOT_RECORDED"
+    elif all(d == "NOT_RECORDED" for d in directions):
+        direction = "NOT_RECORDED"
+    elif improving and not declining:
+        direction = "IMPROVING"
+    elif declining and not improving:
+        direction = "DECLINING"
+    elif improving or declining:
+        direction = "MIXED"
+    elif any(d == "NOT_ENOUGH_DATA" for d in directions):
+        direction = "NOT_ENOUGH_DATA"
+    else:
+        direction = "HOLDING"
+
+    return {
+        "direction": direction,
+        "plan_version": (record or {}).get("plan_version"),
+        "adaptation_reason": (record or {}).get("adaptation_reason"),
+        "triggered_by": (record or {}).get("triggered_by"),
+        "label": {
+            "IMPROVING": "Your recorded sessions are moving up.",
+            "DECLINING": "Your recorded sessions came down last time.",
+            "MIXED": "Some of this moved up and some came down.",
+            "HOLDING": "Your recorded sessions are holding steady.",
+            "NOT_ENOUGH_DATA": "Not enough recorded sessions to compare yet.",
+            "NOT_RECORDED": "Nothing recorded for this part of the plan yet.",
+        }[direction],
+        "rows": [
+            {
+                "label": item["title"],
+                "value": item["progress"].get("label"),
+            }
+            for item in items
+        ],
+    }
+
+
+def _plan_constraints(user_state: dict, safety_result) -> list:
+    """Every constraint that changed this plan — the cross-specialist layer
+    the Orchestrator and the Safety Gate actually produced this cycle, said
+    in their own words."""
+
+    constraints = []
+
+    if safety_result and safety_result.get("status") in (
+        "MODIFY",
+        "PAUSE",
+        "REFER",
+    ):
+        status = safety_result["status"]
+
+        constraints.append(
+            {
+                "source": SAFETY_PRACTITIONER,
+                "type": {
+                    "MODIFY": "modify",
+                    "PAUSE": "pause",
+                    "REFER": "refer",
+                }[status],
+                "reason": safety_result.get("reason"),
+                "actions": [
+                    _safety_action_wording(action)
+                    for action in safety_result.get("actions") or []
+                ],
+                "applies_to": (
+                    "all_recommendations"
+                    if status == "REFER"
+                    else list(
+                        safety_result.get("blocked_recommendation_ids") or []
+                    )
+                    + list(
+                        safety_result.get("modified_recommendation_ids") or []
+                    )
+                ),
+            }
+        )
+
+    recovery = assess_recovery(build_recovery_view(user_state))
+
+    if recovery["constraint"]["limit_progression"]:
+        constraints.append(
+            {
+                "source": RECOVERY_CARE,
+                "type": "limit_progression",
+                "reason": recovery["constraint"]["reason"],
+                "actions": [],
+                "applies_to": [EXERCISE_MOVEMENT],
+            }
+        )
+
+    activity = assess_activity(build_activity_view(user_state))
+
+    for entry in activity["constraints"]:
+        constraints.append(
+            {
+                "source": EXERCISE_MOVEMENT,
+                "type": entry["constraint"],
+                "reason": entry["detail"],
+                "actions": [],
+                "applies_to": [EXERCISE_MOVEMENT],
+            }
+        )
+
+    return constraints
+
+
+def _current_plan_id(user_state: dict):
+    """The plan id of the most recently created plan record across the three
+    plan sections, or None when no plan exists. Read, not invented."""
+
+    candidates = []
+
+    for section_name in ("exercise_history", "nutrition_plan", "behaviour"):
+        record = _latest_plan_record(user_state.get(section_name) or {})
+
+        if isinstance(record, dict) and record.get("plan_id"):
+            candidates.append(
+                (
+                    str(record.get("created_at") or ""),
+                    record["plan_id"],
+                )
+            )
+
+    if not candidates:
+        return None
+
+    return sorted(candidates)[-1][1]
+
+
+def _safety_block(safety_status, safety_result) -> dict:
+    code = safety_status or (safety_result or {}).get("status") or "NOT_ASSESSED"
+
+    return {
+        "status": code,
+        "level": STATUS_TO_LEVEL.get(code),
+        "message": safety_status_message(safety_status or code),
+        "reason": (safety_result or {}).get("reason"),
+        "flags": list((safety_result or {}).get("flags") or []),
+        "requires_referral": bool((safety_result or {}).get("requires_referral")),
+        "constrains_plan": code in ("MODIFY", "PAUSE", "REFER"),
+    }
 
 def never_run_response() -> dict:
     """The shape `GET /api/workflow/latest` returns for an account that has
@@ -1364,6 +3464,13 @@ def never_run_response() -> dict:
             "next_action": NEXT_ACTION_ASSESSMENT,
         },
         "specialists_team": build_specialists_team({}, safety_status=None),
+        # An account with nothing measured has no score, and says so rather than
+        # showing a zero: "we do not know yet" is not a bad result.
+        "movewell_score": build_movewell_score({}),
+        # The same five-specialist, no-actions plan the plan screen reads for
+        # an account with nothing recorded yet: all five present and
+        # NOT_ASSESSED, and not one invented item.
+        "unified_plan": build_unified_plan({}),
         "assessment_summary": {
             "status": "NONE_COMPLETED",
             "tests_completed": 0,

@@ -1,0 +1,213 @@
+/**
+ * The collaboration timeline: a calm vertical flow of short decision summaries.
+ *
+ * A contributor step is legible and carries the coach's accent; a specialist
+ * that took no part is quieter, is marked as not part of the plan, and never
+ * looks like it contributed. The line down the left is what makes it read as a
+ * sequence rather than as a list of unrelated cards — which is the point,
+ * because the sequence is the product claim: several specialists, one plan.
+ *
+ * Nothing here is a chat bubble or a diagram of how the system is built. The
+ * flow is short, the steps are a sentence each, and the only colour is the
+ * coach's own accent on the node and the name.
+ */
+
+.collab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  margin-top: var(--space-6);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border);
+}
+
+.collab-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.collab-title {
+  margin: 0;
+}
+
+.collab-intro {
+  margin: 0;
+}
+
+.collab-flow {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.collab-step {
+  --collab-accent: var(--ink-faint);
+  --collab-accent-wash: var(--surface-soft);
+
+  position: relative;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: var(--space-3);
+  padding-bottom: var(--space-5);
+}
+
+.collab-step:last-child {
+  padding-bottom: 0;
+}
+
+/* The connecting line, drawn from each node down to the next. */
+.collab-step:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 16px;
+  top: 34px;
+  bottom: 0;
+  width: 1px;
+  background: var(--border);
+}
+
+.collab-node {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 15px;
+  line-height: 1;
+}
+
+.collab-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 5px;
+}
+
+.collab-step-name {
+  margin: 0;
+  font: 700 14px/1.3 Manrope, sans-serif;
+  color: var(--ink);
+}
+
+.collab-step-summary {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+/* Per-coach accents, set on the step so the node and the name share one
+   value. Same pairings as the team cards. */
+.collab-step--accent-movement {
+  --collab-accent: var(--accent);
+  --collab-accent-wash: var(--accent-soft);
+}
+
+.collab-step--accent-nutrition {
+  --collab-accent: var(--warn);
+  --collab-accent-wash: var(--warn-soft);
+}
+
+.collab-step--accent-behaviour {
+  --collab-accent: var(--info);
+  --collab-accent-wash: var(--info-soft);
+}
+
+.collab-step--accent-recovery {
+  --collab-accent: var(--accent-strong);
+  --collab-accent-wash: var(--surface-tint);
+}
+
+.collab-step--accent-safety {
+  --collab-accent: var(--danger);
+  --collab-accent-wash: var(--danger-soft);
+}
+
+.collab-step--contributor .collab-node {
+  border-color: var(--collab-accent-wash);
+  background: var(--collab-accent-wash);
+}
+
+.collab-step--contributor .collab-step-name {
+  color: var(--collab-accent);
+}
+
+/* What MoveWell looked at: an input, not a contribution, and not a coach. */
+.collab-step--input .collab-node {
+  background: var(--surface-soft);
+}
+
+.collab-step--input .collab-step-name {
+  color: var(--ink-soft);
+}
+
+/* The one plan they produced. */
+.collab-step--synthesis .collab-node {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+
+.collab-step--synthesis .collab-step-name {
+  color: var(--accent-ink);
+}
+
+.collab-step--synthesis .collab-step-summary {
+  color: var(--ink);
+}
+
+/* A specialist that took no part: quieter, provisional, and never read as a
+   contribution. */
+.collab-step--inactive .collab-node {
+  border-style: dashed;
+  border-color: var(--border-strong);
+  background: var(--surface);
+  opacity: 0.75;
+}
+
+.collab-step--inactive .collab-step-name {
+  color: var(--ink-faint);
+  font-weight: 600;
+}
+
+.collab-step--inactive .collab-step-summary {
+  color: var(--ink-faint);
+}
+
+.collab-step-label {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.collab-step-actions {
+  margin-top: var(--space-2);
+}
+
+@media (max-width: 560px) {
+  .collab-step {
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: var(--space-2);
+  }
+
+  .collab-step:not(:last-child)::before {
+    left: 13px;
+    top: 28px;
+  }
+
+  .collab-node {
+    width: 28px;
+    height: 28px;
+    font-size: 13px;
+  }
+}

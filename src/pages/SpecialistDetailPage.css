@@ -1,940 +1,275 @@
-/* SpecialistDetailPage.css */
+/**
+ * One specialist's page.
+ *
+ * Everything here is built from the tokens in src/index.css. The page is a
+ * stack of plain cards — who this coach is, why they are involved, what they
+ * are working on, what was decided, what to do, what it produced, what happens
+ * next — and the only colour beyond the system's is the specialist's own
+ * accent, applied once to the header's icon chip and hairline.
+ *
+ * Nothing in this file carries dark-theme values or a second design language:
+ * the page is the same product as the plan, opened one level deeper.
+ */
 
-.specialist-detail-page {
-  min-height: 100vh;
-  background-color: var(--bg-surface, #f8fafc);
-  color: var(--text-primary, #0f172a);
+.specialist-main {
   display: flex;
   flex-direction: column;
 }
 
-.specialist-detail-main {
-  max-width: var(--content-max);
-  margin: 0 auto;
-  padding: 32px 24px 64px;
-  width: 100%;
-  box-sizing: border-box;
+/* The specialist's accent, declared once on the page and used by the header. */
+.specialist-accent-none,
+.specialist-accent-movement {
+  --specialist-accent: var(--accent);
+  --specialist-accent-wash: var(--accent-soft);
+  --specialist-accent-line: var(--accent-line);
 }
 
-.specialist-breadcrumb {
+.specialist-accent-nutrition {
+  --specialist-accent: var(--warn);
+  --specialist-accent-wash: var(--warn-soft);
+  --specialist-accent-line: var(--warn-line);
+}
+
+.specialist-accent-behaviour {
+  --specialist-accent: var(--info);
+  --specialist-accent-wash: var(--info-soft);
+  --specialist-accent-line: var(--info-soft);
+}
+
+.specialist-accent-recovery {
+  --specialist-accent: var(--accent-strong);
+  --specialist-accent-wash: var(--surface-tint);
+  --specialist-accent-line: var(--accent-line);
+}
+
+.specialist-accent-safety {
+  --specialist-accent: var(--danger);
+  --specialist-accent-wash: var(--danger-soft);
+  --specialist-accent-line: var(--danger-line);
+}
+
+/* --------------------------------------------------------------- header --- */
+
+.specialist-header {
+  position: relative;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.9rem;
-  color: var(--text-secondary, #64748b);
-  margin-bottom: 24px;
-}
-
-.specialist-breadcrumb a {
-  color: var(--text-secondary, #64748b);
-  text-decoration: none;
-  transition: color 0.15s ease;
-}
-
-.specialist-breadcrumb a:hover {
-  color: var(--brand-primary, #0284c7);
-}
-
-.specialist-breadcrumb-sep {
-  color: var(--text-muted, #94a3b8);
-}
-
-.specialist-header-card {
-  background: white;
-  border-radius: 16px;
-  padding: 32px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
-  border: 1px solid #e2e8f0;
-  margin-bottom: 28px;
-  display: flex;
-  gap: 24px;
   align-items: flex-start;
+  gap: var(--space-4);
+  overflow: hidden;
 }
 
-.specialist-hero-avatar {
-  font-size: 3rem;
-  line-height: 1;
-  background: #f1f5f9;
-  width: 80px;
-  height: 80px;
-  border-radius: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  box-shadow: inset 0 2px 4px rgba(0,0,0,0.04);
+.specialist-header::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: var(--specialist-accent, var(--accent));
+  opacity: 0.6;
 }
 
-.specialist-hero-content {
-  flex: 1;
-  min-width: 0;
-}
-
-.specialist-hero-top {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 8px;
-}
-
-.specialist-hero-role {
-  font-size: 0.825rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #0284c7;
-}
-
-.specialist-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 12px;
-  border-radius: 9999px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  line-height: 1.2;
-}
-
-.specialist-badge--active {
-  background-color: #dcfce7;
-  color: #15803d;
-  border: 1px solid #bbf7d0;
-}
-
-.specialist-badge--active::before {
-  content: "●";
-  color: #16a34a;
-}
-
-.specialist-badge--evaluated {
-  background-color: #f1f5f9;
-  color: #475569;
-  border: 1px solid #cbd5e1;
-}
-
-.specialist-badge--evaluated::before {
-  content: "✓";
-  font-weight: bold;
-}
-
-.specialist-badge--not-assessed {
-  background-color: #fef3c7;
-  color: #92400e;
-  border: 1px solid #fde68a;
-}
-
-.specialist-badge--not-assessed::before {
-  content: "○";
-  font-weight: bold;
-}
-
-.specialist-hero-title {
-  font-size: 1.75rem;
-  font-weight: 700;
-  margin: 0 0 8px;
-  color: #0f172a;
-}
-
-.specialist-hero-desc {
-  font-size: 1.05rem;
-  line-height: 1.5;
-  color: #475569;
-  margin: 0 0 16px;
-}
-
-.specialist-focus-box {
-  background: #f8fafc;
-  border-left: 4px solid #0284c7;
-  padding: 12px 16px;
-  border-radius: 0 8px 8px 0;
-  font-size: 0.95rem;
-  color: #334155;
-}
-
-.specialist-grid {
+.specialist-header-icon {
+  flex: 0 0 auto;
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 24px;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--specialist-accent-line, var(--accent-line));
+  background: var(--specialist-accent-wash, var(--accent-soft));
+  font-size: 26px;
+  line-height: 1;
 }
 
-.specialist-card-panel {
-  background: white;
-  border-radius: 16px;
-  padding: 24px 28px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  border: 1px solid #e2e8f0;
-}
-
-.specialist-panel-title {
-  font-size: 1.25rem;
-  font-weight: 600;
-  margin: 0 0 16px;
-  color: #1e293b;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.specialist-reason-text {
-  font-size: 1rem;
-  line-height: 1.6;
-  color: #334155;
-  margin: 0;
-}
-
-.specialist-evidence-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.specialist-evidence-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  background: #f8fafc;
-  padding: 12px 16px;
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
-  font-size: 0.95rem;
-  color: #1e293b;
-}
-
-.specialist-evidence-icon {
-  color: #0284c7;
-  font-weight: 700;
-  flex-shrink: 0;
-}
-
-.specialist-rec-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.specialist-rec-item {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 18px 20px;
-  font-size: 0.98rem;
-  color: #1e293b;
-  line-height: 1.5;
-  transition: all 0.15s ease;
-}
-
-.specialist-rec-item strong {
-  display: block;
-  font-size: 1.05rem;
-  margin-bottom: 4px;
-  color: #14532d;
-}
-
-.specialist-rec-item:hover {
-  border-color: #0284c7;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
-}
-
-.specialist-rec-card {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-}
-
-.specialist-rec-content {
-  flex: 1;
+.specialist-header-body {
   min-width: 0;
-}
-
-.specialist-rec-header {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-bottom: 8px;
+  flex-direction: column;
+  gap: var(--space-1);
 }
 
-.specialist-rec-title {
-  font-size: 1.1rem;
-  font-weight: 700;
+.specialist-header-name {
+  margin: 2px 0 0;
+}
+
+.specialist-header-role {
+  margin-top: 2px;
+}
+
+.specialist-header-status {
+  margin-top: var(--space-3);
+}
+
+/* -------------------------------------------------------------- actions --- */
+
+/* Each action is its own card inside the section, so a list of them reads as a
+   list — not as one long panel of text. */
+.specialist-action-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+}
+
+.specialist-action-list .plan-item {
+  border-radius: var(--radius-md);
+}
+
+/* ------------------------------------------------------------ the result --- */
+
+.specialist-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.specialist-progress-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.specialist-block-title {
   margin: 0;
-  color: #0f172a;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
 }
 
-.specialist-rec-target-badge {
-  font-size: 0.75rem;
-  font-weight: 600;
-  background: #e0f2fe;
-  color: #0369a1;
-  padding: 2px 8px;
-  border-radius: 9999px;
-}
-
-.specialist-rec-diff-badge {
-  font-size: 0.75rem;
-  font-weight: 600;
-  background: #f1f5f9;
-  color: #475569;
-  padding: 2px 8px;
-  border-radius: 9999px;
-  border: 1px solid #cbd5e1;
-}
-
-.specialist-rec-action {
-  font-size: 0.95rem;
-  color: #334155;
-  margin: 0 0 8px;
-  line-height: 1.5;
-}
-
-.specialist-rec-action strong,
-.specialist-rec-why strong {
-  color: #0f172a;
-  font-weight: 600;
-}
-
-.specialist-rec-dosage {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #0284c7;
-  margin-bottom: 8px;
+/* Recorded values, per item, as a quiet aligned list. */
+.specialist-rows {
   display: flex;
-  gap: 6px;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
 }
 
-.specialist-rec-why {
-  font-size: 0.9rem;
-  color: #475569;
-  margin: 0 0 6px;
-  line-height: 1.5;
-  background: #f1f5f9;
-  padding: 8px 12px;
-  border-radius: 6px;
-}
-
-.specialist-rec-adherence {
-  font-size: 0.85rem;
-  color: #059669;
-  margin: 4px 0 0;
-  font-weight: 500;
-}
-
-.specialist-rec-safety {
-  font-size: 0.85rem;
-  color: #92400e;
-  background: #fef3c7;
-  border: 1px solid #fde68a;
-  padding: 6px 10px;
-  border-radius: 6px;
-  margin-top: 8px;
+.specialist-row {
   display: flex;
-  gap: 6px;
-  align-items: center;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--border);
 }
 
-.specialist-rec-start-btn {
-  flex-shrink: 0;
-  padding: 8px 16px;
-  font-size: 0.85rem;
-  align-self: center;
+.specialist-row:first-child {
+  border-top: 0;
+  padding-top: 0;
 }
+
+.specialist-row-label {
+  flex: 0 0 auto;
+  min-width: 140px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.specialist-row-value {
+  margin: 0;
+  flex: 1 1 200px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+/* ------------------------------------------------- where coaches overlap --- */
+
+.specialist-collab-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.specialist-collab-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  border-left: 3px solid var(--specialist-accent, var(--accent));
+}
+
+.specialist-collab-line {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.specialist-collab-line strong {
+  font-weight: 700;
+  color: var(--specialist-accent, var(--accent));
+}
+
+/* --------------------------------------------------------------- details --- */
+
+.specialist-detail-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.specialist-plain-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+.specialist-plain-list > li {
+  position: relative;
+  padding-left: var(--space-4);
+}
+
+.specialist-plain-list > li::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 8px;
+  width: 5px;
+  height: 5px;
+  border-radius: var(--radius-pill);
+  background: var(--specialist-accent, var(--accent));
+  opacity: 0.55;
+}
+
+/* A question nobody has answered yet is not a finding, so it is quieter. */
+.specialist-plain-list--quiet {
+  color: var(--ink-faint);
+}
+
+.specialist-plain-list--quiet > li::before {
+  background: var(--border-strong);
+  opacity: 1;
+}
+
+/* ------------------------------------------------------------ fallbacks --- */
 
 .specialist-error-fallback {
-  text-align: center;
-  padding: 48px 24px;
-}
-
-.specialist-empty-state {
-  text-align: center;
-  padding: 32px 16px;
-  color: #64748b;
-}
-
-.specialist-empty-icon {
-  font-size: 2.5rem;
-  margin-bottom: 12px;
-}
-
-.specialist-empty-text {
-  font-size: 1rem;
-  line-height: 1.6;
-  max-width: 540px;
-  margin: 0 auto 20px;
-}
-
-.specialist-action-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 10px 20px;
-  border-radius: 8px;
-  font-weight: 600;
-  font-size: 0.95rem;
-  text-decoration: none;
-  background: #0284c7;
-  color: white;
-  border: none;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-
-.specialist-action-btn:hover {
-  background: #0369a1;
-}
-
-.specialist-secondary-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 10px 20px;
-  border-radius: 8px;
-  font-weight: 600;
-  font-size: 0.95rem;
-  text-decoration: none;
-  background: white;
-  color: #0f172a;
-  border: 1px solid #cbd5e1;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.specialist-secondary-btn:hover {
-  background: #f1f5f9;
-  border-color: #94a3b8;
-}
-
-.specialist-nav-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 16px;
-  margin-top: 36px;
-  padding-top: 24px;
-  border-top: 1px solid #e2e8f0;
-}
-
-/* Team peers section */
-.specialist-peers-section {
-  margin-top: 36px;
-}
-
-.specialist-peers-header {
-  text-align: center;
-  margin-bottom: 24px;
-}
-
-.specialist-peers-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #0f172a;
-  margin: 0 0 6px;
-}
-
-.specialist-peers-subtitle {
-  font-size: 1rem;
-  color: #64748b;
-  margin: 0;
-}
-
-.specialist-peers-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 20px;
-}
-
-.specialist-peer-card {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  height: 100%;
-  box-sizing: border-box;
-  padding: 20px 22px;
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 16px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  text-decoration: none;
-  color: inherit;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
-}
-
-.specialist-peer-card:hover {
-  border-color: #0284c7;
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
-}
-
-.specialist-peer-card:focus-visible {
-  outline: 3px solid #7dd3fc;
-  outline-offset: 2px;
-}
-
-.specialist-peer-card--current {
-  border-color: #0284c7;
-  background: #f0f9ff;
-  pointer-events: none;
-}
-
-.specialist-peer-top {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.specialist-peer-avatar {
-  font-size: 1.6rem;
-  line-height: 1;
-  background: #f1f5f9;
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.specialist-peer-card--current .specialist-peer-avatar {
-  background: #e0f2fe;
-}
-
-.specialist-peer-name {
-  font-weight: 700;
-  font-size: 1.05rem;
-  line-height: 1.3;
-  color: #0f172a;
-  margin: 0;
-}
-
-.specialist-peer-desc {
-  font-size: 0.9rem;
-  line-height: 1.5;
-  color: #475569;
-  margin: 0;
-  flex: 1;
-}
-
-.specialist-peer-card .specialist-badge {
-  align-self: flex-start;
-}
-
-.specialist-peer-action {
-  align-self: flex-start;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 4px;
-  padding: 8px 16px;
-  border-radius: 8px;
-  font-size: 0.875rem;
-  font-weight: 600;
-  background: #0284c7;
-  color: white;
-  transition: background 0.15s ease;
-}
-
-.specialist-peer-card:hover .specialist-peer-action {
-  background: #0369a1;
-}
-
-.specialist-peer-action--current {
-  background: white;
-  color: #0369a1;
-  border: 1px solid #7dd3fc;
-  padding: 7px 15px;
+  gap: var(--space-4);
 }
 
 @media (max-width: 640px) {
-  .specialist-nav-bar {
+  .specialist-header {
     flex-direction: column;
-    align-items: stretch;
-  }
-  .specialist-nav-bar .specialist-action-btn,
-  .specialist-nav-bar .specialist-secondary-btn {
-    width: 100%;
-  }
-  .specialist-peers-grid {
-    grid-template-columns: 1fr;
+    gap: var(--space-3);
   }
 
-  .specialist-header-card {
-    flex-direction: column;
-    padding: 20px;
+  .specialist-header-icon {
+    width: 44px;
+    height: 44px;
+    font-size: 21px;
   }
-  .specialist-hero-avatar {
-    width: 60px;
-    height: 60px;
-    font-size: 2.25rem;
+
+  .specialist-row-label {
+    min-width: 0;
   }
-  .specialist-hero-title {
-    font-size: 1.4rem;
-  }
-}
-
-
-/* Evidence a specialist reports as still unknown. Visually quieter than a
-   finding, because that is what it is: a question nobody has answered
-   yet, not a result. */
-.specialist-missing-block {
-  margin-top: 1rem;
-  padding-top: 0.85rem;
-  border-top: 1px dashed var(--specialist-border, rgba(148, 163, 184, 0.45));
-}
-
-.specialist-missing-title {
-  margin: 0 0 0.5rem;
-  font-size: 0.82rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--specialist-muted, #64748b);
-}
-
-.specialist-missing-block .specialist-evidence-icon {
-  opacity: 0.7;
-}
-
-/* The reference diagram beside a recommended exercise. Contained, so the
-   whole figure stays visible. */
-.specialist-rec-image {
-  display: block;
-  width: 96px;
-  height: 96px;
-  flex: 0 0 96px;
-  object-fit: contain;
-  background: #ffffff;
-  border-radius: 10px;
-  margin-right: 12px;
-}
-
-@media (max-width: 640px) {
-  .specialist-rec-image {
-    width: 100%;
-    height: 140px;
-    flex: none;
-    margin: 0 0 10px;
-  }
-}
-
-/* MoveWell dark product theme ----------------------------------------- */
-.specialist-detail-page {
-  background:
-    radial-gradient(circle at 12% 4%, rgba(31, 124, 83, 0.16), transparent 28rem),
-    radial-gradient(circle at 92% 18%, rgba(26, 113, 127, 0.1), transparent 26rem),
-    var(--bg);
-  color: var(--dark);
-}
-
-.specialist-detail-main {
-  padding-top: 30px;
-}
-
-.specialist-breadcrumb {
-  color: var(--muted);
-}
-
-.specialist-breadcrumb a {
-  color: var(--muted);
-}
-
-.specialist-breadcrumb a:hover {
-  color: var(--cyan);
-}
-
-.specialist-breadcrumb-sep {
-  color: rgba(120, 150, 138, 0.6);
-}
-
-.specialist-header-card,
-.specialist-card-panel,
-.specialist-peer-card {
-  background: linear-gradient(145deg, rgba(15, 43, 34, 0.96), rgba(9, 28, 23, 0.9));
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-soft);
-}
-
-.specialist-header-card {
-  border-radius: 20px;
-}
-
-.specialist-hero-avatar,
-.specialist-peer-avatar {
-  background: rgba(101, 232, 237, 0.09);
-  box-shadow: inset 0 1px 0 rgba(168, 243, 207, 0.08);
-}
-
-.specialist-hero-role {
-  color: var(--cyan);
-}
-
-.specialist-badge--active {
-  background: rgba(53, 209, 139, 0.12);
-  color: var(--green-bright);
-  border-color: rgba(53, 209, 139, 0.26);
-}
-
-.specialist-badge--active::before {
-  color: var(--green-bright);
-}
-
-.specialist-badge--evaluated {
-  background: rgba(101, 232, 237, 0.1);
-  color: var(--cyan);
-  border-color: rgba(101, 232, 237, 0.24);
-}
-
-.specialist-badge--not-assessed {
-  background: rgba(245, 195, 107, 0.12);
-  color: var(--amber);
-  border-color: rgba(245, 195, 107, 0.28);
-}
-
-.specialist-hero-title,
-.specialist-panel-title,
-.specialist-peers-title {
-  color: var(--dark);
-}
-
-.specialist-hero-desc,
-.specialist-reason-text,
-.specialist-peer-desc,
-.specialist-peers-subtitle {
-  color: var(--dark-soft);
-}
-
-.specialist-focus-box {
-  background: rgba(7, 24, 19, 0.56);
-  border-left-color: var(--cyan);
-  color: var(--dark-soft);
-}
-
-.specialist-focus-box strong,
-.specialist-rec-action strong,
-.specialist-rec-why strong {
-  color: var(--dark);
-}
-
-.specialist-evidence-item,
-.specialist-rec-item {
-  background: rgba(7, 24, 19, 0.5);
-  border-color: var(--border);
-  color: var(--dark-soft);
-}
-
-.specialist-evidence-icon,
-.specialist-rec-dosage {
-  color: var(--cyan);
-}
-
-.specialist-rec-item strong,
-.specialist-rec-title,
-.specialist-peer-name {
-  color: var(--mint);
-}
-
-.specialist-rec-item:hover,
-.specialist-peer-card:hover {
-  border-color: rgba(101, 232, 237, 0.38);
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.2);
-}
-
-.specialist-rec-target-badge {
-  background: rgba(101, 232, 237, 0.1);
-  color: var(--cyan);
-}
-
-.specialist-rec-diff-badge {
-  background: rgba(168, 243, 207, 0.08);
-  color: var(--dark-soft);
-  border-color: var(--border);
-}
-
-.specialist-rec-action {
-  color: var(--dark-soft);
-}
-
-.specialist-rec-why {
-  background: rgba(101, 232, 237, 0.07);
-  color: var(--muted);
-}
-
-.specialist-rec-adherence {
-  color: var(--green-bright);
-}
-
-.specialist-rec-safety {
-  color: var(--amber);
-  background: rgba(245, 195, 107, 0.1);
-  border-color: rgba(245, 195, 107, 0.24);
-}
-
-.specialist-action-btn,
-.specialist-peer-action {
-  background: linear-gradient(135deg, var(--green-bright), var(--green));
-  color: #062117;
-  border: 1px solid transparent;
-  box-shadow: 0 8px 18px rgba(53, 209, 139, 0.16);
-}
-
-.specialist-action-btn:hover,
-.specialist-peer-card:hover .specialist-peer-action {
-  background: var(--green-bright);
-}
-
-.specialist-secondary-btn,
-.specialist-peer-action--current {
-  background: rgba(101, 232, 237, 0.06);
-  color: var(--dark-soft);
-  border-color: var(--border);
-}
-
-.specialist-secondary-btn:hover {
-  background: rgba(101, 232, 237, 0.11);
-  border-color: rgba(101, 232, 237, 0.35);
-  color: var(--mint);
-}
-
-.specialist-nav-bar {
-  border-top-color: var(--border);
-}
-
-.specialist-peer-card--current {
-  border-color: rgba(101, 232, 237, 0.38);
-  background: linear-gradient(145deg, rgba(18, 54, 49, 0.96), rgba(9, 28, 23, 0.9));
-}
-
-.specialist-peer-card--current .specialist-peer-avatar {
-  background: rgba(101, 232, 237, 0.12);
-}
-
-.specialist-empty-state,
-.specialist-empty-text {
-  color: var(--muted);
-}
-
-.specialist-missing-block {
-  border-top-color: var(--border);
-}
-
-.specialist-missing-title {
-  color: var(--muted);
-}
-
-.specialist-rec-image {
-  background: var(--surface-soft);
-}
-
-.specialist-detail-page .foodlog,
-.specialist-detail-page .behaviour-actions {
-  background: rgba(7, 24, 19, 0.5);
-  border-color: var(--border);
-}
-
-.specialist-detail-page .foodlog-coaching-notice {
-  background: rgba(53, 209, 139, 0.1);
-  border-color: rgba(53, 209, 139, 0.24);
-  color: var(--dark-soft);
-}
-
-.specialist-detail-page .foodlog-notice-icon {
-  color: var(--green-bright);
-}
-
-.specialist-detail-page .foodlog-meal {
-  background: rgba(101, 232, 237, 0.06);
-  color: var(--dark-soft);
-}
-
-.specialist-detail-page .foodlog-meal--on {
-  background: rgba(53, 209, 139, 0.14);
-  border-color: rgba(53, 209, 139, 0.34);
-  color: var(--mint);
-}
-
-.specialist-detail-page .foodlog-input {
-  background: var(--bg);
-  border-color: var(--border);
-  color: var(--dark);
-}
-
-.specialist-detail-page .foodlog-input::placeholder {
-  color: var(--muted);
-}
-
-.specialist-detail-page .foodlog-submit,
-.specialist-detail-page .behaviour-action-complete {
-  background: linear-gradient(135deg, var(--green-bright), var(--green));
-  color: #062117;
-  box-shadow: 0 8px 18px rgba(53, 209, 139, 0.14);
-}
-
-.specialist-detail-page .foodlog-submit:hover:not(:disabled),
-.specialist-detail-page .behaviour-action-complete:hover:not(:disabled) {
-  background: var(--green-bright);
-}
-
-.specialist-detail-page .behaviour-actions-title {
-  color: var(--cyan);
-}
-
-.specialist-detail-page .behaviour-actions-status,
-.specialist-detail-page .behaviour-actions-note,
-.specialist-detail-page .behaviour-action-question {
-  color: var(--muted);
-}
-
-.specialist-detail-page .behaviour-action {
-  background: rgba(13, 33, 27, 0.72);
-  border-color: var(--border);
-}
-
-.specialist-detail-page .behaviour-action-name {
-  color: var(--mint);
-}
-
-.specialist-detail-page .behaviour-action-text {
-  color: var(--dark-soft);
-}
-
-.specialist-detail-page .behaviour-action-skip,
-.specialist-detail-page .behaviour-action-chip {
-  background: rgba(101, 232, 237, 0.06);
-  border-color: var(--border);
-  color: var(--dark-soft);
-}
-
-.specialist-detail-page .behaviour-action-skip:hover:not(:disabled),
-.specialist-detail-page .behaviour-action-chip:hover:not(:disabled) {
-  background: rgba(101, 232, 237, 0.12);
-  border-color: rgba(101, 232, 237, 0.3);
-  color: var(--mint);
-}
-
-.specialist-detail-page .behaviour-action-done {
-  color: var(--green-bright);
-  background: rgba(53, 209, 139, 0.12);
-}
-
-.specialist-detail-page .behaviour-action-done--skipped {
-  color: var(--amber);
-  background: rgba(245, 195, 107, 0.12);
-}
-
-.specialist-action-btn:focus-visible,
-.specialist-secondary-btn:focus-visible,
-.specialist-peer-card:focus-visible {
-  outline: 2px solid var(--cyan);
-  outline-offset: 3px;
 }

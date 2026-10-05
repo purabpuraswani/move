@@ -1,6 +1,6 @@
 /* ========================================
    SIGNUP PAGE
-======================================== */
+   ======================================== */
 
 .auth-page {
   min-height: 100vh;
@@ -9,15 +9,13 @@
   display: grid;
   grid-template-columns: 45% 55%;
 
-  background:
-    radial-gradient(circle at 82% 10%, rgba(119, 181, 142, 0.12), transparent 24rem),
-    var(--bg);
+  background: var(--bg);
 }
 
 
 /* ========================================
    LEFT PANEL
-======================================== */
+   ======================================== */
 
 .auth-visual {
   position: relative;
@@ -28,11 +26,11 @@
 
   padding: 35px 55px;
 
-  background:
-    radial-gradient(circle at 18% 18%, rgba(119, 181, 142, 0.22), transparent 20rem),
-    radial-gradient(circle at 82% 82%, rgba(93, 141, 110, 0.20), transparent 25rem),
-    linear-gradient(145deg, #17231d 0%, #20382b 100%);
-  color: white;
+  background: var(--surface-soft);
+
+  border-right: 1px solid var(--border);
+
+  color: var(--ink);
 }
 
 
@@ -48,7 +46,7 @@
 
   width: fit-content;
 
-  color: white;
+  color: var(--ink);
 
   font-family: "Manrope", sans-serif;
   font-size: 19px;
@@ -56,18 +54,28 @@
 }
 
 .auth-brand .brand-icon {
-  background: white;
-  color: #17231d;
+  width: 30px;
+  height: 30px;
+
+  display: grid;
+  place-items: center;
+
+  border-radius: var(--radius-sm);
+
+  background: var(--accent);
+  color: var(--on-accent);
+
+  font-size: 15px;
 }
 
 .auth-brand > span > span {
-  color: #83c096;
+  color: var(--accent);
 }
 
 
 /* ========================================
    LEFT CONTENT
-======================================== */
+   ======================================== */
 
 .auth-visual-content {
   position: absolute;
@@ -83,7 +91,7 @@
 }
 
 .auth-visual-content .section-tag {
-  color: #83c096;
+  color: var(--accent);
 }
 
 
@@ -99,11 +107,13 @@
   letter-spacing: -3px;
 
   font-weight: 800;
+
+  color: var(--ink);
 }
 
 
 .auth-visual-content h1 span {
-  color: #83c096;
+  color: var(--accent);
 }
 
 
@@ -112,7 +122,7 @@
 
   margin-top: 25px;
 
-  color: #aebbb2;
+  color: var(--ink-soft);
 
   font-size: 15px;
 
@@ -122,7 +132,7 @@
 
 /* ========================================
    BENEFITS
-======================================== */
+   ======================================== */
 
 .auth-points {
   display: grid;
@@ -153,9 +163,9 @@
 
   border-radius: 50%;
 
-  background: #294537;
+  background: var(--accent-soft);
 
-  color: #83c096;
+  color: var(--accent-ink);
 
   font-size: 11px;
   font-weight: 700;
@@ -165,7 +175,7 @@
 .auth-points p {
   margin: 0;
 
-  color: #c4cec8;
+  color: var(--ink-soft);
 
   font-size: 12px;
 }
@@ -173,12 +183,12 @@
 
 /* ========================================
    DECORATIVE CIRCLES
-======================================== */
+   ======================================== */
 
 .auth-decoration {
   position: absolute;
 
-  border: 1px solid rgba(131, 192, 150, 0.1);
+  border: 1px solid var(--border);
 
   border-radius: 50%;
 
@@ -206,7 +216,7 @@
 
 /* ========================================
    RIGHT FORM AREA
-======================================== */
+   ======================================== */
 
 .auth-form-area {
   min-height: 100vh;
@@ -218,9 +228,7 @@
 
   padding: 50px 60px;
 
-  background:
-    radial-gradient(circle at 80% 8%, rgba(53, 209, 139, 0.10), transparent 20rem),
-    var(--bg);
+  background: var(--bg);
 }
 
 
@@ -233,7 +241,7 @@
 
 /* ========================================
    MOBILE BRAND
-======================================== */
+   ======================================== */
 
 .mobile-brand {
   display: none;
@@ -244,7 +252,7 @@
 
   margin-bottom: 45px;
 
-  color: var(--dark);
+  color: var(--ink);
 
   font-family: "Manrope", sans-serif;
 
@@ -252,20 +260,35 @@
   font-weight: 800;
 }
 
+.mobile-brand .brand-icon {
+  width: 30px;
+  height: 30px;
+
+  display: grid;
+  place-items: center;
+
+  border-radius: var(--radius-sm);
+
+  background: var(--accent);
+  color: var(--on-accent);
+
+  font-size: 15px;
+}
+
 
 .mobile-brand > span {
-  color: var(--dark);
+  color: var(--accent);
 }
 
 
 .mobile-brand > span > span {
-  color: var(--green-bright);
+  color: var(--accent);
 }
 
 
 /* ========================================
    FORM HEADING
-======================================== */
+   ======================================== */
 
 .form-heading {
   margin-bottom: 30px;
@@ -273,14 +296,14 @@
 
 
 .form-heading .section-tag {
-  color: var(--green);
+  color: var(--accent);
 }
 
 
 .form-heading h2 {
   margin-top: 12px;
 
-  color: var(--dark);
+  color: var(--ink);
 
   font-family: "Manrope", sans-serif;
 
@@ -295,7 +318,7 @@
 .form-heading p {
   margin-top: 11px;
 
-  color: var(--muted);
+  color: var(--ink-soft);
 
   font-size: 14px;
 }
@@ -303,7 +326,7 @@
 
 /* ========================================
    FORM
-======================================== */
+   ======================================== */
 
 .signup-form {
   display: grid;
@@ -324,7 +347,7 @@
 
 
 .input-group label {
-  color: var(--dark-soft);
+  color: var(--ink-soft);
 
   font-size: 12px;
 
@@ -341,12 +364,12 @@
 
   outline: none;
 
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
 
-  border-radius: 10px;
+  border-radius: var(--radius-md);
 
-  background: rgba(13, 33, 27, 0.86);
-  color: var(--dark);
+  background: var(--surface);
+  color: var(--ink);
 
   font-size: 13px;
 
@@ -357,62 +380,62 @@
 
 
 .input-group input:focus {
-  border-color: var(--green);
-  background-color: #0d211b !important;
-  color: var(--dark) !important;
-  -webkit-text-fill-color: var(--dark) !important;
-  caret-color: var(--dark);
+  border-color: var(--accent);
+  background-color: var(--surface) !important;
+  color: var(--ink) !important;
+  -webkit-text-fill-color: var(--ink) !important;
+  caret-color: var(--ink);
   box-shadow:
-    0 0 0 3px rgba(53, 209, 139, 0.12),
-    inset 0 0 0 1000px #0d211b !important;
+    0 0 0 3px var(--accent-soft),
+    inset 0 0 0 1000px var(--surface) !important;
 }
 
 .input-group input:autofill,
 .input-group input:focus:autofill {
-  background-color: #0d211b !important;
-  color: var(--dark) !important;
-  -webkit-text-fill-color: var(--dark) !important;
-  caret-color: var(--dark);
+  background-color: var(--surface) !important;
+  color: var(--ink) !important;
+  -webkit-text-fill-color: var(--ink) !important;
+  caret-color: var(--ink);
   box-shadow:
-    0 0 0 3px rgba(53, 209, 139, 0.12),
-    inset 0 0 0 1000px #0d211b !important;
+    0 0 0 3px var(--accent-soft),
+    inset 0 0 0 1000px var(--surface) !important;
 }
 
 
 .input-group input::placeholder {
-  color: #6f8e81;
+  color: var(--ink-faint);
 }
 
 .input-group input:-webkit-autofill,
 .input-group input:-webkit-autofill:hover,
 .input-group input:-webkit-autofill:focus,
 .input-group input:-webkit-autofill:active {
-  -webkit-text-fill-color: var(--dark) !important;
-  caret-color: var(--dark);
+  -webkit-text-fill-color: var(--ink) !important;
+  caret-color: var(--ink);
   -webkit-box-shadow:
-    0 0 0 3px rgba(53, 209, 139, 0.12),
-    0 0 0 1000px #0d211b inset !important;
+    0 0 0 3px var(--accent-soft),
+    0 0 0 1000px var(--surface) inset !important;
   box-shadow:
-    0 0 0 3px rgba(53, 209, 139, 0.12),
-    0 0 0 1000px #0d211b inset !important;
+    0 0 0 3px var(--accent-soft),
+    0 0 0 1000px var(--surface) inset !important;
   transition: background-color 9999s ease-out 0s;
 }
 
 
 /* ========================================
    ERROR
-======================================== */
+   ======================================== */
 
 .form-error {
   padding: 11px 13px;
 
-  border: 1px solid #f0d1ce;
+  border: 1px solid var(--danger-line);
 
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
 
-  background: #f9e8e6;
+  background: var(--danger-soft);
 
-  color: #a54e47;
+  color: var(--danger);
 
   font-size: 11px;
 }
@@ -420,7 +443,7 @@
 
 /* ========================================
    TERMS
-======================================== */
+   ======================================== */
 
 .terms {
   display: flex;
@@ -429,7 +452,7 @@
 
   gap: 9px;
 
-  color: var(--muted);
+  color: var(--ink-soft);
 
   font-size: 10px;
 
@@ -445,13 +468,13 @@
 
   margin-top: 1px;
 
-  accent-color: var(--green);
+  accent-color: var(--accent);
 }
 
 
 /* ========================================
    CREATE ACCOUNT BUTTON
-======================================== */
+   ======================================== */
 
 .signup-button {
   width: 100%;
@@ -463,18 +486,20 @@
   align-items: center;
   justify-content: space-between;
 
-  padding: 0 18px;
+  padding: 0 22px;
 
   border: none;
 
-  border-radius: 10px;
+  border-radius: var(--radius-pill);
 
-  background: var(--green);
-  color: #062117;
+  background: var(--accent);
+  color: var(--on-accent);
 
   font-size: 13px;
 
   font-weight: 700;
+
+  box-shadow: var(--shadow-accent);
 
   transition:
     transform 0.2s ease,
@@ -485,12 +510,12 @@
 .signup-button:hover {
   transform: translateY(-2px);
 
-  background: var(--green-bright);
+  background: var(--accent-strong);
 }
 
 
 .signup-button:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
 
   cursor: not-allowed;
 
@@ -505,7 +530,7 @@
 
 /* ========================================
    DIVIDER
-======================================== */
+   ======================================== */
 
 .auth-divider {
   display: flex;
@@ -516,7 +541,7 @@
 
   margin: 22px 0;
 
-  color: var(--muted);
+  color: var(--ink-faint);
 
   font-size: 9px;
 
@@ -538,7 +563,7 @@
 
 /* ========================================
    GOOGLE BUTTON
-======================================== */
+   ======================================== */
 
 .google-button {
   width: 100%;
@@ -552,12 +577,12 @@
 
   gap: 10px;
 
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
 
-  border-radius: 10px;
+  border-radius: var(--radius-pill);
 
-  background: rgba(13, 33, 27, 0.72);
-  color: var(--dark-soft);
+  background: var(--surface);
+  color: var(--ink);
 
   font-size: 12px;
 
@@ -565,19 +590,22 @@
 
   transition:
     border-color 0.2s ease,
+    background 0.2s ease,
     transform 0.2s ease;
 }
 
 
 .google-button:hover {
-  border-color: rgba(53, 209, 139, 0.45);
+  border-color: var(--accent-line);
+
+  background: var(--accent-soft);
 
   transform: translateY(-1px);
 }
 
 
 .google-icon {
-  color: #4285f4;
+  color: var(--info);
 
   font-size: 15px;
 
@@ -587,12 +615,12 @@
 
 /* ========================================
    LOGIN LINK
-======================================== */
+   ======================================== */
 
 .login-text {
   margin-top: 23px;
 
-  color: var(--muted);
+  color: var(--ink-soft);
 
   text-align: center;
 
@@ -601,7 +629,7 @@
 
 
 .login-text a {
-  color: var(--green-bright);
+  color: var(--accent);
 
   font-weight: 700;
 }
@@ -609,14 +637,14 @@
 
 /* ========================================
    DISCLAIMER
-======================================== */
+   ======================================== */
 
 .health-disclaimer {
   max-width: 400px;
 
   margin: 27px auto 0;
 
-  color: var(--muted);
+  color: var(--ink-faint);
 
   text-align: center;
 
@@ -628,7 +656,7 @@
 
 /* ========================================
    TABLET
-======================================== */
+   ======================================== */
 
 @media (max-width: 1000px) {
 
@@ -654,7 +682,7 @@
 
 /* ========================================
    MOBILE
-======================================== */
+   ======================================== */
 
 @media (max-width: 600px) {
 

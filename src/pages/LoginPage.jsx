@@ -79,21 +79,21 @@ function LoginPage() {
       <section className="login-visual">
         <Link to="/" className="auth-brand">
           <div className="brand-icon">M</div>
-          <span>Move<span>Well</span> AI</span>
+          <span>Move<span>Well</span></span>
         </Link>
 
         <div className="login-visual-content">
           <span className="section-tag">WELCOME BACK</span>
-          <h1>Keep building your <span>better routine.</span></h1>
+          <h1>Keep building <span>your routine.</span></h1>
           <p>
-            Return to your personalized movement plan, progress history and
-            guidance from your MoveWell specialist team.
+            Come back to your MoveWell Score, the areas behind it, and the
+            actions in your plan.
           </p>
 
           <div className="login-trust-list">
-            <span><b>✓</b> Personalized movement guidance</span>
-            <span><b>✓</b> Progress you can understand</span>
-            <span><b>✓</b> Safety-aware recommendations</span>
+            <span><b>✓</b> Your MoveWell Score, and the areas behind it</span>
+            <span><b>✓</b> The plan you are working through</span>
+            <span><b>✓</b> A safety review before any plan is shown</span>
           </div>
         </div>
 
@@ -107,17 +107,18 @@ function LoginPage() {
         <div className="login-heading">
 
           <span className="section-tag">
-            WELCOME BACK
+            SIGN IN
           </span>
 
           <h1>
-            Continue your
-            <span> wellness journey.</span>
+            Sign in to
+            <span> MoveWell.</span>
           </h1>
 
           <p>
-            Sign in to access your personalized
-            MoveWell assessment.
+            Your score, your plan and your progress are waiting. When it is
+            time for the next assessment, MoveWell will take you through the
+            three movement checks again.
           </p>
 
         </div>

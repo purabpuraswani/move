@@ -1,6 +1,6 @@
 .onboarding-page {
   min-height: 100vh;
-  background: #f7f8f4;
+  background: var(--bg);
 
   padding: 50px 20px;
 }
@@ -33,7 +33,7 @@
 
   flex-shrink: 0;
 
-  border: 1px solid #dfe5e0;
+  border: 1px solid var(--border);
   border-radius: 50%;
 
   background: white;
@@ -45,9 +45,9 @@
 }
 
 .progress-step.active {
-  border-color: #2f6b4f;
+  border-color: var(--accent);
 
-  background: #2f6b4f;
+  background: var(--accent);
 
   color: white;
 }
@@ -57,7 +57,7 @@
 
   height: 1px;
 
-  background: #dfe5e0;
+  background: var(--border);
 }
 
 
@@ -70,7 +70,7 @@
 }
 
 .section-tag {
-  color: #2f6b4f;
+  color: var(--accent);
 
   font-size: 10px;
 
@@ -82,7 +82,7 @@
 .onboarding-header h1 {
   margin-top: 12px;
 
-  color: #17231d;
+  color: var(--ink);
 
   font-family: "Manrope", sans-serif;
 
@@ -94,7 +94,7 @@
 }
 
 .onboarding-header h1 span {
-  color: #2f6b4f;
+  color: var(--accent);
 }
 
 .onboarding-header p {
@@ -126,7 +126,7 @@
 }
 
 .form-step h2 {
-  color: #17231d;
+  color: var(--ink);
 
   font-family: "Manrope", sans-serif;
 
@@ -165,7 +165,7 @@
 }
 
 .input-group label {
-  color: #34443a;
+  color: var(--ink);
 
   font-size: 11px;
 
@@ -187,9 +187,9 @@
 
   outline: none;
 
-  background: #fafbf9;
+  background: var(--surface-soft);
 
-  color: #17231d;
+  color: var(--ink);
 
   font-family: inherit;
 
@@ -201,7 +201,7 @@
 .input-group input:focus,
 .input-group select:focus,
 .input-group textarea:focus {
-  border-color: #2f6b4f;
+  border-color: var(--accent);
 
   background: white;
 
@@ -229,15 +229,15 @@
 .health-option {
   padding: 15px;
 
-  border: 1px solid #e5e9e6;
+  border: 1px solid var(--border);
 
   border-radius: 10px;
 
-  background: #fafbf9;
+  background: var(--surface-soft);
 }
 
 .health-option span {
-  color: #34443a;
+  color: var(--ink);
 
   font-size: 11px;
 
@@ -247,13 +247,13 @@
 .health-option select {
   padding: 7px 8px;
 
-  border: 1px solid #dfe5e0;
+  border: 1px solid var(--border);
 
   border-radius: 6px;
 
   background: white;
 
-  color: #34443a;
+  color: var(--ink);
 
   font-size: 10px;
 }
@@ -297,9 +297,9 @@
 }
 
 .condition-dropzone:hover {
-  border-color: #2f6b4f;
+  border-color: var(--accent);
 
-  background: #f5faf6;
+  background: var(--surface-tint);
 }
 
 .condition-dropzone input {
@@ -307,7 +307,7 @@
 }
 
 .condition-dropzone .condition-dropzone-title {
-  color: #2f6b4f;
+  color: var(--accent);
 
   font-size: 11px;
 
@@ -315,7 +315,7 @@
 }
 
 .condition-dropzone small {
-  color: #9aa39e;
+  color: var(--ink-faint);
 
   font-size: 10px;
 }
@@ -348,7 +348,7 @@
 
   background: transparent;
 
-  color: #9aa39e;
+  color: var(--ink-faint);
 
   font-size: 16px;
 
@@ -360,7 +360,7 @@
 .remove-document:hover {
   background: #eef1ee;
 
-  color: #34443a;
+  color: var(--ink);
 }
 
 .upload-failures {
@@ -376,7 +376,7 @@
 
   background: #fdf6f4;
 
-  color: #34443a;
+  color: var(--ink);
 
   font-size: 11px;
 }
@@ -419,9 +419,9 @@
 }
 
 .document-upload:hover {
-  border-color: #2f6b4f;
+  border-color: var(--accent);
 
-  background: #f5faf6;
+  background: var(--surface-tint);
 }
 
 .document-upload input {
@@ -441,19 +441,19 @@
 
   background: #e9f2eb;
 
-  color: #2f6b4f;
+  color: var(--accent);
 
   font-size: 25px;
 }
 
 .document-upload strong {
-  color: #34443a;
+  color: var(--ink);
 
   font-size: 13px;
 }
 
 .document-upload span {
-  color: #9aa39e;
+  color: var(--ink-faint);
 
   font-size: 10px;
 }
@@ -478,11 +478,11 @@
 
   padding: 12px;
 
-  border: 1px solid #e5e9e6;
+  border: 1px solid var(--border);
 
   border-radius: 9px;
 
-  background: #fafbf9;
+  background: var(--surface-soft);
 }
 
 .selected-document > span {
@@ -496,13 +496,13 @@
 }
 
 .selected-document strong {
-  color: #34443a;
+  color: var(--ink);
 
   font-size: 11px;
 }
 
 .selected-document small {
-  color: #9aa39e;
+  color: var(--ink-faint);
 
   font-size: 9px;
 }
@@ -555,23 +555,23 @@
 }
 
 .back-button {
-  border: 1px solid #dfe5e0;
+  border: 1px solid var(--border);
 
   background: white;
 
-  color: #657168;
+  color: var(--ink-soft);
 }
 
 .next-button {
   border: none;
 
-  background: #17231d;
+  background: var(--ink);
 
   color: white;
 }
 
 .next-button:hover {
-  background: #2f6b4f;
+  background: var(--accent);
 }
 
 .next-button:disabled {

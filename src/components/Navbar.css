@@ -1,4 +1,6 @@
-.navbar { width:100%; position:absolute; top:0; left:0; z-index:50; border-bottom:1px solid rgba(153,232,194,.1); background:linear-gradient(180deg,rgba(7,17,15,.92),rgba(7,17,15,.58) 70%,transparent); backdrop-filter:blur(12px); }
+/* Site header for the public pages. Light surface, one accent, no blur. */
+
+.navbar { width:100%; position:absolute; top:0; left:0; z-index:50; border-bottom:1px solid var(--border); background:var(--surface); }
 
 .nav-container {
   max-width: 1240px;
@@ -21,12 +23,29 @@
   align-items: center;
   gap: 10px;
 
+  color: var(--ink);
+
   font-family: "Manrope", sans-serif;
   font-size: 19px;
   font-weight: 800;
 }
 
-.brand > span > span { color:var(--green-bright); }
+.brand .brand-icon {
+  width: 30px;
+  height: 30px;
+
+  display: grid;
+  place-items: center;
+
+  border-radius: var(--radius-sm);
+
+  background: var(--accent);
+  color: var(--on-accent);
+
+  font-size: 15px;
+}
+
+.brand > span > span { color:var(--accent); }
 
 /* =========================
    NAV LINKS
@@ -37,7 +56,7 @@
   align-items: center;
   gap: 36px;
 
-  color: var(--muted);
+  color: var(--ink-soft);
 
   font-size: 14px;
   font-weight: 500;
@@ -60,13 +79,13 @@
   width: 0;
   height: 1px;
 
-  background: var(--green);
+  background: var(--accent);
 
   transition: width 0.2s ease;
 }
 
 .nav-links a:hover {
-  color: var(--green);
+  color: var(--accent);
 }
 
 .nav-links a:hover::after {
@@ -84,24 +103,28 @@
 }
 
 .nav-login {
+  color: var(--ink);
+
   font-size: 14px;
   font-weight: 600;
 
   transition: color 0.2s ease;
 }
 
-.nav-login:hover { color:var(--mint); }
+.nav-login:hover { color:var(--accent); }
 
 .nav-signup {
-  padding: 12px 19px;
+  padding: 12px 20px;
 
-  border-radius: 10px;
+  border-radius: var(--radius-pill);
 
-  background:var(--green);
-  color:#062117;
+  background:var(--accent);
+  color:var(--on-accent);
 
   font-size: 13px;
   font-weight: 600;
+
+  box-shadow: var(--shadow-accent);
 
   transition:
     transform 0.25s ease,
@@ -110,7 +133,7 @@
 
 .nav-signup:hover {
   transform: translateY(-2px);
-  background:var(--green-bright);
+  background:var(--accent-strong);
 }
 
 /* =========================
@@ -138,6 +161,6 @@
   }
 
   .nav-signup {
-    padding: 10px 13px;
+    padding: 10px 15px;
   }
 }

@@ -22,6 +22,10 @@ rather than guessing, and never returns LOW for that reason — LOW is a
 finding, not a default.
 """
 
+from nutrition_library.check_in import (
+    EATING_OUT_KNOWN_VALUES as CHECK_IN_EATING_OUT_KNOWN_VALUES,
+    EATING_OUT_TRIGGER_VALUES as CHECK_IN_EATING_OUT_TRIGGER_VALUES,
+)
 from need_assessment.schema import build_need_entry
 
 # ---------------------------------------------------------------------------
@@ -423,6 +427,10 @@ def assess_behaviour_need(user_state: dict) -> dict:
 FRUIT_VEGETABLE_SERVINGS_LOW_THRESHOLD = 3
 WATER_GLASSES_LOW_THRESHOLD = 6
 
+# Fewer than three meals a day counts as one triggered factor: it is the
+# answer that most often means meals are being skipped or timings are erratic.
+MEALS_PER_DAY_LOW_THRESHOLD = 3
+
 # Closed vocabularies this project expects for the two free-text fields.
 # Any other string is treated the same as a missing answer (not counted as
 # an available factor, and not guessed at) rather than crashing or being
@@ -435,6 +443,11 @@ PROCESSED_FOOD_TRIGGER_VALUES = frozenset({"often", "daily"})
 PROCESSED_FOOD_KNOWN_VALUES = (
     frozenset({"rarely", "sometimes"}) | PROCESSED_FOOD_TRIGGER_VALUES
 )
+
+# The eating-out bands come from the check-in module, so the vocabulary the
+# form offers and the vocabulary this rule reads are the same one.
+EATING_OUT_TRIGGER_VALUES = CHECK_IN_EATING_OUT_TRIGGER_VALUES
+EATING_OUT_KNOWN_VALUES = CHECK_IN_EATING_OUT_KNOWN_VALUES
 
 
 def assess_nutrition_need(user_state: dict) -> dict:
@@ -451,6 +464,8 @@ def assess_nutrition_need(user_state: dict) -> dict:
     fruit_veg = data.get("fruit_vegetable_servings")
     water = data.get("water_glasses_per_day")
     processed_food = data.get("processed_food_frequency")
+    meals_per_day = data.get("meals_per_day")
+    eating_out = data.get("eating_out_frequency")
 
     factors_available = 0
     factors_triggered = 0
@@ -463,6 +478,16 @@ def assess_nutrition_need(user_state: dict) -> dict:
             factors_triggered += 1
             evidence.append(
                 f"Self-reported meal pattern is '{meal_pattern}'."
+            )
+
+    if isinstance(meals_per_day, (int, float)) and not isinstance(meals_per_day, bool):
+        factors_available += 1
+
+        if meals_per_day < MEALS_PER_DAY_LOW_THRESHOLD:
+            factors_triggered += 1
+            evidence.append(
+                f"Self-reported meals per day is {meals_per_day:g}, below the "
+                f"project's {MEALS_PER_DAY_LOW_THRESHOLD}-meal marker."
             )
 
     if isinstance(fruit_veg, (int, float)):
@@ -500,14 +525,37 @@ def assess_nutrition_need(user_state: dict) -> dict:
                 f"'{processed_food}'."
             )
 
+    if isinstance(eating_out, str) and eating_out in EATING_OUT_KNOWN_VALUES:
+        factors_available += 1
+
+        if eating_out in EATING_OUT_TRIGGER_VALUES:
+            factors_triggered += 1
+            evidence.append(
+                "Self-reported eating out / ordering in frequency is "
+                f"'{eating_out}'."
+            )
+
     if factors_available == 0:
+        # A user who answered only the "main goal" question has told us what
+        # they want, not what they eat. That is a preference, and it does not
+        # establish a need — so the reason says so instead of implying the
+        # answers could not be read.
+        if data.get("nutrition_goal"):
+            reason = (
+                "The main goal from the nutrition check-in was recorded, but "
+                "it is a preference rather than a finding about eating "
+                "patterns, so no nutrition need has been established."
+            )
+        else:
+            reason = (
+                "The nutrition fields present on this profile could not be "
+                "read as any of the values this project recognizes."
+            )
+
         return build_need_entry(
             level="NOT_ASSESSED",
             confidence="NONE",
-            evidence=[
-                "The nutrition fields present on this profile could not be "
-                "read as any of the values this project recognizes."
-            ],
+            evidence=[reason],
         )
 
     risk_ratio = factors_triggered / factors_available

@@ -14,6 +14,8 @@ feedback-collection UI exists yet. Structured but empty, so a later phase
 does not need to change this contract's shape.
 """
 
+from orchestration.pose_boundary import find_pose_or_media_violation
+
 REQUIRED_FIELDS = (
     "workflow_id",
     "request_id",
@@ -123,15 +125,10 @@ def validate_behaviour_agent_input(payload) -> None:
     ):
         _fail("relevant_behaviour_signals must be null or an object")
 
-    forbidden_substrings = (
-        "keypoint", "landmark", "skeleton", "rawframe", "video", "image",
-        "base64", "dataurl",
-    )
-    serialised = str(payload).lower()
+    # One shared implementation of the pose/media boundary, so this contract
+    # and the other three can never disagree about what is refused
+    # (orchestration/pose_boundary.py).
+    violation = find_pose_or_media_violation(payload)
 
-    for term in forbidden_substrings:
-        if term in serialised:
-            _fail(
-                f"Behaviour Agent input appears to contain {term!r} — "
-                "refusing to build an input that might carry raw media data"
-            )
+    if violation:
+        _fail(f"Behaviour Agent input {violation}")

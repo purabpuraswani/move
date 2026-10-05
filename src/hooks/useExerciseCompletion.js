@@ -70,8 +70,16 @@ export default function useExerciseCompletion({ enabled = true } = {}) {
     [results],
   );
 
-  const markCompleted = useCallback(async (exerciseId) => {
-    const response = await confirmExerciseManually({ exerciseId });
+  /**
+   * Record "I did this" by hand.
+   *
+   * `planId`/`itemId` are optional and, when known, are what link the record
+   * back to the plan item that asked for it — the same link the camera flow
+   * sends. Without them the record is still real; it simply is not attached to
+   * a plan item, and nothing is invented to attach it to.
+   */
+  const markCompleted = useCallback(async (exerciseId, { planId = null, itemId = null } = {}) => {
+    const response = await confirmExerciseManually({ exerciseId, planId, itemId });
     const saved = response?.result;
 
     setCompletedIds((previous) => new Set(previous).add(exerciseId));

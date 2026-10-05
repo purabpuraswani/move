@@ -9,12 +9,24 @@ closed-loop end-to-end run:
 
 import unittest
 
+from datetime import datetime, timedelta, timezone
+
 from behaviour_agent.tool_client import InProcessBehaviourToolClient
 from nutrition_agent.tool_client import InProcessNutritionToolClient
 from orchestrator.orchestrator import run_workflow
 from physio_agent.tool_client import InProcessExerciseToolClient
 from progress_agent.tool_client import InProcessProgressToolClient
 from user_state.schema import build_user_state
+
+# A completion timestamp that is genuinely recent, relative to whatever
+# "now" is when this suite runs. These tests are about what the Progress
+# Agent concludes from a *current* assessment; a hard-coded calendar date
+# silently became a "stale assessment" case once enough real time passed,
+# which is not what any of them is testing.
+RECENT_COMPLETED_AT = (
+    datetime.now(timezone.utc) - timedelta(days=3)
+).strftime("%Y-%m-%dT%H:%M:%SZ")
+
 
 
 def _need_entry(level):
@@ -145,7 +157,7 @@ class DispatchAndClosedLoopTests(unittest.TestCase):
             progress_tool_client=progress_client,
             progress_trigger={"reason": "exercise activity recorded"},
             baseline_assessment=_balance_doc(40, "2026-01-01T00:00:00Z"),
-            current_assessment=_balance_doc(60, "2026-09-05T00:00:00Z"),
+            current_assessment=_balance_doc(60, RECENT_COMPLETED_AT),
             exercise_results=exercise_results,
             **_clients("loop"),
         )
@@ -209,7 +221,7 @@ class DispatchAndClosedLoopTests(unittest.TestCase):
             progress_tool_client=progress_client,
             progress_trigger={"reason": "exercise activity recorded"},
             baseline_assessment=_balance_doc(50, "2026-01-01T00:00:00Z"),
-            current_assessment=_balance_doc(50, "2026-09-05T00:00:00Z"),
+            current_assessment=_balance_doc(50, RECENT_COMPLETED_AT),
             exercise_results=exercise_results,
             **_clients("stag"),
         )
@@ -241,7 +253,7 @@ class DispatchAndClosedLoopTests(unittest.TestCase):
             progress_tool_client=progress_client,
             progress_trigger={"reason": "exercise activity recorded"},
             baseline_assessment=_balance_doc(50, "2026-01-01T00:00:00Z"),
-            current_assessment=_balance_doc(50, "2026-09-05T00:00:00Z"),
+            current_assessment=_balance_doc(50, RECENT_COMPLETED_AT),
             exercise_results=exercise_results,
             **_clients("mod"),
         )
@@ -272,7 +284,7 @@ class DispatchAndClosedLoopTests(unittest.TestCase):
             progress_tool_client=progress_client,
             progress_trigger={"reason": "exercise activity recorded"},
             baseline_assessment=_balance_doc(40, "2026-01-01T00:00:00Z"),
-            current_assessment=_balance_doc(60, "2026-09-05T00:00:00Z"),
+            current_assessment=_balance_doc(60, RECENT_COMPLETED_AT),
             exercise_results=exercise_results,
             **_clients("dup"),
         )
@@ -295,7 +307,7 @@ class DispatchAndClosedLoopTests(unittest.TestCase):
             progress_tool_client=progress_client,
             progress_trigger={"reason": "exercise activity recorded"},
             baseline_assessment=_balance_doc(40, "2026-01-01T00:00:00Z"),
-            current_assessment=_balance_doc(60, "2026-09-05T00:00:00Z"),
+            current_assessment=_balance_doc(60, RECENT_COMPLETED_AT),
             exercise_results=exercise_results,
             **_clients("safety"),
         )
@@ -319,7 +331,7 @@ class DispatchAndClosedLoopTests(unittest.TestCase):
                 progress_tool_client=progress_client,
                 progress_trigger={"reason": "exercise activity recorded"},
                 baseline_assessment=_balance_doc(40, "2026-01-01T00:00:00Z"),
-                current_assessment=_balance_doc(60 + cycle, "2026-09-05T00:00:00Z"),
+                current_assessment=_balance_doc(60 + cycle, RECENT_COMPLETED_AT),
                 exercise_results=exercise_results,
                 **_clients(f"v{cycle}"),
             )

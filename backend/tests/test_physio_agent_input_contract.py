@@ -133,22 +133,78 @@ class BuildPhysioAgentInputTests(unittest.TestCase):
         )
         self.assertIsNone(payload["exercise_preferences"])
 
-    def test_a_payload_naming_keypoints_is_refused(self):
-        with self.assertRaises(PhysioAgentInputValidationError):
-            validate_physio_agent_input(
-                {
-                    "workflow_id": "wf",
-                    "request_id": "req",
-                    "agent_run_id": "run",
-                    "physical_assessment": {"note": "keypoint sequence embedded here"},
-                    "movement_evidence": {},
-                    "current_needs": None,
-                    "relevant_user_profile": None,
-                    "relevant_lifestyle_constraints": None,
-                    "confirmed_medical_context": None,
-                    "exercise_preferences": None,
+    def test_a_real_assessment_quality_summary_is_accepted(self):
+        # The regression this guards: the boundary used to refuse any payload
+        # whose serialised text contained "keypoint", and the browser sends
+        # `quality.meanKeypointScore` with every session. A real assessment
+        # therefore made the Physio Agent refuse its own input, and no movement
+        # plan could be produced from a real recording.
+        payload = self._payload()
+        payload["physical_assessment"] = {
+            "tests": {
+                "shoulder": {
+                    "status": "completed",
+                    "measurements": {"left": {"finalElevationDeg": 104.0}},
+                    "quality": {
+                        "meanKeypointScore": 0.71,
+                        "longestPoseLossMs": 132,
+                        "framesSeen": 188,
+                    },
                 }
-            )
+            }
+        }
+
+        validate_physio_agent_input(payload)  # must not raise
+
+    def test_a_pose_named_list_is_still_refused(self):
+        payload = self._payload()
+        payload["physical_assessment"] = {
+            "tests": {"shoulder": {"keypointSeries": [[0.1, 0.2], [0.3, 0.4]]}}
+        }
+
+        with self.assertRaises(PhysioAgentInputValidationError):
+            validate_physio_agent_input(payload)
+
+    def test_a_media_named_scalar_is_still_refused(self):
+        payload = self._payload()
+        payload["physical_assessment"] = {"debugFrameSnapshot": "abc"}
+
+        with self.assertRaises(PhysioAgentInputValidationError):
+            validate_physio_agent_input(payload)
+
+    def test_a_data_uri_is_still_refused(self):
+        payload = self._payload()
+        payload["physical_assessment"] = {"note": "data:image/png;base64,iVBORw0KGgo="}
+
+        with self.assertRaises(PhysioAgentInputValidationError):
+            validate_physio_agent_input(payload)
+
+    def test_prose_about_pose_data_is_not_a_violation(self):
+        # Free text is free text. The boundary's job is to stop pose DATA, and
+        # a reason sentence that happens to mention keypoints is not data — the
+        # previous substring rule refused it, which is how false positives get
+        # into a safety check and then get switched off.
+        payload = self._payload()
+        payload["physical_assessment"] = {
+            "note": "The camera lost the keypoint sequence briefly during this attempt."
+        }
+
+        validate_physio_agent_input(payload)  # must not raise
+
+    @staticmethod
+    def _payload():
+        return {
+            "workflow_id": "wf",
+            "request_id": "req",
+            "agent_run_id": "run",
+            "physical_assessment": None,
+            "movement_evidence": {},
+            "current_needs": None,
+            "relevant_user_profile": None,
+            "relevant_lifestyle_constraints": None,
+            "confirmed_medical_context": None,
+            "exercise_preferences": None,
+        }
 
     def test_missing_field_is_rejected(self):
         with self.assertRaises(PhysioAgentInputValidationError):

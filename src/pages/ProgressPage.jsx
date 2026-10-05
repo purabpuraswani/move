@@ -1,77 +1,161 @@
 /**
- * What you have done, and what changed because of it.
+ * Your progress, in the order a person asks about it.
  *
- * This page answers the questions the plan screen cannot: did anything
- * actually change, and why. It reads the same workflow state the plan does,
- * and asks the server to run a progress review only when there is real
- * evidence to review — recorded exercise results or logged food. It never
- * triggers a review speculatively, because a review with nothing new to look
- * at can only conclude "not enough data", and asking repeatedly would just
- * spend model calls to be told so again.
+ *   1. Your MoveWell Score, and how it has moved
+ *   2. What is improving, per area
+ *   3. What changed in the plan, in the server's own words
+ *   4. What the plan focuses on now
+ *   5. What moved forward (the recorded series)
+ *   6. What you completed
+ *   7. What happens next
  *
- * The honesty rule this page is built around: an absence of data is reported
- * as an absence of data. If nothing has been recorded, this page says exactly
- * that. It does not draw a trend through two points, it does not describe a
- * user as having fallen behind because they did not write something down, and
- * it shows no internal reasoning — only the plain-language adaptation reason
- * the server already produced.
+ * Three rules shape every sentence here:
+ *
+ *   * Nothing is invented. Every number, label and sentence is read from the
+ *     server response, through services/score.js, services/unifiedPlan.js and
+ *     services/progress.js — the chrome around it is ours, the content is not.
+ *   * An absence is reported as an absence. A missing reading is missing, not
+ *     a decline; a single recorded point is a record, not a direction of
+ *     travel; an unusable camera session is a recording problem, not a
+ *     performance. Each empty state says what is missing, why it matters and
+ *     what to do about it.
+ *   * The Progress Agent's own machine vocabulary stays on the server. The
+ *     adaptation reasons on this page are the plain-language sentences the
+ *     server already wrote for a person.
  */
 
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import AppShell from "../components/ui/AppShell.jsx";
+import ScoreDial from "../components/ui/ScoreDial.jsx";
+import {
+  DetailDrawer,
+  EmptyState,
+  Field,
+  PageHeader,
+  PrimaryButton,
+  SectionHeader,
+  StatusBadge,
+} from "../components/ui/primitives.jsx";
+import ProgressLineChart from "../progress/ProgressLineChart.jsx";
 import { getToken } from "../services/auth";
 import { fetchExerciseResults } from "../services/exerciseResults";
-import { fetchProgressSeries } from "../services/progress";
-import { toArray } from "../services/specialistData.js";
-import ProgressLineChart from "../progress/ProgressLineChart.jsx";
 import { fetchFoodLog } from "../services/foodLog";
+import { fetchProgressSeries } from "../services/progress";
+import {
+  changeWording,
+  domainChanges,
+  hasScore,
+  movewellScore,
+  scoreChange,
+  scoreFocus,
+  scoreMessage,
+  scoreMethod,
+  scoredDomains,
+  unscoredDomains,
+} from "../services/score";
+import { safeDisplayValue, toArray } from "../services/specialistData.js";
+import { planSummary, unifiedPlan } from "../services/unifiedPlan.js";
 import { fetchLatestWorkflow, hasAnyPlan, runWorkflow } from "../services/workflow";
-import AppNavigation from "../components/AppNavigation.jsx";
 
 import "./ProgressPage.css";
 
-function formatDate(value) {
-  if (!value) return null;
+/** A whole number, or null. Never a computed value. */
+function numberOrNull(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
 
-  const parsed = new Date(value);
+/** The signed change, exactly as the server sent it: "+8", "-3", "0". */
+function signed(change) {
+  if (typeof change !== "number" || !Number.isFinite(change)) return null;
 
-  if (Number.isNaN(parsed.getTime())) return null;
+  return `${change > 0 ? "+" : ""}${change}`;
+}
+
+/** What MoveWell measured this from. The server says which; we only word it. */
+const SOURCE_LABELS = {
+  measured: "Measured",
+  answered: "From your answers",
+};
+
+function sourceLabel(source) {
+  return SOURCE_LABELS[source] || null;
+}
+
+function formatDay(value) {
+  const day = typeof value === "string" ? value.slice(0, 10) : null;
+
+  if (!day) return null;
+
+  const parsed = new Date(`${day}T00:00:00`);
+
+  if (Number.isNaN(parsed.getTime())) return day;
 
   return parsed.toLocaleDateString(undefined, {
-    month: "short",
     day: "numeric",
+    month: "short",
     year: "numeric",
   });
 }
 
-/**
- * A plan section's change history, as far as the response exposes it.
- *
- * Only `adaptation_reason` is shown, and only when the server set one. A plan
- * that has never been adapted says so; it does not get a manufactured
- * "no changes yet — keep going!" that implies a review happened.
- */
-function ChangeRow({ label, plan }) {
-  if (!plan?.available) {
-    return null;
-  }
+function plural(count, one, many) {
+  return count === 1 ? one : many;
+}
 
-  const created = formatDate(plan.created_at);
+/** Whether any series or completion actually carries a recorded point. */
+function seriesHasPoints(series) {
+  if (!series) return false;
+
+  const completions = numberOrNull(series.completions?.point_count) ?? 0;
+
+  const metrics = toArray(series.movementMetrics).some(
+    (metric) => (numberOrNull(metric?.point_count) ?? toArray(metric?.points).length) > 0,
+  );
+
+  return completions > 0 || metrics || toArray(series.recentCompletions).length > 0;
+}
+
+/** One area that moved, with the name the server gave it. */
+function DomainChange({ entry }) {
+  const change = numberOrNull(entry.change);
+
+  if (change === null || change === 0) return null;
+
+  const direction = changeWording(change);
+  const value = numberOrNull(entry.value);
+  const source = sourceLabel(entry.source);
 
   return (
-    <li className="progress-change">
-      <span className="progress-change-label">{label}</span>
+    <li className="progress-area">
+      <span className="progress-area-name">{safeDisplayValue(entry.label)}</span>
 
-      {plan.adaptation_reason ? (
-        <span className="progress-change-reason">{plan.adaptation_reason}</span>
-      ) : (
-        <span className="progress-change-none">
-          This part of your plan has not been changed since it was prepared.
-        </span>
-      )}
+      <span className={`progress-area-move progress-area-move--${direction}`}>
+        {direction} {signed(change)} points
+      </span>
 
-      {created ? <span className="progress-change-date">{created}</span> : null}
+      <span className="progress-area-now">
+        {value === null ? "No current value" : `now ${value}`}
+      </span>
+
+      {source ? <span className="mw-meta progress-area-source">{source}</span> : null}
+    </li>
+  );
+}
+
+/** One plan section that the server has reported a change for. */
+function PlanChangeRow({ label, plan }) {
+  if (!plan?.available || !plan.adaptation_reason) return null;
+
+  const version = safeDisplayValue(plan.plan_version);
+
+  return (
+    <li className="progress-plan-change">
+      <Field label={label} value={plan.adaptation_reason} />
+
+      {version ? (
+        <p className="mw-meta">Version {version} of this part of your plan.</p>
+      ) : null}
     </li>
   );
 }
@@ -90,6 +174,30 @@ function ProgressPage() {
 
   const signedIn = Boolean(getToken());
 
+  const load = useCallback(async () => {
+    setState("loading");
+    setError(null);
+
+    try {
+      const [latest, foodPage, exercisePage, progressSeries] = await Promise.all([
+        fetchLatestWorkflow(),
+        fetchFoodLog({ limit: 50 }).catch(() => ({ entries: [] })),
+        fetchExerciseResults({ limit: 50 }).catch(() => ({ results: [] })),
+        // The charts are a bonus on top of the counts: if this one call fails
+        // the page still renders everything the other three returned.
+        fetchProgressSeries().catch(() => null),
+      ]);
+
+      setWorkflow(latest);
+      setFoodEntries(foodPage.entries || []);
+      setExerciseResults(exercisePage.results || exercisePage.exercise_results || []);
+      setSeries(progressSeries);
+      setState("ready");
+    } catch (loadError) {
+      setError(loadError.message);
+      setState("error");
+    }
+  }, []);
 
   useEffect(() => {
     if (!signedIn) {
@@ -98,282 +206,538 @@ function ProgressPage() {
       return;
     }
 
-    let ignore = false;
-
-    Promise.all([
-      fetchLatestWorkflow(),
-      fetchFoodLog({ limit: 50 }).catch(() => ({ entries: [] })),
-      fetchExerciseResults({ limit: 50 }).catch(() => ({ results: [] })),
-      // The charts are a bonus on top of the counts: if this one call
-      // fails the page still renders what it already had.
-      fetchProgressSeries().catch(() => null),
-    ])
-      .then(([latest, foodPage, exercisePage, progressSeries]) => {
-        if (!ignore) {
-          setWorkflow(latest);
-          setFoodEntries(foodPage.entries || []);
-          setExerciseResults(exercisePage.results || exercisePage.exercise_results || []);
-          setSeries(progressSeries);
-          setState("ready");
-        }
-      })
-      .catch((loadError) => {
-        if (!ignore) {
-          setError(loadError.message);
-          setState("error");
-        }
-      });
-
-    return () => {
-      ignore = true;
-    };
-  }, [signedIn, navigate]);
-
-  const loggedCount = foodEntries.length;
-  const exerciseCount = exerciseResults.length;
-
-  // A result the camera could not measure is not evidence of performance --
-  // it is evidence of a recording problem. Counting it would let an unusable
-  // session look like a completed one.
-  const measuredExerciseCount = exerciseResults.filter(
-    (result) => result.status && result.status !== "invalid",
-  ).length;
-
-  const hasEvidence = loggedCount > 0 || measuredExerciseCount > 0;
+    load();
+  }, [signedIn, navigate, load]);
 
   const review = useCallback(async () => {
+    const measured = exerciseResults.filter(
+      (result) => result.status && result.status !== "invalid",
+    ).length;
+
+    const logged = foodEntries.length;
+
     setReviewing(true);
     setError(null);
     setReviewNote(null);
 
     try {
-      // The trigger says why a review is warranted, in the server's own
-      // vocabulary. It is only sent because something was actually recorded.
       // The reason names what actually happened, so the audit trail says why
       // this review ran rather than attributing it to logging that may not
-      // have occurred.
+      // have occurred. It is only ever sent because something was recorded.
       const reason =
-        measuredExerciseCount > 0 && loggedCount > 0
+        measured > 0 && logged > 0
           ? "exercise activity and food log activity recorded"
-          : measuredExerciseCount > 0
+          : measured > 0
             ? "exercise activity recorded"
             : "food log activity recorded";
 
       const result = await runWorkflow({ progressTrigger: { reason } });
 
       setWorkflow(result);
-      setReviewNote(
-        "Your plan has been reviewed against what you have recorded.",
-      );
+      setReviewNote("Your plan has been reviewed against what you have recorded.");
     } catch (reviewError) {
       setError(reviewError.message);
     } finally {
       setReviewing(false);
     }
-  }, [measuredExerciseCount, loggedCount]);
+  }, [exerciseResults, foodEntries]);
 
   const planExists = hasAnyPlan(workflow);
+  const summary = planSummary(workflow);
+  const serverPlan = unifiedPlan(workflow);
+
+  const score = movewellScore(workflow);
+  const scoreIsAvailable = hasScore(workflow);
+  const scoreValue = scoreIsAvailable ? numberOrNull(score.value) : null;
+  const change = scoreChange(workflow);
+  const focus = scoreFocus(workflow);
+  const method = scoreMethod(workflow);
+  const message = scoreMessage(workflow);
+  const domainMoves = domainChanges(workflow);
+  const withValue = scoredDomains(workflow);
+  const withoutValue = unscoredDomains(workflow);
+
+  // A result the camera could not measure is not evidence of performance — it
+  // is evidence of a recording problem. Counting it would let an unusable
+  // session look like a completed one.
+  const exerciseCount = exerciseResults.length;
+  const measuredExerciseCount = exerciseResults.filter(
+    (result) => result.status && result.status !== "invalid",
+  ).length;
+  const unmeasuredExerciseCount = exerciseCount - measuredExerciseCount;
+
+  const loggedCount = foodEntries.length;
+
+  const hasEvidence = measuredExerciseCount > 0 || loggedCount > 0;
+
+  const planSections = [
+    { key: "exercise", label: "Movement", plan: workflow?.exercise_plan },
+    { key: "nutrition", label: "Nutrition", plan: workflow?.nutrition_plan },
+    { key: "behaviour", label: "Daily habits", plan: workflow?.behaviour_plan },
+  ];
+
+  const hasPlanChange = planSections.some(
+    (section) => section.plan?.available && section.plan.adaptation_reason,
+  );
+
+  const recentCompletions = toArray(series?.recentCompletions);
+  const movementMetrics = toArray(series?.movementMetrics);
+  const progressLoaded = Boolean(series);
+  const progressHasPoints = seriesHasPoints(series);
 
   return (
-    <div className="progress-page">
-      <AppNavigation showBack={false} />
-      <main className="progress-main">
-        <div className="progress-intro">
-          <span className="progress-eyebrow">Progress</span>
-          <h1 className="progress-title">How things are going</h1>
-          <p className="progress-lead">
-            What you have recorded, and what has changed in your plan as a
-            result.
-          </p>
-        </div>
+    <AppShell>
+      <main className="mw-main mw-stack" id="main">
+        {/* 1. Header */}
+        <PageHeader
+          eyebrow="Progress"
+          title="Your Progress"
+          lead="What you have recorded, where your score stands, and what your plan does next."
+        />
 
         {state === "loading" ? (
-          <p className="progress-status">Loading…</p>
+          <p className="mw-loading">Reading your recorded progress…</p>
         ) : null}
 
-        {error ? <p className="progress-error">{error}</p> : null}
+        {state === "error" && !workflow ? (
+          <section className="mw-card" aria-label="Progress could not be loaded">
+            <SectionHeader title="We could not read your progress just now" />
+            <p className="mw-lede">
+              {safeDisplayValue(error) ||
+                "There was a problem reaching the service. Nothing you recorded has been changed."}
+            </p>
+            <div className="mw-row">
+              <PrimaryButton onClick={load}>Try again</PrimaryButton>
+            </div>
+          </section>
+        ) : null}
 
         {state === "ready" ? (
           <>
-            <section className="progress-card">
-              <h2 className="progress-card-title">What you have recorded</h2>
+            {error ? <p className="mw-error progress-error">{safeDisplayValue(error)}</p> : null}
 
-              {hasEvidence ? (
-                <ul className="progress-counts">
-                  {measuredExerciseCount > 0 ? (
-                    <li>
-                      {measuredExerciseCount}{" "}
-                      {measuredExerciseCount === 1 ? "exercise" : "exercises"}{" "}
-                      recorded
-                      {exerciseCount > measuredExerciseCount
-                        ? ` (${exerciseCount - measuredExerciseCount} the camera could not measure)`
-                        : ""}
-                      .
-                    </li>
+            {/* 2. MoveWell Score */}
+            <section className="mw-card" aria-label="MoveWell Score">
+              <SectionHeader
+                title="MoveWell Score"
+                hint="Worked out from your own results, on the server."
+              />
+
+              {scoreIsAvailable ? (
+                <>
+                  <div className="progress-score">
+                    <ScoreDial
+                      value={scoreValue}
+                      label="Your MoveWell Score"
+                      caption={message}
+                    />
+
+                    <div className="progress-score-detail mw-stack mw-stack--tight">
+                      {change ? (
+                        <div className="progress-score-change">
+                          <span className="progress-score-change-label">
+                            Since your previous assessment
+                          </span>
+
+                          <span className="progress-score-change-value">
+                            <span className="progress-score-change-from">{change.from}</span>
+                            <span aria-hidden="true"> → </span>
+                            <span className="mw-sr">to </span>
+                            <span className="progress-score-change-to">{scoreValue}</span>
+                          </span>
+
+                          <span
+                            className={`progress-score-change-delta progress-score-change-delta--${changeWording(change.value)}`}
+                          >
+                            {signed(change.value)} points
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="progress-score-noprevious">
+                          <p className="mw-lede">
+                            MoveWell needs another completed assessment to understand your
+                            trend.
+                          </p>
+                          <div className="mw-row">
+                            <PrimaryButton onClick={() => navigate("/assessment")}>
+                              Start reassessment
+                            </PrimaryButton>
+                          </div>
+                        </div>
+                      )}
+
+                      {focus?.label ? (
+                        <p className="mw-meta">
+                          The area carrying the greatest need is{" "}
+                          <strong>{safeDisplayValue(focus.label)}</strong>.
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {method ? (
+                    <DetailDrawer label="How this number is worked out">
+                      <p className="mw-lede">{method}</p>
+
+                      {withoutValue.length ? (
+                        <div className="mw-stack mw-stack--tight">
+                          <p className="mw-meta">
+                            An area with no usable evidence is left out rather than counted
+                            as zero. Nothing has been measured for:
+                          </p>
+                          <ul className="mw-row progress-score-missing">
+                            {withoutValue.map((domain) => (
+                              <li key={domain.key} className="mw-chip mw-chip--neutral">
+                                {safeDisplayValue(domain.label)}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                    </DetailDrawer>
                   ) : null}
-                  {loggedCount > 0 ? (
-                    <li>
-                      {loggedCount} {loggedCount === 1 ? "meal" : "meals"} logged.
-                    </li>
-                  ) : null}
-                </ul>
+                </>
               ) : (
-                <p className="progress-empty">
-                  Nothing recorded yet. Your plan can only be reviewed against
-                  things you have actually logged, so there is nothing to
-                  compare at this stage — that is not a setback, just an
-                  absence of data.
-                </p>
+                <EmptyState
+                  title={
+                    withValue.length
+                      ? "Your score is waiting on a movement check"
+                      : "No MoveWell Score yet"
+                  }
+                  why={
+                    withValue.length
+                      ? "MoveWell only shows a score once a movement check has measured something. The answers you have given are kept, and they are not presented as a score because nobody measured them."
+                      : "Every check contributes to the score, and no check has produced a usable measurement yet. Until one does, there is no number to follow."
+                  }
+                  action={
+                    <PrimaryButton onClick={() => navigate("/assessment")}>
+                      {withValue.length ? "Take a movement check" : "Start your assessment"}
+                    </PrimaryButton>
+                  }
+                />
               )}
             </section>
 
-            {/* ─────────── RECORDED PROGRESS, FROM STORED DATA ───────────
-                Every figure below comes from backend/routes/progress.py,
-                which reads stored exercise results, stored assessments
-                and stored plan versions. Each series carries its own
-                `plottable` flag; where it is false the chart states the
-                single recorded figure and says a trend needs more
-                sessions, rather than drawing a line through one point. */}
-            {series ? (
-              <>
-                <section className="progress-card">
-                  <h2 className="progress-card-title">Exercises completed over time</h2>
+            {/* 3. What's improving */}
+            <section className="mw-card" aria-label="What's improving">
+              <SectionHeader
+                title="What's improving"
+                hint="Only areas that have actually moved since your previous assessment."
+              />
 
-                  <ProgressLineChart
-                    series={series.completions}
-                    title="Exercises completed per day"
-                    emptyNote="No completed exercises recorded yet."
-                  />
+              {domainMoves.length ? (
+                <ul className="progress-areas">
+                  {domainMoves.map((entry) => (
+                    <DomainChange key={entry.key} entry={entry} />
+                  ))}
+                </ul>
+              ) : score?.previous ? (
+                <EmptyState
+                  title="No area has moved since your last assessment"
+                  why="Every area MoveWell measured came out at the same value as last time. A steady result is a real one — nothing is hidden by calling it an improvement."
+                  action={
+                    <PrimaryButton
+                      variant="ghost"
+                      onClick={() => navigate("/plan")}
+                    >
+                      See your current plan
+                    </PrimaryButton>
+                  }
+                />
+              ) : (
+                <EmptyState
+                  title="There is nothing to compare yet"
+                  why="MoveWell can only show what moved once two assessments can be compared. One assessment says where you are; it cannot say which way anything is going."
+                  action={
+                    <PrimaryButton onClick={() => navigate("/assessment")}>
+                      Start reassessment
+                    </PrimaryButton>
+                  }
+                />
+              )}
+            </section>
 
-                  {series.completions?.total_completions > 0 ? (
-                    <p className="progress-chart-note">
-                      {series.completions.total_completions} completion
-                      {series.completions.total_completions === 1 ? "" : "s"} recorded
-                      across {series.completions.point_count} day
-                      {series.completions.point_count === 1 ? "" : "s"}.
-                    </p>
-                  ) : null}
-                </section>
+            {/* 4. What changed */}
+            <section className="mw-card" aria-label="What changed">
+              <SectionHeader
+                title="What changed"
+                hint="What your plan says about the last change it made."
+              />
 
-                <section className="progress-card">
-                  <h2 className="progress-card-title">Movement measurements</h2>
-                  <p className="progress-card-lead">
-                    Taken from your recorded movement checks. A check you
-                    skipped contributes no point — it is missing, not a
-                    decline.
-                  </p>
-
-                  <div className="progress-chart-grid">
-                    {toArray(series.movementMetrics).map((metric) => (
-                      <ProgressLineChart
-                        key={metric.metric}
-                        series={metric}
-                        title={metric.label}
-                        unit={metric.unit}
-                        emptyNote="This check has not produced a usable measurement yet."
+              {planExists ? (
+                hasPlanChange ? (
+                  <ul className="progress-plan-changes">
+                    {planSections.map((section) => (
+                      <PlanChangeRow
+                        key={section.key}
+                        label={section.label}
+                        plan={section.plan}
                       />
                     ))}
+                  </ul>
+                ) : (
+                  <p className="mw-lede">
+                    Your plan has not needed a change yet. Nothing has moved far enough
+                    since it was prepared to justify rewriting it — and a plan that was
+                    rebuilt without a reason would be a change you did not need.
+                  </p>
+                )
+              ) : (
+                <EmptyState
+                  title="No plan has been prepared yet"
+                  why="There is no change to report, because there is no plan yet. Everything you record from here is what a first plan is built from."
+                  action={
+                    <PrimaryButton onClick={() => navigate("/assessment")}>
+                      Start your assessment
+                    </PrimaryButton>
+                  }
+                />
+              )}
+            </section>
+
+            {/* 5. Your current focus */}
+            <section className="mw-card" aria-label="Your current focus">
+              <SectionHeader
+                title="Your current focus"
+                hint="The areas this plan is built around, as the server named them."
+              />
+
+              {summary ? (
+                <div className="mw-stack mw-stack--tight">
+                  <p className="progress-headline">
+                    {safeDisplayValue(summary.headline) ||
+                      "Your plan does not name a focus area."}
+                  </p>
+
+                  {toArray(summary.focus_areas).length ? (
+                    <ul className="mw-row progress-chips">
+                      {toArray(summary.focus_areas).map((area, index) => (
+                        <li key={`${area}-${index}`} className="mw-chip">
+                          {safeDisplayValue(area)}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+
+                  {serverPlan?.version ? (
+                    <p className="mw-meta">
+                      This is version {safeDisplayValue(serverPlan.version)} of your plan.
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <EmptyState
+                  title="No plan focus has been set yet"
+                  why="Your focus areas come with your plan. Until one is prepared there is nothing here that would honestly stand for them."
+                  action={
+                    <PrimaryButton onClick={() => navigate("/plan")}>
+                      Go to your plan
+                    </PrimaryButton>
+                  }
+                />
+              )}
+            </section>
+
+            {/* 6. What moved forward */}
+            <section className="mw-card" aria-label="What moved forward">
+              <SectionHeader
+                title="What moved forward"
+                hint="Drawn from what you have recorded, one point per recorded day."
+              />
+
+              {progressLoaded ? (
+                progressHasPoints ? (
+                  <div className="mw-stack">
+                    <ProgressLineChart
+                      series={series.completions}
+                      title="Exercises completed per day"
+                      emptyNote="Your first completed session will appear here."
+                    />
+
+                    {movementMetrics.length ? (
+                      <div className="mw-grid mw-grid--two">
+                        {movementMetrics.map((metric) => (
+                          <ProgressLineChart
+                            key={metric.metric}
+                            series={metric}
+                            title={metric.label}
+                            unit={metric.unit}
+                            emptyNote="This check has not produced a usable measurement yet."
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+
+                    <p className="mw-lede progress-honesty">
+                      Each point is a day you recorded something. A check you skipped
+                      contributes no point at all: it is missing from the line, not a fall
+                      in it. One recorded point is a record, not a trend, so the chart says
+                      so rather than drawing a line through it.
+                    </p>
                   </div>
-                </section>
+                ) : (
+                  <EmptyState
+                    title="Nothing recorded to draw yet"
+                    why="The charts are built from sessions you complete and movement checks you save. With none recorded there is no line to draw, and a line through an empty chart would be a picture of nothing."
+                    action={
+                      <PrimaryButton onClick={() => navigate("/plan")}>
+                        Start your first exercise
+                      </PrimaryButton>
+                    }
+                  />
+                )
+              ) : (
+                <EmptyState
+                  title="Your recorded history could not be loaded"
+                  why="Your sessions and checks are stored safely; this one request did not come back, so the charts cannot be drawn and nothing is being shown in their place."
+                  action={<PrimaryButton onClick={load}>Try again</PrimaryButton>}
+                />
+              )}
+            </section>
 
-                {toArray(series.recentCompletions).length ? (
-                  <section className="progress-card">
-                    <h2 className="progress-card-title">Recently completed</h2>
+            {/* 7. What you completed */}
+            <section className="mw-card" aria-label="What you completed">
+              <SectionHeader
+                title="What you completed"
+                hint="Counted from what is stored against your account."
+              />
 
-                    <ul className="progress-recent-list">
-                      {toArray(series.recentCompletions).map((entry, index) => (
-                        <li key={index} className="progress-recent-row">
-                          <span className="progress-recent-name">{entry.exerciseId}</span>
-                          <span className="progress-recent-meta">
-                            {(entry.completedAt || "").slice(0, 10)}
-                            {" · "}
-                            {entry.source === "manual_confirmation"
-                              ? "self-reported"
-                              : "measured"}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
+              {hasEvidence ? (
+                <>
+                  <div className="mw-grid mw-grid--two progress-counts">
+                    {measuredExerciseCount > 0 ? (
+                      <div className="progress-count">
+                        <span className="progress-count-value">{measuredExerciseCount}</span>
+                        <span className="progress-count-label">
+                          {plural(measuredExerciseCount, "exercise session", "exercise sessions")}{" "}
+                          recorded
+                        </span>
+                      </div>
+                    ) : null}
+
+                    {loggedCount > 0 ? (
+                      <div className="progress-count">
+                        <span className="progress-count-value">{loggedCount}</span>
+                        <span className="progress-count-label">
+                          {plural(loggedCount, "meal", "meals")} logged
+                        </span>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {unmeasuredExerciseCount > 0 ? (
+                    <p className="mw-meta progress-unmeasured">
+                      {unmeasuredExerciseCount}{" "}
+                      {plural(unmeasuredExerciseCount, "other session", "other sessions")}{" "}
+                      could not be measured by the camera, so{" "}
+                      {plural(unmeasuredExerciseCount, "it is", "they are")} not counted
+                      above. That is a recording problem rather than a performance — it
+                      says nothing about how you did.
+                    </p>
+                  ) : null}
+
+                  {recentCompletions.length ? (
+                    <div className="mw-stack mw-stack--tight">
+                      <h3 className="mw-h3">Your most recent sessions</h3>
+
+                      <ul className="progress-completions">
+                        {recentCompletions.map((entry, index) => {
+                          const day = formatDay(entry.completedAt);
+                          const unusable = entry.status === "invalid";
+
+                          return (
+                            <li
+                              key={`${entry.exerciseId || "session"}-${entry.completedAt || index}`}
+                              className="progress-completion"
+                            >
+                              <span className="progress-completion-name">
+                                {safeDisplayValue(entry.exerciseName || entry.exerciseId)}
+                              </span>
+
+                              <span className="progress-completion-meta">
+                                {day ? <span>{day}</span> : null}
+                                {unusable ? (
+                                  <StatusBadge label="Could not be measured" tone="muted" />
+                                ) : (
+                                  <StatusBadge
+                                    label={
+                                      entry.source === "manual_confirmation"
+                                        ? "Self-reported"
+                                        : "Measured"
+                                    }
+                                    tone={entry.source === "manual_confirmation" ? "neutral" : "active"}
+                                  />
+                                )}
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <EmptyState
+                  title="Nothing recorded yet"
+                  why="Every count on this page comes from what you record: a completed session, or a meal you log. Until one exists there is nothing to count, and nothing here is filled in on your behalf."
+                  action={
+                    <>
+                      <PrimaryButton
+                        onClick={() => navigate(planExists ? "/plan" : "/assessment")}
+                      >
+                        {planExists ? "Start your first exercise" : "Start your assessment"}
+                      </PrimaryButton>
+                      <PrimaryButton
+                        variant="ghost"
+                        onClick={() => navigate("/nutrition-check-in")}
+                      >
+                        Complete your nutrition check-in
+                      </PrimaryButton>
+                    </>
+                  }
+                />
+              )}
+            </section>
+
+            {/* 8. What happens next */}
+            <section className="mw-card mw-card--tint" aria-label="What happens next">
+              <SectionHeader title="What happens next" />
+
+              {summary?.next ? (
+                <p className="mw-lede">{safeDisplayValue(summary.next)}</p>
+              ) : (
+                <EmptyState
+                  title="MoveWell has not written a next step yet"
+                  why="The next step comes with your plan, and there is no plan yet to read it from. What you record now is what the first one is prepared from."
+                  action={
+                    <PrimaryButton onClick={() => navigate("/plan")}>
+                      Go to your plan
+                    </PrimaryButton>
+                  }
+                />
+              )}
+
+              <div className="mw-row progress-actions">
+                {/* Offered only when there is something to review. Without
+                    evidence the review can only return "not enough data", so
+                    the button would promise something it cannot deliver. */}
+                {hasEvidence && planExists ? (
+                  <PrimaryButton onClick={review} disabled={reviewing}>
+                    {reviewing ? "Reviewing…" : "Review my plan against this"}
+                  </PrimaryButton>
                 ) : null}
 
-                {toArray(series.planHistory).length ? (
-                  <section className="progress-card">
-                    <h2 className="progress-card-title">Plan adaptations</h2>
+                <PrimaryButton variant="ghost" onClick={() => navigate("/plan")}>
+                  Back to your plan
+                </PrimaryButton>
+              </div>
 
-                    <ul className="progress-plan-history">
-                      {toArray(series.planHistory).map((domain) => (
-                        <li key={domain.domain} className="progress-plan-domain">
-                          <strong>{domain.domain}</strong>
-                          <span className="progress-recent-meta">
-                            {domain.version_count} version
-                            {domain.version_count === 1 ? "" : "s"}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                ) : null}
-              </>
-            ) : null}
-
-            {planExists ? (
-              <section className="progress-card">
-                <h2 className="progress-card-title">What changed in your plan</h2>
-
-                <ul className="progress-changes">
-                  <ChangeRow label="Movement" plan={workflow.exercise_plan} />
-                  <ChangeRow label="Nutrition" plan={workflow.nutrition_plan} />
-                  <ChangeRow label="Daily habits" plan={workflow.behaviour_plan} />
-                </ul>
-              </section>
-            ) : (
-              <section className="progress-card">
-                <h2 className="progress-card-title">No plan yet</h2>
-                <p className="progress-empty">
-                  Once you have a plan, this is where you will see what changed
-                  in it and why.
-                </p>
-              </section>
-            )}
-
-            {reviewNote ? <p className="progress-note">{reviewNote}</p> : null}
-
-            <div className="progress-actions">
-              {/* Offered only when there is something to review. Without
-                  evidence the review can only return "not enough data", so
-                  the button would promise something it cannot deliver. */}
-              {hasEvidence && planExists ? (
-                <button
-                  type="button"
-                  className="progress-button"
-                  onClick={review}
-                  disabled={reviewing}
-                >
-                  {reviewing ? "Reviewing…" : "Review my plan against this"}
-                </button>
-              ) : null}
-
-              <button
-                type="button"
-                className="progress-button progress-button--quiet"
-                onClick={() => navigate("/plan")}
-              >
-                Back to your plan
-              </button>
-
-              <button
-                type="button"
-                className="progress-button progress-button--quiet"
-                onClick={() => navigate("/dashboard")}
-              >
-                ← Dashboard
-              </button>
-            </div>
+              {reviewNote ? <p className="mw-success">{safeDisplayValue(reviewNote)}</p> : null}
+            </section>
           </>
         ) : null}
       </main>
-    </div>
+    </AppShell>
   );
 }
 

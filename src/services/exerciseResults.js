@@ -47,6 +47,11 @@ async function readResponse(response, fallbackMessage) {
  * met, "incomplete" when the user stopped early, "invalid" when the camera
  * could not see enough to measure anything. An invalid result carries no
  * measurements at all — a reading nobody could make is not a score of zero.
+ *
+ * `planId` and `itemId` link the result to the plan item the user was working
+ * through, so a recorded session answers "this plan item was performed" and not
+ * only "this exercise was performed at some point". Both are optional; omitted,
+ * the result is stored with no plan link rather than a guessed one.
  */
 export async function submitExerciseResult({
   exerciseId,
@@ -56,6 +61,7 @@ export async function submitExerciseResult({
   measurements = null,
   errors = null,
   planId = null,
+  itemId = null,
   source = null,
 }) {
   const payload = {
@@ -81,12 +87,16 @@ export async function submitExerciseResult({
     payload.errors = errors;
   }
 
-  // routes/exercise_results.py declares `payload` and `plan_id` as separate
-  // Body(...) parameters, so they nest under those names.
+  // routes/exercise_results.py declares `payload`, `plan_id` and `item_id` as
+  // separate Body(...) parameters, so they nest under those names.
   const body = { payload };
 
   if (planId) {
     body.plan_id = planId;
+  }
+
+  if (itemId) {
+    body.item_id = itemId;
   }
 
   const response = await apiFetch(`${getApiUrl()}/api/exercise-results`, {
@@ -122,7 +132,7 @@ export async function fetchExerciseResults({ limit = 20 } = {}) {
  * adherence exactly like any other completed session — it is simply marked
  * as self-reported rather than measured.
  */
-export async function confirmExerciseManually({ exerciseId, planId = null }) {
+export async function confirmExerciseManually({ exerciseId, planId = null, itemId = null }) {
   const now = new Date().toISOString();
 
   return submitExerciseResult({
@@ -131,6 +141,7 @@ export async function confirmExerciseManually({ exerciseId, planId = null }) {
     startedAt: now,
     completedAt: now,
     planId,
+    itemId,
     source: "manual_confirmation",
   });
 }

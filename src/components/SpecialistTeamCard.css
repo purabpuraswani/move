@@ -1,0 +1,235 @@
+/**
+ * The five-specialist team cards.
+ *
+ * Two things have to be visible at a glance: *which* of the five this is, and
+ * *how involved* it currently is. The first is carried by a restrained accent
+ * — one coloured icon chip, one hairline along the top — and the second by the
+ * card's weight: a specialist working on the plan is a raised surface, one that
+ * was reviewed and needed nothing is a quiet surface, and one that has not been
+ * assessed is a dashed, provisional one.
+ *
+ * The five accents are declared here as values local to this stylesheet, set on
+ * the card itself, so nothing inside the card has to know which specialist it
+ * is. Each accent is a pairing of existing design tokens; none introduces a
+ * colour of its own. They are deliberately restrained — a wash behind the icon
+ * and a hairline, never a filled card — so five cards still read as one plan
+ * rather than five separate products.
+ */
+
+.team-card {
+  --team-accent: var(--ink-faint);
+  --team-accent-wash: var(--surface-soft);
+  --team-accent-line: var(--border-strong);
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  /* Every card in the row is the same height, so five cards read as one row. */
+  height: 100%;
+  overflow: hidden;
+  transition:
+    border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+}
+
+/* The hairline that names the specialist, without a second colour system. */
+.team-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: var(--team-accent);
+  opacity: 0.5;
+}
+
+.team-card--accent-none {
+  --team-accent: var(--ink-faint);
+  --team-accent-wash: var(--surface-soft);
+  --team-accent-line: var(--border-strong);
+}
+
+/* Exercise & Movement — the primary action accent. */
+.team-card--accent-movement {
+  --team-accent: var(--accent);
+  --team-accent-wash: var(--accent-soft);
+  --team-accent-line: var(--accent-line);
+}
+
+/* Nutrition & Lifestyle — the review/precaution accent. */
+.team-card--accent-nutrition {
+  --team-accent: var(--warn);
+  --team-accent-wash: var(--warn-soft);
+  --team-accent-line: var(--warn-line);
+}
+
+/* Behaviour & Adherence — the informational accent. */
+.team-card--accent-behaviour {
+  --team-accent: var(--info);
+  --team-accent-wash: var(--info-soft);
+  --team-accent-line: var(--info-soft);
+}
+
+/* Recovery & Care — rest and pacing: the deepest, quietest green, paired with
+   the tinted surface rather than a warning colour. */
+.team-card--accent-recovery {
+  --team-accent: var(--accent-strong);
+  --team-accent-wash: var(--surface-tint);
+  --team-accent-line: var(--accent-line);
+}
+
+/* Safety & Practitioner Recommendation — the accent that means "stop and
+   read this before you continue". */
+.team-card--accent-safety {
+  --team-accent: var(--danger);
+  --team-accent-wash: var(--danger-soft);
+  --team-accent-line: var(--danger-line);
+}
+
+/* Emphasis ---------------------------------------------------------------- */
+
+.team-card--active {
+  border-color: var(--team-accent-line);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+
+.team-card--active::before {
+  opacity: 0.85;
+}
+
+.team-card--reviewed {
+  background: var(--surface);
+}
+
+.team-card--not-needed {
+  border-color: transparent;
+  background: var(--surface-soft);
+  box-shadow: none;
+}
+
+.team-card--not-needed::before {
+  opacity: 0.25;
+}
+
+.team-card--not-assessed {
+  border-style: dashed;
+  border-color: var(--border-strong);
+  background: var(--surface-soft);
+  box-shadow: none;
+}
+
+.team-card--not-assessed::before {
+  opacity: 0.2;
+}
+
+.team-card--not-assessed .team-card-title,
+.team-card--not-needed .team-card-title {
+  color: var(--ink-soft);
+}
+
+/* Names ------------------------------------------------------------------- */
+
+.team-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.team-card-icon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--team-accent-line);
+  background: var(--team-accent-wash);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.team-card-names {
+  min-width: 0;
+}
+
+.team-card-title {
+  margin: 0;
+  font: 700 15px/1.3 Manrope, sans-serif;
+  letter-spacing: -0.2px;
+  color: var(--ink);
+}
+
+.team-card-subtitle {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-faint);
+}
+
+/* Status ------------------------------------------------------------------ */
+
+.team-card-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.team-card-flag {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--team-accent);
+}
+
+/* Why, in one line -------------------------------------------------------- */
+
+.team-card-reason {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+.team-card--not-assessed .team-card-reason,
+.team-card--not-needed .team-card-reason {
+  color: var(--ink-faint);
+}
+
+/* The way in -------------------------------------------------------------- */
+
+.team-card-actions {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: auto;
+  padding-top: var(--space-1);
+}
+
+.team-card-actions .mw-btn {
+  padding: 0 var(--space-2);
+  color: var(--ink-soft);
+}
+
+/* The way in stays legible on a subdued card — it is still the way in. */
+.team-card--not-assessed .team-card-actions .mw-btn,
+.team-card--not-needed .team-card-actions .mw-btn {
+  color: var(--accent);
+  opacity: 0.85;
+}
+
+.team-card--not-assessed .team-card-actions .mw-btn:hover,
+.team-card--not-needed .team-card-actions .mw-btn:hover {
+  opacity: 1;
+}
+
+@media (hover: hover) {
+  .team-card--active:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+  }
+
+  .team-card--reviewed:hover {
+    border-color: var(--team-accent-line);
+  }
+}

@@ -10,10 +10,39 @@
  */
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { EXERCISE_IMAGES } from "../../movementDemos/exerciseImages.js";
 import { EXERCISE_ENGINE_CONFIG, ENGINE_TYPES } from "../config.js";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+
+/**
+ * What the backend library itself says about each exercise's camera support
+ * (`movenet_support.implemented` in backend/exercise_library/data.py). The
+ * library is authoritative — this project does not measure a movement the
+ * library marks as unmeasurable, and it does measure one the library marks as
+ * implemented. Reading it here means the two cannot drift.
+ */
+function libraryCameraSupport() {
+  const source = readFileSync(
+    path.resolve(here, "../../../backend/exercise_library/data.py"),
+    "utf8",
+  );
+  const supported = new Map();
+
+  for (const block of source.split(/"exercise_id":\s*"/).slice(1)) {
+    const id = block.slice(0, block.indexOf('"'));
+    const flags = /_movenet\(\s*supported=\w+,\s*implemented=(\w+)/.exec(block);
+
+    supported.set(id, flags ? flags[1] === "True" : null);
+  }
+
+  return supported;
+}
 
 // Exercise id -> the movement the camera must actually measure. Written
 // out here so a change to config.js has to be a deliberate change to this
@@ -71,14 +100,32 @@ test("glute bridge has a diagram but no camera configuration", () => {
   assert.equal(EXERCISE_ENGINE_CONFIG["glute-bridge"], undefined);
 });
 
-test("every id with a camera configuration is spelled the same everywhere", () => {
-  for (const id of Object.keys(EXERCISE_IMAGES)) {
-    if (id === "glute-bridge") continue;
+test("an image never implies a camera configuration the library does not support", () => {
+  // An exercise can have a demonstration image without being measurable by a
+  // single camera — for the movements this project deliberately does not
+  // measure, a reference picture matters MORE, not less, because following the
+  // demonstration is the whole instruction. What must never happen is an
+  // exercise acquiring an engine for a movement the library marks as
+  // unmeasurable, or losing the engine for one it marks as implemented.
+  const supported = libraryCameraSupport();
 
-    assert.ok(
-      Object.prototype.hasOwnProperty.call(EXERCISE_ENGINE_CONFIG, id),
-      `${id} has a diagram but no camera configuration under that exact id`,
-    );
+  for (const id of Object.keys(EXERCISE_IMAGES)) {
+    const implemented = supported.get(id);
+    const hasConfig = Object.prototype.hasOwnProperty.call(EXERCISE_ENGINE_CONFIG, id);
+
+    assert.notEqual(implemented, undefined, `${id} is not an exercise in the library`);
+
+    if (implemented) {
+      assert.ok(
+        hasConfig,
+        `${id} is camera-implemented in the library but has no engine configuration`,
+      );
+    } else {
+      assert.ok(
+        !hasConfig,
+        `${id} is not camera-measurable, so it must not have an engine configuration`,
+      );
+    }
   }
 });
 

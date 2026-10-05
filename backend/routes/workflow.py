@@ -72,6 +72,7 @@ from reports.store import confirmed_values_for_user
 from user_state.store import get_user_state, save_user_state
 from workflow.assembly import assemble_user_state_from_documents
 from workflow.response import never_run_response, serialise_workflow_state
+from workflow.score import build_movewell_score
 
 logger = logging.getLogger(__name__)
 
@@ -150,6 +151,52 @@ def build_user_state_for_user(user_id: str) -> dict:
         confirmed_reports_doc=confirmed_reports_doc,
         persisted_state=persisted_state,
     )
+
+
+def previous_score_for_user(user_id: str) -> dict:
+    """The MoveWell Score as it stood at the user's *previous* assessment.
+
+    Rebuilt from that earlier session through the same machinery the current
+    score uses: assemble a User State around that assessment document, run the
+    real Need Assessment over it, and present the result. Nothing about "the
+    previous score" is stored, so it cannot drift from the score the same
+    evidence would produce today — and a user with one session (or whose earlier
+    session measured nothing) simply has no previous score to compare against.
+
+    Returns None when there is nothing honest to compare, never a zero.
+    """
+
+    try:
+        document = previous_assessment(user_id)
+    except PyMongoError:
+        raise _database_error() from None
+
+    if document is None:
+        return None
+
+    state = assemble_user_state_from_documents(
+        profile_doc=load_profile(user_id),
+        assessment_doc=document,
+        confirmed_reports_doc=confirmed_values_for_user(user_id),
+        # Deliberately not the persisted state: this asks what THAT session's
+        # evidence says, not what the plan has become since.
+        persisted_state=None,
+    )
+
+    score = build_movewell_score(state)
+
+    if not score["available"]:
+        return None
+
+    return {
+        "value": score["value"],
+        "recorded_at": document.get("completed_at") or document.get("completedAt"),
+        "domains": {
+            domain["key"]: domain["value"]
+            for domain in score["domains"]
+            if domain["assessed"]
+        },
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -430,6 +477,23 @@ def _progress_inputs(user_state: dict, user_id: str) -> dict:
     }
 
 
+def _tracking_evidence(user_id: str) -> dict:
+    """Everything the user has actually recorded, for the plan's TRACKING and
+    PROGRESS fields.
+
+    Read from the same three stores every other consumer reads — the
+    exercise-results history, the behaviour log and the food log — so the
+    plan screen can never disagree with the specialist screens about what
+    was recorded. No new collection, no derived copy, no cache.
+    """
+
+    return {
+        "exercise_results": list_exercise_results(user_id),
+        "behaviour_actions": list_behaviour_actions(user_id),
+        "food_log_entries": list_food_log_entries(user_id),
+    }
+
+
 @router.post("/run")
 def run_user_workflow(
     payload: dict | None = Body(None),
@@ -504,9 +568,11 @@ def run_user_workflow(
             raise _database_error() from None
 
     try:
-        behaviour_actions = list_behaviour_actions(user_id)
+        tracking = _tracking_evidence(user_id)
     except PyMongoError:
         raise _database_error() from None
+
+    behaviour_actions = tracking["behaviour_actions"]
 
     result = run_workflow(
         user_state,
@@ -544,6 +610,8 @@ def run_user_workflow(
         updated_user_state,
         safety_status=safety_result["status"] if safety_result else None,
         safety_result=safety_result,
+        tracking=tracking,
+        previous_score=previous_score_for_user(user_id),
     )
 
 
@@ -560,6 +628,13 @@ def read_latest_workflow_state(current_user: dict = Depends(get_current_user)):
     except PyMongoError:
         raise _database_error() from None
 
+    # The same recorded evidence POST /run reads, so a reloaded plan shows
+    # the same tracking and progress a freshly built one would.
+    try:
+        tracking = _tracking_evidence(user_id)
+    except PyMongoError:
+        raise _database_error() from None
+
     if document is None:
         try:
             assessment_doc = latest_assessment(user_id)
@@ -568,7 +643,10 @@ def read_latest_workflow_state(current_user: dict = Depends(get_current_user)):
 
         if assessment_doc is not None:
             user_state = build_user_state_for_user(user_id)
-            serialized = serialise_workflow_state(user_state)
+            previous = previous_score_for_user(user_id)
+            serialized = serialise_workflow_state(
+                user_state, tracking=tracking, previous_score=previous
+            )
             serialized["plan_state"] = {
                 "state": "NEVER_RUN",
                 "reason": "Your movement assessment is saved and ready.",
@@ -578,7 +656,9 @@ def read_latest_workflow_state(current_user: dict = Depends(get_current_user)):
             serialized["plan_status"] = "NEVER_RUN"
             return {
                 "available": False,
-                **serialise_workflow_state(user_state),
+                **serialise_workflow_state(
+                    user_state, tracking=tracking, previous_score=previous
+                ),
                 **serialized,
             }
 
@@ -592,6 +672,8 @@ def read_latest_workflow_state(current_user: dict = Depends(get_current_user)):
             if document.get("last_safety_result")
             else None,
             safety_result=document.get("last_safety_result"),
+            tracking=tracking,
+            previous_score=previous_score_for_user(user_id),
         ),
     }
 

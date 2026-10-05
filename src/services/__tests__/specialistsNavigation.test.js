@@ -1,102 +1,171 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
+import { SPECIALIST_ALIASES } from "../unifiedPlan.js";
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(here, "../../..");
+
+/**
+ * The five specialists, as the product presents them.
+ *
+ * This file is the client half of a two-sided contract. The server half is
+ * backend/orchestration/specialists.py, which is the single place the five are
+ * defined; the assertions below read that file and check this client agrees
+ * with it, so a rename on one side cannot quietly leave the other pointing at
+ * a specialist that no longer exists.
+ */
 const EXPECTED_SPECIALISTS = [
   {
-    id: "exercise_activity",
-    alias: "exercise",
-    title: "Exercise & Physical Activity",
-    route: "/specialist/exercise",
-    icon: "🏃"
+    id: "exercise_movement",
+    slug: "exercise-movement",
+    title: "Exercise & Movement",
+    route: "/specialist/exercise-movement",
+    icon: "🏃",
   },
   {
-    id: "physio",
-    alias: "physio",
-    title: "Physiotherapy & Movement",
-    route: "/specialist/physio",
-    icon: "🧑‍⚕️"
-  },
-  {
-    id: "nutrition",
-    alias: "nutrition",
+    id: "nutrition_lifestyle",
+    slug: "nutrition-lifestyle",
     title: "Nutrition & Lifestyle",
-    route: "/specialist/nutrition",
-    icon: "🍎"
+    route: "/specialist/nutrition-lifestyle",
+    icon: "🍎",
   },
   {
-    id: "recovery",
-    alias: "recovery",
-    title: "Recovery & Care",
-    route: "/specialist/recovery",
-    icon: "🌙"
-  },
-  {
-    id: "behaviour",
-    alias: "behaviour",
+    id: "behaviour_adherence",
+    slug: "behaviour-adherence",
     title: "Behaviour & Adherence",
-    route: "/specialist/behaviour",
-    icon: "🧠"
+    route: "/specialist/behaviour-adherence",
+    icon: "🧠",
   },
   {
-    id: "safety",
-    alias: "safety",
-    title: "Safety & Clinical Escalation",
-    route: "/specialist/safety",
-    icon: "🛡️"
-  }
+    id: "recovery_care",
+    slug: "recovery-care",
+    title: "Recovery & Care",
+    route: "/specialist/recovery-care",
+    icon: "🌙",
+  },
+  {
+    id: "safety_practitioner",
+    slug: "safety-practitioner",
+    title: "Safety & Practitioner Recommendation",
+    route: "/specialist/safety-practitioner",
+    icon: "🛡️",
+  },
 ];
 
-test("exactly 6 specialists are defined with proper titles and routes", () => {
-  assert.equal(EXPECTED_SPECIALISTS.length, 6);
-  const routes = EXPECTED_SPECIALISTS.map(s => s.route);
-  assert.ok(routes.includes("/specialist/exercise"));
-  assert.ok(routes.includes("/specialist/physio"));
-  assert.ok(routes.includes("/specialist/nutrition"));
-  assert.ok(routes.includes("/specialist/recovery"));
-  assert.ok(routes.includes("/specialist/behaviour"));
-  assert.ok(routes.includes("/specialist/safety"));
+function backendRegistrySource() {
+  return readFileSync(
+    path.join(repoRoot, "backend/orchestration/specialists.py"),
+    "utf8",
+  );
+}
+
+/** The SPECIALISTS dict entries the backend defines, in file order. */
+function backendSpecialistInfo() {
+  const source = backendRegistrySource();
+
+  const ids = [...source.matchAll(/^([A-Z_]+) = "([a-z_]+)"$/gm)].map(
+    ([, , value]) => value,
+  );
+  const slugs = [...source.matchAll(/"slug": "([a-z-]+)"/g)].map(([, value]) => value);
+  const names = [...source.matchAll(/"name": "([^"]+)"/g)].map(([, value]) => value);
+
+  return { ids, slugs, names, source };
+}
+
+test("exactly five specialists are presented", () => {
+  assert.equal(EXPECTED_SPECIALISTS.length, 5);
+
+  const routes = EXPECTED_SPECIALISTS.map((s) => s.route);
+
+  for (const specialist of EXPECTED_SPECIALISTS) {
+    assert.ok(routes.includes(specialist.route));
+  }
 });
 
-test("each specialist has a unique id, route, and clinical title", () => {
-  const ids = new Set(EXPECTED_SPECIALISTS.map(s => s.id));
-  const titles = new Set(EXPECTED_SPECIALISTS.map(s => s.title));
-  const routes = new Set(EXPECTED_SPECIALISTS.map(s => s.route));
+test("the two removed specialists are gone from the user-facing list", () => {
+  const titles = EXPECTED_SPECIALISTS.map((s) => s.title).join(" | ");
 
-  assert.equal(ids.size, 6);
-  assert.equal(titles.size, 6);
-  assert.equal(routes.size, 6);
+  // Exercise and physiotherapy are ONE specialist now, and safety is a
+  // practitioner recommendation rather than a "clinical escalation" desk.
+  assert.ok(!titles.includes("Physiotherapy"));
+  assert.ok(!titles.includes("Physical Activity"));
+  assert.ok(!titles.includes("Clinical Escalation"));
+  assert.ok(titles.includes("Safety & Practitioner Recommendation"));
+});
+
+test("each specialist has a unique id, route, and title", () => {
+  const ids = new Set(EXPECTED_SPECIALISTS.map((s) => s.id));
+  const titles = new Set(EXPECTED_SPECIALISTS.map((s) => s.title));
+  const routes = new Set(EXPECTED_SPECIALISTS.map((s) => s.route));
+
+  assert.equal(ids.size, 5);
+  assert.equal(titles.size, 5);
+  assert.equal(routes.size, 5);
+});
+
+test("the client's specialist list matches the backend registry", () => {
+  const { slugs, names } = backendSpecialistInfo();
+
+  for (const specialist of EXPECTED_SPECIALISTS) {
+    assert.ok(
+      slugs.includes(specialist.slug),
+      `backend registry has no slug ${specialist.slug}`,
+    );
+    assert.ok(
+      names.includes(specialist.title),
+      `backend registry has no specialist named ${specialist.title}`,
+    );
+  }
+
+  assert.equal(slugs.length, 5, "the backend must define exactly five specialists");
 });
 
 test("specialist route aliases resolve consistently", () => {
-  const aliasMap = {
-    exercise: "exercise",
-    exercise_activity: "exercise",
-    activity: "exercise",
-    physio: "physio",
-    movement: "physio",
-    nutrition: "nutrition",
-    recovery: "recovery",
-    sleep: "recovery",
-    behaviour: "behaviour",
-    behavior: "behaviour",
-    habits: "behaviour",
-    safety: "safety",
-    clinical: "safety"
-  };
+  assert.equal(SPECIALIST_ALIASES["exercise-movement"], "exercise_movement");
+  assert.equal(SPECIALIST_ALIASES.exercise, "exercise_movement");
+  assert.equal(SPECIALIST_ALIASES.exercise_activity, "exercise_movement");
+  assert.equal(SPECIALIST_ALIASES.physio, "exercise_movement");
+  assert.equal(SPECIALIST_ALIASES.movement, "exercise_movement");
+  assert.equal(SPECIALIST_ALIASES.nutrition, "nutrition_lifestyle");
+  assert.equal(SPECIALIST_ALIASES.behaviour, "behaviour_adherence");
+  assert.equal(SPECIALIST_ALIASES.habits, "behaviour_adherence");
+  assert.equal(SPECIALIST_ALIASES.recovery, "recovery_care");
+  assert.equal(SPECIALIST_ALIASES.sleep, "recovery_care");
+  assert.equal(SPECIALIST_ALIASES.safety, "safety_practitioner");
+  assert.equal(SPECIALIST_ALIASES.clinical, "safety_practitioner");
+});
 
-  assert.equal(aliasMap["exercise"], "exercise");
-  assert.equal(aliasMap["exercise_activity"], "exercise");
-  assert.equal(aliasMap["movement"], "physio");
-  assert.equal(aliasMap["sleep"], "recovery");
-  assert.equal(aliasMap["habits"], "behaviour");
-  assert.equal(aliasMap["clinical"], "safety");
+test("every retired specialist id the backend knows is known here too", () => {
+  // The alias table exists so an old link or a stored id still lands on the
+  // one specialist that absorbed it. If the backend learns a new alias and
+  // the client does not, an old URL starts 404-ing in the browser only.
+  const { source } = backendSpecialistInfo();
+
+  const block = source.match(/LEGACY_ID_ALIASES = \{([\s\S]*?)\n\}/);
+
+  assert.ok(block, "could not find LEGACY_ID_ALIASES in the backend registry");
+
+  const backendAliases = [...block[1].matchAll(/"([a-z_]+)":/g)].map(([, key]) => key);
+
+  assert.ok(backendAliases.length > 0);
+
+  for (const alias of backendAliases) {
+    assert.ok(
+      Object.prototype.hasOwnProperty.call(SPECIALIST_ALIASES, alias),
+      `the client does not know the backend alias ${alias}`,
+    );
+  }
 });
 
 import {
   normalizeEvidence,
   normalizeRecommendation,
   normalizeRecommendations,
-  isPlainRenderable
+  isPlainRenderable,
 } from "../specialistData.js";
 
 test("normalizeRecommendation handles Behaviour specialist object without returning raw object children", () => {
@@ -104,7 +173,7 @@ test("normalizeRecommendation handles Behaviour specialist object without return
     id: "habit-1",
     title: "Take Regular Movement Breaks",
     action: "Stand up and stretch for 2 minutes every hour",
-    why: "Reduces prolonged sedentary time and joint stiffness"
+    why: "Reduces prolonged sedentary time and joint stiffness",
   };
 
   const normalized = normalizeRecommendation(behaviourRaw, 0);
@@ -123,7 +192,7 @@ test("normalizeRecommendation handles Exercise specialist object", () => {
     id: "daily_walking_routine",
     title: "Progressive Daily Walking Routine",
     action: "Aim for 20-30 minutes of brisk walking 4-5 days per week",
-    why: "Builds cardiovascular endurance and functional capacity"
+    why: "Builds cardiovascular endurance and functional capacity",
   };
 
   const normalized = normalizeRecommendation(exerciseRaw, 0);
@@ -134,7 +203,7 @@ test("normalizeRecommendation handles Exercise specialist object", () => {
   assert.equal(typeof normalized.why, "string");
 });
 
-test("normalizeRecommendation handles Physio programme exercise object", () => {
+test("normalizeRecommendation handles a movement programme exercise object", () => {
   const physioRaw = {
     id: "wall_slide",
     name: "Wall Slide",
@@ -234,5 +303,3 @@ test("isPlainRenderable accurately guards React child values", () => {
   assert.equal(isPlainRenderable(null), false);
   assert.equal(isPlainRenderable(undefined), false);
 });
-
-

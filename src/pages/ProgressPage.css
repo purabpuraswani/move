@@ -1,341 +1,303 @@
 /**
- * Progress screen. Same tokens as the rest of the application.
+ * Progress screen.
+ *
+ * Almost all of this page is built from the shared classes in src/index.css
+ * (mw-card, mw-grid, mw-stack, mw-row, mw-chip, mw-lede, mw-meta, mw-btn and
+ * the primitives that use them). What is left here is the handful of layouts
+ * that are specific to Progress: the score block, the per-area change rows,
+ * the plain list rows, the count cards, and the chart styles the shared
+ * ProgressLineChart component draws with.
+ *
+ * Every value is a token from src/index.css. There are no literal colours in
+ * this file, so the page cannot drift away from the light identity.
  */
 
-.progress-page {
-  min-height: 100vh;
+/* ─────────────────────────────── score ─────────────────────────────── */
 
-  background: var(--bg);
-
-  color: var(--dark);
-
-  font-family: "DM Sans", system-ui, sans-serif;
-}
-
-.progress-main {
-  max-width: var(--content-max);
-
-  margin: 0 auto;
-
-  padding: 38px 24px 90px;
-}
-
-.progress-breadcrumb {
-  margin-bottom: 20px;
-}
-
-.page-back-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--green);
-  font-size: 13px;
-  font-weight: 600;
-  padding: 6px 12px;
-  border-radius: var(--radius-sm, 10px);
-  background: var(--green-light);
-  text-decoration: none;
-  transition:
-    background 0.2s ease,
-    transform 0.2s ease;
-}
-
-.page-back-link:hover {
-  background: #cce2d3;
-  transform: translateX(-2px);
-}
-
-.page-back-link:focus-visible {
-  outline: 2px solid var(--green);
-  outline-offset: 2px;
-}
-
-.progress-intro {
-  margin-bottom: 26px;
-}
-
-.progress-eyebrow {
-  display: block;
-
-  color: var(--green);
-
-  font-size: 11px;
-
-  font-weight: 700;
-
-  letter-spacing: 1.4px;
-
-  text-transform: uppercase;
-
-  margin-bottom: 8px;
-}
-
-.progress-title {
-  margin: 0 0 10px;
-
-  font-size: 30px;
-
-  font-weight: 700;
-}
-
-.progress-lead {
-  margin: 0;
-
-  max-width: 58ch;
-
-  color: var(--dark-soft);
-
-  line-height: 1.6;
-}
-
-.progress-card {
-  margin-bottom: 20px;
-
-  padding: 22px;
-
-  background: var(--surface);
-
-  border: 1px solid var(--border);
-
-  border-radius: var(--radius-md);
-}
-
-.progress-card-title {
-  margin: 0 0 12px;
-
-  font-size: 17px;
-
-  font-weight: 700;
-}
-
-.progress-count {
-  margin: 0;
-
-  font-size: 15px;
-}
-
-.progress-empty {
-  margin: 0;
-
-  color: var(--muted);
-
-  line-height: 1.65;
-
-  font-size: 14px;
-}
-
-.progress-changes {
-  margin: 0;
-
-  padding: 0;
-
-  list-style: none;
-}
-
-.progress-change {
+.progress-score {
   display: flex;
-
   flex-direction: column;
+  gap: var(--space-5);
+  align-items: center;
+  text-align: center;
+}
 
-  gap: 4px;
+.progress-score-detail {
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+}
 
-  padding: 12px 0;
+.progress-score-change {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+}
 
+.progress-score-change-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.progress-score-change-value {
+  font: 700 24px/1.2 Manrope, sans-serif;
+  letter-spacing: -0.4px;
+  color: var(--ink);
+}
+
+.progress-score-change-from {
+  color: var(--ink-faint);
+}
+
+.progress-score-change-delta {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* The two directions, and no third: "unchanged" keeps the plain ink colour so
+   a zero is never dressed as either an improvement or a loss. */
+.progress-score-change-delta--up {
+  color: var(--accent);
+}
+
+.progress-score-change-delta--down {
+  color: var(--warn);
+}
+
+.progress-score-change-delta--unchanged {
+  color: var(--ink-soft);
+}
+
+.progress-score-noprevious {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.progress-score-missing {
+  gap: var(--space-2);
+}
+
+@media (min-width: 720px) {
+  .progress-score {
+    flex-direction: row;
+    align-items: center;
+    text-align: left;
+  }
+
+  .progress-score-detail {
+    align-items: flex-start;
+  }
+
+  .progress-score-change,
+  .progress-score-noprevious {
+    align-items: flex-start;
+  }
+}
+
+/* ─────────────────────────── what's improving ──────────────────────── */
+
+.progress-areas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.progress-area {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+}
+
+.progress-area-name {
+  font-weight: 700;
+  font-size: 14.5px;
+}
+
+.progress-area-move {
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.progress-area-move--up {
+  color: var(--accent);
+}
+
+.progress-area-move--down {
+  color: var(--warn);
+}
+
+.progress-area-move--unchanged {
+  color: var(--ink-soft);
+}
+
+.progress-area-now {
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+
+.progress-area-source {
+  margin-left: auto;
+}
+
+/* ──────────────────────────── what changed ─────────────────────────── */
+
+.progress-plan-changes {
+  display: flex;
+  flex-direction: column;
+}
+
+.progress-plan-change {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) 0;
   border-bottom: 1px solid var(--border);
 }
 
-.progress-change:last-child {
+.progress-plan-change:first-child {
+  padding-top: 0;
+}
+
+.progress-plan-change:last-child {
+  padding-bottom: 0;
   border-bottom: none;
 }
 
-.progress-change-label {
-  color: var(--green);
+/* ───────────────────────── current focus / copies ──────────────────── */
 
-  font-size: 12px;
-
-  font-weight: 700;
-
-  letter-spacing: 0.6px;
-
-  text-transform: uppercase;
+.progress-headline {
+  margin: 0;
+  font: 700 18px/1.35 Manrope, sans-serif;
+  letter-spacing: -0.2px;
+  color: var(--ink);
+  max-width: 62ch;
 }
 
-.progress-change-reason {
-  color: var(--dark-soft);
-
-  font-size: 14px;
-
-  line-height: 1.6;
+.progress-chips {
+  gap: var(--space-2);
 }
 
-.progress-change-none {
-  color: var(--muted);
-
-  font-size: 14px;
-
-  line-height: 1.6;
+.progress-honesty {
+  margin: 0;
+  max-width: 72ch;
 }
 
-.progress-change-date {
-  color: var(--muted);
+/* ────────────────────────── what you completed ─────────────────────── */
 
-  font-size: 12px;
+.progress-counts {
+  gap: var(--space-3);
 }
 
-.progress-status {
-  color: var(--muted);
+.progress-count {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--surface-tint);
+  border: 1px solid var(--accent-line);
 }
 
-.progress-note {
-  margin: 0 0 18px;
+.progress-count-value {
+  font: 800 32px/1 Manrope, sans-serif;
+  letter-spacing: -1px;
+  color: var(--accent-ink);
+}
 
-  padding: 12px 16px;
+.progress-count-label {
+  font-size: 13px;
+  color: var(--ink-soft);
+}
 
-  border-left: 3px solid var(--green);
+.progress-unmeasured {
+  margin: 0;
+  max-width: 72ch;
+}
 
-  background: var(--green-light);
+.progress-completions {
+  display: flex;
+  flex-direction: column;
+}
 
-  border-radius: var(--radius-sm);
+.progress-completion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
 
-  font-size: 14px;
+.progress-completion:last-child {
+  border-bottom: none;
+}
+
+.progress-completion-name {
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.progress-completion-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: 12.5px;
+  color: var(--ink-faint);
+}
+
+/* ───────────────────────── what happens next ───────────────────────── */
+
+.progress-actions {
+  gap: var(--space-3);
 }
 
 .progress-error {
-  padding: 12px 16px;
-
-  border-radius: var(--radius-sm);
-
-  background: #fbeceb;
-
-  color: var(--danger);
-
-  font-size: 14px;
-}
-
-.progress-actions {
-  display: flex;
-
-  flex-wrap: wrap;
-
-  gap: 10px;
-
-  margin-top: 8px;
-}
-
-.progress-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 42px;
-  padding: 10px 18px;
-  border: 1px solid transparent;
-  border-radius: 11px;
-  background: linear-gradient(135deg, var(--green-bright), var(--green));
-  box-shadow: 0 8px 18px rgba(53, 209, 139, 0.16);
-  color: #062117;
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 800;
-  cursor: pointer;
-  transition: transform .2s ease, box-shadow .2s ease, filter .2s ease;
-}
-
-.progress-button:hover:not(:disabled) {
-  filter: brightness(1.08);
-  box-shadow: 0 10px 22px rgba(53, 209, 139, 0.24);
-  transform: translateY(-1px);
-}
-
-.progress-button:focus-visible {
-  outline: 2px solid var(--cyan);
-  outline-offset: 3px;
-}
-
-.progress-button:disabled {
-  opacity: 0.6;
-
-  cursor: default;
-}
-
-.progress-button--quiet {
-  background: var(--surface);
-
-  border: 1px solid var(--border);
-
-  color: var(--dark);
-}
-
-.progress-button--quiet:hover:not(:disabled) {
-  border-color: rgba(101, 232, 237, 0.35);
-  background: rgba(101, 232, 237, 0.11);
-  color: var(--mint);
-  box-shadow: none;
-}
-
-.progress-counts {
   margin: 0;
-
-  padding-left: 20px;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--danger-soft);
+  border: 1px solid var(--danger-line);
 }
 
-.progress-counts li {
-  padding: 3px 0;
-
-  font-size: 15px;
-}
-
-/* ───────────────────────── Progress charts ─────────────────────────
-   Uses the existing surface/border/text tokens so these sections sit
-   in the same design language as the cards above. The SVG scales with
-   its container rather than a measured width, which is what keeps it
-   readable from phone to desktop. */
-
-.progress-card-lead {
-  margin: -4px 0 14px;
-
-  font-size: 13.5px;
-  line-height: 1.5;
-
-  color: var(--text-muted, #64748b);
-}
-
-.progress-chart-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 18px;
-}
-
-@media (min-width: 860px) {
-  .progress-chart-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
+/* ─────────────────────────── progress charts ─────────────────────────
+   ProgressLineChart is shared with nothing else and its API is fixed, so the
+   class names it draws with are styled here. The SVG scales with its
+   container rather than a measured width, which is what keeps it readable
+   from phone to desktop. Values are the same tokens as the rest of the page:
+   there is no second palette for charts. */
 
 .progress-chart {
   min-width: 0;
 }
 
 .progress-chart-title {
-  margin: 0 0 8px;
-
-  font-size: 14px;
-  font-weight: 600;
-
-  color: var(--text, #0f172a);
+  margin: 0 0 var(--space-2);
+  font: 700 14px/1.3 Manrope, sans-serif;
+  color: var(--ink);
 }
 
 .progress-chart-svg {
   display: block;
-
   width: 100%;
   height: 160px;
-
   overflow: visible;
 }
 
 .progress-chart-axis,
 .progress-chart-gridline {
-  stroke: var(--border, #e2e8f0);
+  stroke: var(--border-strong);
   stroke-width: 1;
 }
 
@@ -345,85 +307,40 @@
 
 .progress-chart-line {
   fill: none;
-  stroke: #2563eb;
+  stroke: var(--accent);
   stroke-width: 2.5;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
 .progress-chart-dot {
-  fill: #2563eb;
+  fill: var(--accent);
 }
 
 .progress-chart-scale {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 12px;
+  gap: var(--space-1) var(--space-3);
   justify-content: space-between;
-
   margin-top: 6px;
-
   font-size: 11.5px;
-
-  color: var(--text-muted, #64748b);
+  color: var(--ink-faint);
 }
 
 /* The honest states: one point, or none. Neither draws a line. */
 .progress-chart-single {
-  margin: 0 0 4px;
-
+  margin: 0 0 var(--space-1);
   font-size: 15px;
 }
 
 .progress-chart-single-date {
-  color: var(--text-muted, #64748b);
+  color: var(--ink-faint);
 }
 
 .progress-chart-empty,
 .progress-chart-note {
-  margin: 4px 0 0;
-
+  margin: var(--space-1) 0 0;
   font-size: 13px;
   line-height: 1.5;
-
-  color: var(--text-muted, #64748b);
-}
-
-.progress-recent-list,
-.progress-plan-history {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.progress-recent-row,
-.progress-plan-domain {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 12px;
-  justify-content: space-between;
-  align-items: baseline;
-
-  padding-bottom: 8px;
-
-  border-bottom: 1px solid var(--border, #e2e8f0);
-
-  font-size: 14px;
-}
-
-.progress-recent-row:last-child,
-.progress-plan-domain:last-child {
-  padding-bottom: 0;
-
-  border-bottom: none;
-}
-
-.progress-recent-meta {
-  font-size: 12px;
-
-  color: var(--text-muted, #64748b);
+  color: var(--ink-soft);
 }

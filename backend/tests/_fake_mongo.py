@@ -171,6 +171,45 @@ class FakeReportsCollection:
 
         return None
 
+    def update_one(self, query, update, upsert=False):
+        """$set-only update, with upsert. Added for routes/profile.py's partial
+        update, which is the only other writer in this project that sends a
+        plain update_one with a $set."""
+
+        for doc in self._docs.values():
+            if _matches(doc, query or {}):
+                for path, value in (update.get("$set") or {}).items():
+                    _set_path(doc, path, value)
+
+                class _Matched:
+                    matched_count = 1
+                    upserted_id = None
+
+                return _Matched()
+
+        if not upsert:
+            class _Unmatched:
+                matched_count = 0
+                upserted_id = None
+
+            return _Unmatched()
+
+        created = copy.deepcopy(query or {})
+        created["_id"] = ObjectId()
+
+        for path, value in (update.get("$set") or {}).items():
+            _set_path(created, path, value)
+
+        self._seq += 1
+        created["__seq"] = self._seq
+        self._docs[str(created["_id"])] = created
+
+        class _Upserted:
+            matched_count = 0
+            upserted_id = created["_id"]
+
+        return _Upserted()
+
     def delete_one(self, query):
         for key, doc in list(self._docs.items()):
             if _matches(doc, query or {}):

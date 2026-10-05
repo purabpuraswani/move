@@ -18,6 +18,8 @@ the same discipline exercise_preferences uses in physio_agent's contract.
 This agent must never invent a value for it.
 """
 
+from orchestration.pose_boundary import find_pose_or_media_violation
+
 REQUIRED_FIELDS = (
     "workflow_id",
     "request_id",
@@ -130,17 +132,11 @@ def validate_nutrition_agent_input(payload) -> None:
     ):
         _fail("relevant_nutrition_signals must be null or an object")
 
-    # Same second line of defence as physio_agent.input_contract: nothing
-    # shaped like raw pose/frame/food-image data may cross this boundary.
-    forbidden_substrings = (
-        "keypoint", "landmark", "skeleton", "rawframe", "video", "image",
-        "base64", "dataurl",
-    )
-    serialised = str(payload).lower()
+    # Same second line of defence as every other agent input contract, from
+    # one shared implementation (orchestration/pose_boundary.py): nothing
+    # shaped like raw pose/frame/food-image data may cross this boundary, while
+    # a scalar quality summary still passes.
+    violation = find_pose_or_media_violation(payload)
 
-    for term in forbidden_substrings:
-        if term in serialised:
-            _fail(
-                f"Nutrition Agent input appears to contain {term!r} — "
-                "refusing to build an input that might carry raw media data"
-            )
+    if violation:
+        _fail(f"Nutrition Agent input {violation}")

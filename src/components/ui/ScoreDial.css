@@ -1,0 +1,98 @@
+.score-dial {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  margin: 0;
+}
+
+.score-dial-ring {
+  position: relative;
+  width: 216px;
+  height: 216px;
+  display: grid;
+  place-items: center;
+}
+
+.score-dial--small .score-dial-ring {
+  width: 148px;
+  height: 148px;
+}
+
+.score-dial svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.score-dial-track {
+  stroke: var(--surface-soft);
+}
+
+.score-dial-arc {
+  stroke: var(--accent);
+  transition: stroke-dashoffset var(--dur-slow) var(--ease);
+}
+
+.score-dial--empty .score-dial-track {
+  stroke: var(--border-strong);
+  stroke-dasharray: 4 8;
+  stroke-linecap: round;
+}
+
+.score-dial-centre {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.score-dial-value {
+  font: 800 58px/1 Manrope, sans-serif;
+  letter-spacing: -2px;
+  color: var(--ink);
+}
+
+.score-dial--small .score-dial-value {
+  font-size: 38px;
+  letter-spacing: -1px;
+}
+
+.score-dial-scale {
+  font-size: 13px;
+  color: var(--ink-faint);
+}
+
+.score-dial-none {
+  max-width: 120px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--ink-faint);
+}
+
+.score-dial-caption {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+}
+
+.score-dial-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.score-dial-note {
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+
+@media (max-width: 520px) {
+  .score-dial-ring { width: 184px; height: 184px; }
+  .score-dial-value { font-size: 48px; }
+}

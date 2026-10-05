@@ -434,7 +434,7 @@ class NotAssessedTests(unittest.TestCase):
             )
         }
 
-        self.assertNotEqual(team["physio"]["status"], "ACTIVE")
+        self.assertNotEqual(team["exercise_movement"]["status"], "ACTIVE")
 
 
 class SafetyGateTests(unittest.TestCase):
@@ -505,7 +505,7 @@ class DeterminismTests(unittest.TestCase):
 
 
 class SpecialistStatusTests(unittest.TestCase):
-    """The six cards must reflect what actually happened."""
+    """The five cards must reflect what actually happened."""
 
     def test_not_every_specialist_is_active_for_a_healthy_user(self):
         state = _state(ACTIVE_HEALTHY, NORMAL_MOVEMENT)
@@ -517,14 +517,14 @@ class SpecialistStatusTests(unittest.TestCase):
             safety_result=result["safety_result"],
         )
 
-        self.assertEqual(len(team), 6)
+        self.assertEqual(len(team), 5)
 
         active = [card["id"] for card in team if card["status"] == "ACTIVE"]
 
         # Safety is a standing review and may legitimately be active; no
         # advisory specialist should be.
         self.assertFalse(
-            set(active) - {"safety"},
+            set(active) - {"safety_practitioner"},
             f"specialists claimed active without evidence: {active}",
         )
 
@@ -543,7 +543,11 @@ class SpecialistStatusTests(unittest.TestCase):
             safety_status=(result["safety_result"] or {}).get("status"),
             safety_result=result["safety_result"],
         ):
-            allowed = safety_statuses if card["id"] == "safety" else advisory_statuses
+            allowed = (
+                safety_statuses
+                if card["id"] == "safety_practitioner"
+                else advisory_statuses
+            )
 
             self.assertIn(
                 card["status"],

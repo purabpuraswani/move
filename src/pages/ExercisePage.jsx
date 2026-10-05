@@ -19,7 +19,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import CameraStage from "../assessment/components/CameraStage.jsx";
 import RawCameraView from "../assessment/components/RawCameraView.jsx";
@@ -48,6 +48,7 @@ import MovementDemo from "../movementDemos/MovementDemo.jsx";
 import { getToken } from "../services/auth";
 import { submitExerciseResult } from "../services/exerciseResults";
 import { fetchLatestWorkflow } from "../services/workflow";
+import { planItems } from "../services/unifiedPlan.js";
 
 import "./ExercisePage.css";
 
@@ -120,8 +121,16 @@ function SessionPanel({ title, children, footer = null, className = "", bodyClas
 
 function ExercisePage() {
   const { exerciseId } = useParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const pose = usePoseEngine();
+
+  // The plan item this session is being performed against, carried in the URL
+  // by the plan card that sent the user here. Both are optional: someone who
+  // opens an exercise directly is not performing a plan item, and the result
+  // is then stored with no plan link rather than a fabricated one.
+  const planIdFromUrl = searchParams.get("planId");
+  const itemIdFromUrl = searchParams.get("itemId");
 
   const [step, setStep] = useState(STEP.BRIEF);
   const [live, setLive] = useState({ reps: 0, seconds: 0, holdState: null, repState: null, cue: "" });
@@ -177,14 +186,32 @@ function ExercisePage() {
 
   useEffect(() => {
     let isMounted = true;
+
     fetchLatestWorkflow()
       .then((wf) => {
         if (!isMounted || !wf) return;
-        const movement = wf.specialists?.find((s) => s.title === "Movement");
-        const prog = movement?.programme || wf.exercise_plan?.exercise_items || [];
-        setPlanProgramme(prog);
+
+        // The plan's own exercise items, read from the server's unified plan
+        // rather than re-derived from a display list. Each one carries the plan
+        // id and the item id the result must be recorded against.
+        const items = planItems(wf)
+          .filter((item) => item.kind === "exercise")
+          .map((item) => ({
+            id: item.item_id,
+            name: item.title,
+            planId: item.plan_id || null,
+            itemId: item.item_id || null,
+            sets: item.metadata?.sets ?? null,
+            repetitions: item.metadata?.repetitions ?? null,
+            durationSeconds: item.metadata?.duration_seconds ?? null,
+            why: item.why || null,
+            withheld: Boolean(item.withheld),
+          }));
+
+        setPlanProgramme(items);
       })
       .catch(() => {});
+
     return () => {
       isMounted = false;
     };
@@ -213,10 +240,19 @@ function ExercisePage() {
   }, []);
 
   const currentIndex = planProgramme.findIndex((e) => e.id === exerciseId);
+  const currentPlanItem = currentIndex >= 0 ? planProgramme[currentIndex] : null;
   const nextExercise =
     currentIndex >= 0 && currentIndex < planProgramme.length - 1
       ? planProgramme[currentIndex + 1]
       : null;
+
+  // The ids this session is recorded against, taken from the URL when the plan
+  // card supplied them and from the plan's own item otherwise. `exerciseId` is
+  // itself the item id for an exercise item — it is the exercise library id,
+  // which is the domain identifier the plan publishes — so nothing is invented
+  // by falling back to it.
+  const recordingPlanId = planIdFromUrl || currentPlanItem?.planId || null;
+  const recordingItemId = itemIdFromUrl || currentPlanItem?.itemId || exerciseId || null;
 
   const engineRef = useRef(null);
   const extractorRef = useRef(null);
@@ -500,6 +536,8 @@ function ExercisePage() {
         completedAt,
         measurements,
         errors,
+        planId: recordingPlanId,
+        itemId: recordingItemId,
       });
 
       setSaveState("saved");
@@ -507,7 +545,7 @@ function ExercisePage() {
       setSaveError(error.message);
       setSaveState("failed");
     }
-  }, [pose, config, exerciseId]);
+  }, [pose, config, exerciseId, recordingPlanId, recordingItemId]);
 
   const completeManual = useCallback(async () => {
     const completedAt = new Date().toISOString();
@@ -525,12 +563,19 @@ function ExercisePage() {
     setSaveError(null);
 
     try {
+      // A ticked box is a self-report, not a camera reading, and the backend
+      // stores the two apart (`source`). Recording it as a camera session
+      // would make a confirmation indistinguishable from a measurement in
+      // every consumer downstream.
       await submitExerciseResult({
         exerciseId,
         status,
         startedAt: startedAtRef.current || completedAt,
         completedAt,
         measurements: {},
+        source: "manual_confirmation",
+        planId: recordingPlanId,
+        itemId: recordingItemId,
       });
 
       setSaveState("saved");
@@ -538,7 +583,7 @@ function ExercisePage() {
       setSaveError(error.message);
       setSaveState("failed");
     }
-  }, [exerciseId]);
+  }, [exerciseId, recordingPlanId, recordingItemId]);
 
   const viewHint = config ? VIEW_GUIDANCE[config.signal] : null;
 
@@ -584,7 +629,71 @@ function ExercisePage() {
               <MovementDemo demo={demo} />
             ) : null}
 
-            {unsupported ? (
+            {/* What the plan asked for, when this exercise is a plan item.
+                Read from the item, so the page and the plan card cannot
+                disagree about the dose. */}
+            {currentPlanItem ? (
+              <div className="exercise-setup">
+                <h2 className="exercise-setup-title">Your plan asks for</h2>
+                <p>
+                  {[
+                    currentPlanItem.sets
+                      ? `${currentPlanItem.sets} ${
+                          currentPlanItem.sets === 1 ? "set" : "sets"
+                        }`
+                      : null,
+                    currentPlanItem.repetitions
+                      ? `${currentPlanItem.repetitions} repetitions`
+                      : null,
+                    currentPlanItem.durationSeconds
+                      ? `${currentPlanItem.durationSeconds}s hold`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ") || "This exercise, as shown."}
+                </p>
+                {currentPlanItem.why ? (
+                  <p className="exercise-setup-quiet">{currentPlanItem.why}</p>
+                ) : null}
+                {recordingItemId ? (
+                  <p className="exercise-setup-quiet">
+                    Recorded against plan item <code>{recordingItemId}</code>
+                    {recordingPlanId ? (
+                      <>
+                        {" "}
+                        in plan <code>{recordingPlanId}</code>
+                      </>
+                    ) : null}
+                    .
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
+            {currentPlanItem?.withheld ? (
+              <div className="exercise-note">
+                <h2 className="exercise-note-title">Paused for safety review</h2>
+                <p>
+                  The Safety &amp; Practitioner Recommendation specialist
+                  withheld this item from your plan for this cycle. Read that
+                  guidance before performing it.
+                </p>
+                <div className="exercise-actions" style={{ marginTop: "20px" }}>
+                  <button
+                    type="button"
+                    className="exercise-start exercise-start--quiet"
+                    onClick={() => navigate("/specialist/safety-practitioner")}
+                  >
+                    See the safety guidance
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {/* A withheld item cannot be started from here. The Safety
+                specialist's verdict reached the plan, so it has to reach the
+                page that would carry the item out. */}
+            {currentPlanItem?.withheld ? null : unsupported ? (
               <div className="exercise-note">
                 <h2 className="exercise-note-title">Not measured by camera</h2>
                 <p>{unsupported}</p>

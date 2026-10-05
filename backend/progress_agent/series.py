@@ -14,6 +14,7 @@ and the interface says so plainly. An empty series means "nothing
 recorded yet", never "no progress".
 """
 
+from exercise_library.catalog import ExerciseNotFoundError, get_exercise_details
 from progress_agent.comparison import (
     DIRECTION_HIGHER_IS_BETTER,
     METRIC_DIRECTIONS,
@@ -215,7 +216,13 @@ def plan_version_history(user_state) -> list:
 
 
 def recent_completions(exercise_results, *, limit: int = 10) -> list:
-    """The most recently completed exercises, newest first."""
+    """The most recently completed exercises, newest first.
+
+    Each entry carries the exercise's own library name as well as its id, so a
+    screen can say "Chair Sit-to-Stand" instead of `chair-sit-to-stand`. The id
+    is still sent: it is the identifier the exercise page and the results API
+    use, and dropping it would leave the row unactionable.
+    """
 
     dated = [
         result
@@ -225,15 +232,29 @@ def recent_completions(exercise_results, *, limit: int = 10) -> list:
 
     dated.sort(key=_result_day, reverse=True)
 
-    return [
-        {
-            "exerciseId": result.get("exerciseId"),
-            "completedAt": _result_day(result),
-            "status": result.get("status"),
-            "source": result.get("source") or "camera",
-        }
-        for result in dated[:limit]
-    ]
+    entries = []
+
+    for result in dated[:limit]:
+        exercise_id = result.get("exerciseId")
+
+        try:
+            name = get_exercise_details(exercise_id)["name"]
+        except (ExerciseNotFoundError, TypeError):
+            # An id from a library snapshot that no longer has it: the id is
+            # shown rather than the row being hidden.
+            name = exercise_id
+
+        entries.append(
+            {
+                "exerciseId": exercise_id,
+                "exerciseName": name,
+                "completedAt": _result_day(result),
+                "status": result.get("status"),
+                "source": result.get("source") or "camera",
+            }
+        )
+
+    return entries
 
 
 def build_progress_series(

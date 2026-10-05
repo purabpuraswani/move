@@ -281,7 +281,10 @@ function AssessmentPage() {
   }
 
   function exit() {
-    navigate("/dashboard");
+    // The journey continues into the results: the score, what matters most,
+    // the team it brought in, and the plan. /dashboard is kept as an alias of
+    // Today, so nothing that already linked there breaks.
+    navigate("/results");
   }
 
   function handleExitResults() {
