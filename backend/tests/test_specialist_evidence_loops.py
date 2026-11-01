@@ -49,11 +49,16 @@ PROFILE = {
     "fruit_vegetable_servings": 1,
     "water_glasses_per_day": 2,
     "processed_food_frequency": "daily",
+    "food_allergies": [],
+    "dietary_restrictions": [],
+    "diabetes": "no", "hypertension": "no", "heart_condition": "no",
+    "previous_injury": "no", "joint_pain": "no", "back_neck_pain": "no",
+    "other_conditions": "",
 }
 
 ASSESSMENT = {
     "protocol_version": "1.0.0",
-    "completed_at": "2026-09-06T10:00:00+00:00",
+        "completed_at": "2026-10-15T10:00:00+00:00",
     "tests": {
         "shoulder": {
             "status": "completed",
@@ -63,22 +68,14 @@ ASSESSMENT = {
                 "observableDifferenceDeg": 3.0,
             },
         },
-        "ftsst": {
-            "status": "completed",
-            "measurements": {
-                "completionTimeSeconds": 18.0,
-                "repetitionsDetected": 5,
-                "requiredRepetitions": 5,
-            },
-        },
         "balance": {
             "status": "completed",
             "measurements": {
-                "left": {"attempted": True, "valid": True, "holdDurationSeconds": 30.0},
+                "left": {"attempted": True, "valid": True, "holdDurationSeconds": 4.0},
                 "right": {
                     "attempted": True,
                     "valid": True,
-                    "holdDurationSeconds": 30.0,
+                    "holdDurationSeconds": 4.0,
                 },
                 "observableDifferenceMs": 0,
             },
@@ -487,7 +484,7 @@ class TheWholePlanReadsAsOneSystem(unittest.TestCase):
         ids = [exercise["id"] for exercise in movement["programme"]]
 
         self.assertTrue(ids)
-        for baseline in ("chair-sit-to-stand", "standing-shoulder-raise"):
+        for baseline in ("standing-shoulder-raise"):
             self.assertNotIn(baseline, ids)
 
 

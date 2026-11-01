@@ -25,7 +25,7 @@ from recovery_agent.evidence import build_recovery_view
 from recovery_agent.reasoning import assess_recovery
 from safety.gate import evaluate_safety
 from user_state.schema import build_user_state
-from workflow.response import build_specialists_team
+from workflow.response import build_specialists_team, serialise_workflow_state
 
 # --------------------------------------------------------------------------
 # Scenario inputs. Every value is synthetic and chosen to represent the
@@ -74,7 +74,7 @@ OLDER_ADULT = {
 }
 
 
-def _assessment(*, shoulder=None, ftsst=None, balance=None, completed_at="2026-09-01T09:00:00Z"):
+def _assessment(*, shoulder=None, balance=None, completed_at="2026-09-01T09:00:00Z"):
     """A stored assessment session. A test that is not passed is recorded
     as skipped -- the state a user's own decision produces -- never as a
     zero measurement."""
@@ -98,15 +98,6 @@ def _assessment(*, shoulder=None, ftsst=None, balance=None, completed_at="2026-0
                     "observableDifferenceDeg": abs(shoulder[0] - shoulder[1]),
                 }
             ),
-            "ftsst": test_block(
-                None
-                if ftsst is None
-                else {
-                    "completionTimeSeconds": ftsst,
-                    "repetitionsDetected": 5,
-                    "requiredRepetitions": 5,
-                }
-            ),
             "balance": test_block(
                 None
                 if balance is None
@@ -121,6 +112,10 @@ def _assessment(*, shoulder=None, ftsst=None, balance=None, completed_at="2026-0
 
 
 def _state(profile, assessment=None):
+    profile = dict(profile or {})
+    for field in ("diabetes", "hypertension", "heart_condition", "previous_injury", "joint_pain", "back_neck_pain"):
+        profile.setdefault(field, "no")
+    profile.setdefault("other_conditions", "")
     state = build_user_state(profile_doc=profile, assessment_doc=assessment)
 
     return apply_need_profile(state, assemble_need_profile(state))
@@ -153,7 +148,7 @@ class ScenarioAOfficeWorkerTests(unittest.TestCase):
     def setUp(self):
         self.state = _state(
             OFFICE_WORKER,
-            _assessment(shoulder=(150, 146), ftsst=9.0, balance=(28, 26)),
+            _assessment(shoulder=(150, 146), balance=(28, 26)),
         )
         self.result = run_workflow(
             self.state,
@@ -242,7 +237,7 @@ class ScenarioBMobilityLimitedTests(unittest.TestCase):
     def setUp(self):
         self.state = _state(
             MOBILITY_LIMITED,
-            _assessment(shoulder=(118, 122), ftsst=None, balance=None),
+            _assessment(shoulder=(118, 122), balance=None),
         )
         self.result = run_workflow(self.state, exercise_results=[], **_clients("b"))
 
@@ -279,7 +274,7 @@ class ScenarioCOlderAdultTests(unittest.TestCase):
     def setUp(self):
         self.state = _state(
             OLDER_ADULT,
-            _assessment(shoulder=(110, 100), ftsst=16.5, balance=(4.2, 6.0)),
+            _assessment(shoulder=(110, 100), balance=(4.2, 6.0)),
         )
         self.result = run_workflow(self.state, exercise_results=[], **_clients("c"))
 
@@ -288,17 +283,17 @@ class ScenarioCOlderAdultTests(unittest.TestCase):
 
         physio = _findings(self.result, "physio")
         self.assertEqual(physio["need_levels"]["stability_need"], "HIGH")
-        self.assertEqual(physio["need_levels"]["functional_movement_need"], "HIGH")
+        self.assertEqual(physio["need_levels"]["functional_movement_need"], "NOT_ASSESSED")
         self.assertTrue(physio["plan"]["exercises"])
         self.assertEqual(
             {entry["movement"] for entry in physio["assessed_movements"]},
-            {"shoulder", "ftsst", "balance"},
+            {"shoulder", "balance"},
         )
 
     def test_age_alone_changes_nothing(self):
         younger = _state(
             {**OLDER_ADULT, "age": 34},
-            _assessment(shoulder=(110, 100), ftsst=16.5, balance=(4.2, 6.0)),
+            _assessment(shoulder=(110, 100), balance=(4.2, 6.0)),
         )
         younger_result = run_workflow(younger, exercise_results=[], **_clients("c2"))
 
@@ -322,7 +317,7 @@ class SpecialistsAreDifferentTests(unittest.TestCase):
     """The ten differentiation checks, each against computed output."""
 
     def test_1_one_profile_produces_different_reasoning_per_domain(self):
-        state = _state(OFFICE_WORKER, _assessment(shoulder=(150, 146), ftsst=9.0, balance=(28, 26)))
+        state = _state(OFFICE_WORKER, _assessment(shoulder=(150, 146), balance=(28, 26)))
         result = run_workflow(state, exercise_results=[], **_clients("d1"))
 
         shapes = {
@@ -339,12 +334,12 @@ class SpecialistsAreDifferentTests(unittest.TestCase):
 
     def test_2_different_users_activate_different_specialists(self):
         office = run_workflow(
-            _state(OFFICE_WORKER, _assessment(shoulder=(150, 146), ftsst=9.0, balance=(28, 26))),
+            _state(OFFICE_WORKER, _assessment(shoulder=(150, 146), balance=(28, 26))),
             exercise_results=[],
             **_clients("d2a"),
         )
         older = run_workflow(
-            _state(OLDER_ADULT, _assessment(shoulder=(110, 100), ftsst=16.5, balance=(4.2, 6.0))),
+            _state(OLDER_ADULT, _assessment(shoulder=(110, 100), balance=(4.2, 6.0))),
             exercise_results=[],
             **_clients("d2b"),
         )
@@ -430,6 +425,66 @@ class SpecialistsAreDifferentTests(unittest.TestCase):
         self.assertEqual(unknown["status"], STATUS_INSUFFICIENT_EVIDENCE)
         self.assertIn("Sleep duration", unknown["missing_information"])
 
+    def test_recovery_uses_reported_stress_and_difficulties_without_inference(self):
+        reported = assess_recovery(build_recovery_view(_state({
+            "stress_level": "high",
+            "recovery_difficulties": ["tired after activity"],
+        })))
+        no_difficulties = assess_recovery(build_recovery_view(_state({
+            "stress_level": "low",
+            "recovery_difficulties": [],
+        })))
+        unknown = assess_recovery(build_recovery_view(_state({"daily_steps": 3000})))
+
+        self.assertEqual(reported["status"], "ASSESSED")
+        self.assertIn("Self-reported stress level: high", reported["evidence_used"])
+        self.assertTrue(any("tired after activity" in item["why"] for item in reported["recovery_recommendations"]))
+        self.assertFalse(reported["constraint"]["limit_progression"])
+        self.assertTrue(any("No recovery difficulties" in item["finding"] for item in no_difficulties["recovery_findings"]))
+        self.assertEqual(unknown["status"], STATUS_INSUFFICIENT_EVIDENCE)
+        self.assertFalse(unknown["recovery_findings"])
+
+    def test_recovery_constraint_is_handed_to_activity_agent(self):
+        state = _state({
+            "sleep_hours": 5,
+            "sleep_quality": "poor",
+            "daily_steps": 1800,
+            "daily_sitting_hours": 9,
+            "exercise_days": 1,
+            "exercise_minutes": 20,
+        })
+        result = run_workflow(state, exercise_results=[], **_clients("recovery-handoff"))
+        activity = _findings(result, "exercise_activity")
+        self.assertTrue(any(item.get("source") == "recovery" for item in activity["constraints"]))
+
+    def test_response_uses_actual_activity_recovery_and_progress_execution_outputs(self):
+        state = _state({"daily_steps": 2000, "sleep_hours": 5, "sleep_quality": "poor"})
+        executions = {
+            "exercise_activity": {
+                "status": "completed", "priority": "medium",
+                "findings": {"status": "ASSESSED", "activity_findings": [{"finding": "agent activity finding"}], "evidence_used": ["steps: 2000"], "progression": [], "constraints": [], "missing_information": [], "confidence": 1},
+                "recommendations": [{"id": "actual-activity", "title": "Actual activity", "action": "Do it", "why": "Actual rationale"}],
+                "metadata": {"workflow_id": "private"},
+            },
+            "recovery": {
+                "status": "completed", "priority": None,
+                "findings": {"status": "ASSESSED", "recovery_findings": [{"finding": "agent recovery finding"}], "evidence_used": ["stress: high"], "constraint": {"limit_progression": True, "reason": "actual recovery constraint"}, "missing_information": [], "confidence": 1},
+                "recommendations": [{"id": "actual-recovery", "title": "Actual recovery", "action": "Track it", "why": "Actual recovery rationale"}],
+            },
+            "progress": {
+                "status": "completed", "priority": None,
+                "findings": {"physical_comparison": {"status": "NOT_ENOUGH_DATA"}, "dispatch": ["physio"]},
+                "recommendations": [],
+            },
+        }
+        response = serialise_workflow_state(state, agent_executions=executions)
+        cards = {item["id"]: item for item in response["specialists_team"]}
+        self.assertEqual(cards["exercise_activity"]["recommendations"][0]["id"], "actual-activity")
+        self.assertEqual(cards["recovery"]["reason"], "actual recovery constraint")
+        self.assertEqual(cards["recovery"]["recommendations"][0]["why"], "Actual recovery rationale")
+        self.assertEqual(response["execution_results"]["progress"]["findings"]["physical_comparison"]["status"], "NOT_ENOUGH_DATA")
+        self.assertNotIn("workflow_id", str(response))
+
     def test_7_safety_responds_to_evidence_and_constrains_other_specialists(self):
         candidates = [
             {"id": "wall-sit", "agent": "physio", "type": "exercise", "difficulty": "intermediate"},
@@ -474,12 +529,12 @@ class SpecialistsAreDifferentTests(unittest.TestCase):
 
     def test_9_physio_tracks_movement_evidence(self):
         limited = run_workflow(
-            _state(OLDER_ADULT, _assessment(shoulder=(55, 58), ftsst=9.0, balance=(20, 22))),
+            _state(OLDER_ADULT, _assessment(shoulder=(55, 58), balance=(20, 22))),
             exercise_results=[],
             **_clients("d9a"),
         )
         unlimited = run_workflow(
-            _state(OLDER_ADULT, _assessment(shoulder=(150, 148), ftsst=16.5, balance=(4.0, 4.5))),
+            _state(OLDER_ADULT, _assessment(shoulder=(150, 148), balance=(4.0, 4.5))),
             exercise_results=[],
             **_clients("d9b"),
         )
@@ -494,7 +549,7 @@ class SpecialistsAreDifferentTests(unittest.TestCase):
 
     def test_10_the_final_plan_is_built_from_the_specialised_outputs(self):
         result = run_workflow(
-            _state(OFFICE_WORKER, _assessment(shoulder=(150, 146), ftsst=12.0, balance=(28, 26))),
+            _state(OFFICE_WORKER, _assessment(shoulder=(150, 146), balance=(4.2, 6.0))),
             exercise_results=[],
             **_clients("d10"),
         )
@@ -503,21 +558,24 @@ class SpecialistsAreDifferentTests(unittest.TestCase):
         for entry in result["final_recommendations"]:
             by_agent.setdefault(entry["agent"], set()).add(entry["id"])
 
-        # Every specialist that ran contributed to what the user is shown,
-        # and each contribution is its own domain's output.
-        self.assertIn("physio", by_agent)
+        # The user reported joint pain without location/detail. Physio runs
+        # to preserve movement evidence, but it defers exercises for review.
+        self.assertNotIn("physio", by_agent)
         self.assertIn("behaviour", by_agent)
         self.assertIn("exercise_activity", by_agent)
+
+        physio = _findings(result, "physio")
+        self.assertTrue(physio["exercise_safety_evaluations"])
+        self.assertTrue(all(
+            item["status"] == "DEFERRED_HEALTHCARE_REVIEW"
+            for item in physio["exercise_safety_evaluations"]
+        ))
 
         activity_ids = {
             item["id"] for item in _findings(result, "exercise_activity")["activity_recommendations"]
         }
         self.assertEqual(by_agent["exercise_activity"], activity_ids)
 
-        physio_plan_ids = {
-            entry["exercise_id"] for entry in _findings(result, "physio")["plan"]["exercises"]
-        }
-        self.assertTrue(by_agent["physio"].issubset(physio_plan_ids))
 
 
 class DomainInputIsolationTests(unittest.TestCase):
@@ -526,7 +584,7 @@ class DomainInputIsolationTests(unittest.TestCase):
 
     def setUp(self):
         self.state = _state(
-            OFFICE_WORKER, _assessment(shoulder=(150, 146), ftsst=9.0, balance=(28, 26))
+            OFFICE_WORKER, _assessment(shoulder=(150, 146), balance=(28, 26))
         )
 
     def test_activity_view_excludes_medical_sleep_and_raw_movement_data(self):
@@ -557,6 +615,52 @@ class DomainInputIsolationTests(unittest.TestCase):
         self.assertTrue(
             all(entry["state"] == "MISSING" for entry in recovery["signals"].values())
         )
+
+
+class UnifiedPlanActivityOrderingTests(unittest.TestCase):
+    def test_actionable_recommendations_are_separate_from_tracking_and_clarification(self):
+        from workflow.response import _unified_plan
+
+        executions = {
+            "nutrition": {
+                "status": "completed",
+                "findings": {
+                    "mode": "maintenance_review",
+                    "evidence_used": ["No specific nutrition need was established."],
+                    "tracking_activities": [{"id": "nutrition-log", "title": "Record meals"}],
+                    "missing_information": ["Food preferences remain unknown."],
+                },
+                "recommendations": [{
+                    "id": "build_a_regular_meal_pattern",
+                    "title": "Build a Regular Meal Pattern",
+                    "action": "Plan tomorrow's lunch tonight.",
+                    "why": "General education; no personal diet goal inferred.",
+                    "safety_notes": ["General guidance only."],
+                }],
+            }
+        }
+        plan = _unified_plan(
+            {}, executions,
+            [{"agent": "nutrition", "id": "build_a_regular_meal_pattern"}],
+        )
+        self.assertEqual(plan["activities"][0]["type"], "general_maintenance_activity")
+        self.assertEqual(plan["activities"][0]["instruction"], "Plan tomorrow's lunch tonight.")
+        self.assertEqual(plan["tracking_tasks"][0]["type"], "tracking_task")
+        self.assertEqual(plan["clarification_tasks"][0]["type"], "clarification_task")
+        self.assertEqual(plan["activities"][0]["safety_status"], "APPROVED_BY_FINAL_SAFETY_GATE")
+
+    def test_recovery_maintenance_uses_reported_sleep_without_inventing_a_problem(self):
+        from orchestration.ids import start_workflow
+        from recovery_agent.agent import run_recovery_agent
+
+        state = build_user_state(profile_doc={"sleep_hours": 7, "sleep_quality": "average"})
+        result = run_recovery_agent(state, parent_trace=start_workflow(), exercise_results=[])
+        activity = result["recommendations"][0]
+        self.assertEqual(activity["id"], "maintain_sleep_timing")
+        self.assertIn("7 hours", activity["why"])
+        self.assertIn("general maintenance", activity["why"])
+        self.assertIn("no change to sleep duration", activity["action"].lower())
+        self.assertFalse(result["findings"]["constraint"]["limit_progression"])
 
 
 if __name__ == "__main__":

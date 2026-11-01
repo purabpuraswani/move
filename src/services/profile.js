@@ -123,3 +123,21 @@ export async function fetchProfileSummary() {
     updatedAt: data.updatedAt ?? null,
   };
 }
+
+export async function fetchEditableProfile() {
+  const response = await apiFetch(`${getApiUrl()}/api/profile/edit`, { headers: authHeader() });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.detail || "Your profile could not be loaded.");
+  return data;
+}
+
+export async function updateProfileFields(fields) {
+  const response = await apiFetch(`${getApiUrl()}/api/profile/edit`, {
+    method: "PATCH",
+    headers: { ...authHeader(), "Content-Type": "application/json" },
+    body: JSON.stringify(fields),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.detail || "Your profile could not be updated.");
+  return data;
+}

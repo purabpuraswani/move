@@ -6,9 +6,8 @@
  * file once for its side effect (done in App.jsx, before any panel needs
  * to look one up — not imported from this file, to avoid a circular
  * import: content.js itself imports registerMovementDemo from here): the
- * three baseline assessments — assessment-shoulder-raise,
- * assessment-chair-sit-to-stand, assessment-one-leg-stand — wired into
- * ShoulderPanel.jsx / FtsstPanel.jsx / BalancePanel.jsx's idle state, before
+ * two baseline assessments — assessment-shoulder-raise and
+ * assessment-one-leg-stand — wired into their panels before
  * camera activation; and one demonstration per Exercise Library entry
  * (backend/exercise_library/data.py's ten exercises, matched by
  * demonstration_id). As with the exercise content itself, this is authored

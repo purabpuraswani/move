@@ -19,9 +19,12 @@ content is stored as recorded; only structure and privacy are policed.
 
 from datetime import datetime
 
-# The three tests defined by the assessment protocol. A payload naming anything
-# else is rejected rather than stored for later interpretation.
-TEST_IDS = ("shoulder", "ftsst", "balance")
+# These are the only assessments required or accepted in a new session.
+# Keep this contract explicit instead of deriving it from historical records:
+# old stored sessions may still contain `ftsst`, but new submissions never
+# need that retired measurement.
+ACTIVE_TEST_IDS = ("shoulder", "balance")
+TEST_IDS = ACTIVE_TEST_IDS
 
 # Must match TEST_STATUS in src/assessment/config/protocol.js.
 TEST_STATUSES = ("completed", "invalid", "skipped", "not_started")
@@ -435,12 +438,12 @@ def validate_assessment_payload(raw) -> dict:
 
     raw_tests = _require_mapping(payload.get("tests"), "tests")
 
-    missing = [test_id for test_id in TEST_IDS if test_id not in raw_tests]
+    missing = [test_id for test_id in ACTIVE_TEST_IDS if test_id not in raw_tests]
 
     if missing:
         _fail(f"tests is missing: {', '.join(missing)}")
 
-    extra = set(raw_tests) - set(TEST_IDS)
+    extra = set(raw_tests) - set(ACTIVE_TEST_IDS)
 
     if extra:
         _fail(f"tests contains unknown test ids: {', '.join(sorted(extra))}")
@@ -449,7 +452,7 @@ def validate_assessment_payload(raw) -> dict:
 
     tests = {
         test_id: _validate_test(test_id, raw_tests[test_id], budget)
-        for test_id in TEST_IDS
+        for test_id in ACTIVE_TEST_IDS
     }
 
     started_at = _parse_timestamp(payload.get("startedAt"), "startedAt", required=True)

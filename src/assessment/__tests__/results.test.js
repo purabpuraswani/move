@@ -19,8 +19,10 @@ import {
   toStoredPayload,
   ASSESSMENT_SUMMARY_STATUS,
   computeSummaryStatus,
+  assessmentCompletion,
+  savedAssessmentMatches,
 } from "../utils/results.js";
-import { PROTOCOL_VERSION, TEST_STATUS, REASON } from "../config/protocol.js";
+import { PROTOCOL_VERSION, TEST_STATUS, REASON, TEST_ORDER } from "../config/protocol.js";
 
 test("a not-started test has no measurements and no reasons", () => {
   const result = notStartedResult("shoulder");
@@ -74,14 +76,14 @@ test("a valid test is the only thing that counts as usable", () => {
 
 test("invalidReasons is copied, so a caller cannot mutate a stored result", () => {
   const reasons = [REASON.TIMEOUT];
-  const result = measuredResult("ftsst", { valid: false, measurements: {}, quality: {}, invalidReasons: reasons });
+  const result = measuredResult("balance", { valid: false, measurements: {}, quality: {}, invalidReasons: reasons });
 
   reasons.push(REASON.POSE_LOST);
 
   assert.deepEqual(result.invalidReasons, [REASON.TIMEOUT]);
 });
 
-test("a new session starts with all three tests not started", () => {
+test("a new session starts with only the two intended tests not started", () => {
   const session = createSession();
 
   assert.equal(session.protocolVersion, PROTOCOL_VERSION);
@@ -89,6 +91,7 @@ test("a new session starts with all three tests not started", () => {
   assert.ok(session.startedAt);
   assert.equal(session.completedAt, null);
   assert.deepEqual(Object.keys(session.tests).sort(), [...TEST_IDS].sort());
+  assert.deepEqual(TEST_ORDER, ["shoulder", "balance"]);
 
   for (const testId of TEST_IDS) {
     assert.equal(session.tests[testId].status, TEST_STATUS.NOT_STARTED);
@@ -101,15 +104,50 @@ test("session ids are unique", () => {
   assert.equal(ids.size, 3);
 });
 
+test("assessment completion is based only on the two active saved tests", () => {
+  const saved = {
+    tests: {
+      shoulder: { status: TEST_STATUS.COMPLETED },
+      balance: { status: TEST_STATUS.COMPLETED },
+      ftsst: { status: TEST_STATUS.COMPLETED },
+    },
+  };
+  assert.deepEqual(assessmentCompletion(saved), {
+    complete: true,
+    completed: ["shoulder", "balance"],
+    missing: [],
+    completedCount: 2,
+    total: 2,
+  });
+  assert.equal(assessmentCompletion({ tests: { shoulder: { status: "completed" } } }).complete, false);
+});
+
+test("save confirmation must match session, both statuses, and actual measurements", () => {
+  const payload = {
+    sessionId: "session-1",
+    tests: {
+      shoulder: { status: "completed", measurements: { right: { value: 140 } } },
+      balance: { status: "completed", measurements: { right: { seconds: 30 } } },
+    },
+  };
+  assert.equal(savedAssessmentMatches(payload, structuredClone(payload)), true);
+  assert.equal(savedAssessmentMatches(payload, { ...structuredClone(payload), sessionId: "other" }), false);
+  assert.equal(savedAssessmentMatches(payload, {
+    ...structuredClone(payload),
+    tests: { ...payload.tests, balance: { status: "not_started", measurements: null } },
+  }), false);
+});
+
 test("withTestResult replaces one test without touching the others", () => {
   const session = createSession();
-  const updated = withTestResult(session, "ftsst", skippedResult("ftsst"));
+  const updated = withTestResult(session, "balance", skippedResult("balance"));
 
-  assert.equal(updated.tests.ftsst.status, TEST_STATUS.SKIPPED);
+  assert.equal(updated.tests.balance.status, TEST_STATUS.SKIPPED);
   assert.equal(updated.tests.shoulder.status, TEST_STATUS.NOT_STARTED);
+  assert.equal("ftsst" in updated.tests, false);
 
   // The original object is untouched.
-  assert.equal(session.tests.ftsst.status, TEST_STATUS.NOT_STARTED);
+  assert.equal(session.tests.balance.status, TEST_STATUS.NOT_STARTED);
 });
 
 test("an unknown test id is rejected rather than silently stored", () => {
@@ -126,22 +164,20 @@ test("the session summary counts statuses and does not combine measurements", ()
   );
   session = withTestResult(
     session,
-    "ftsst",
-    measuredResult("ftsst", {
+    "balance",
+    measuredResult("balance", {
       valid: false,
       measurements: { value: 10 },
       quality: {},
       invalidReasons: [REASON.INSUFFICIENT_REPETITIONS],
     })
   );
-  session = withTestResult(session, "balance", skippedResult("balance"));
-
   const finalised = finaliseSession(session);
 
   assert.deepEqual(finalised.summary, {
     testsCompleted: 1,
     testsInvalid: 1,
-    testsSkipped: 1,
+    testsSkipped: 0,
     testsNotStarted: 0,
     hasAnyUsableResult: true,
     status: "PARTIAL",
@@ -166,7 +202,7 @@ test("a session where everything was skipped has no usable result", () => {
   const finalised = finaliseSession(session);
 
   assert.equal(finalised.summary.hasAnyUsableResult, false);
-  assert.equal(finalised.summary.testsSkipped, 3);
+  assert.equal(finalised.summary.testsSkipped, 2);
   assert.equal(finalised.summary.testsCompleted, 0);
 });
 
@@ -195,7 +231,7 @@ test("the stored payload keeps statuses and measurements but no pose data", () =
   assert.equal(payload.tests.shoulder.measurements.left.finalElevationDeg, 150);
   assert.equal(payload.tests.balance.status, TEST_STATUS.SKIPPED);
   assert.equal(payload.tests.balance.measurements, null);
-  assert.equal(payload.tests.ftsst.status, TEST_STATUS.NOT_STARTED);
+  assert.equal("ftsst" in payload.tests, false);
 
   const serialised = JSON.stringify(payload);
 
@@ -237,71 +273,44 @@ test("the stored payload contains no array long enough to be a pose sequence", (
   assert.ok(longestArray(payload) <= 20, "a stored array is long enough to be raw pose data");
 });
 
-test("the stored payload keeps setup metadata such as chair seat height", () => {
-  // Without the seat height, two sit-to-stand times are not comparable, so it
-  // has to survive into storage alongside the result it affects.
-  const result = measuredResult("ftsst", {
-    valid: true,
-    measurements: { completionTimeMs: 9400, repetitionsDetected: 5 },
-    quality: { framesSeen: 300 },
-  });
-
-  result.setup = {
-    chairSeatHeightCm: 45,
-    chairSeatHeightPlausible: true,
-    measuredSide: "right",
-    cameraView: "side",
-    warnings: [],
-  };
-
-  const payload = toStoredPayload(finaliseSession(withTestResult(createSession(), "ftsst", result)));
-
-  assert.equal(payload.tests.ftsst.setup.chairSeatHeightCm, 45);
-  assert.equal(payload.tests.ftsst.setup.measuredSide, "right");
-
-  // Tests that collected no setup metadata do not gain an empty object.
-  assert.equal("setup" in payload.tests.shoulder, false);
+test("summary status uses the two-assessment sequence", () => {
+  assert.equal(TEST_IDS.length, 2);
+  assert.equal(computeSummaryStatus([TEST_STATUS.NOT_STARTED, TEST_STATUS.NOT_STARTED]), ASSESSMENT_SUMMARY_STATUS.NONE_COMPLETED);
+  assert.equal(computeSummaryStatus([TEST_STATUS.COMPLETED, TEST_STATUS.NOT_STARTED]), ASSESSMENT_SUMMARY_STATUS.PARTIAL);
+  assert.equal(computeSummaryStatus([TEST_STATUS.COMPLETED, TEST_STATUS.INVALID]), ASSESSMENT_SUMMARY_STATUS.PARTIAL);
+  assert.equal(computeSummaryStatus([TEST_STATUS.COMPLETED, TEST_STATUS.COMPLETED]), ASSESSMENT_SUMMARY_STATUS.COMPLETE);
+  assert.equal(computeSummaryStatus([TEST_STATUS.INVALID, TEST_STATUS.SKIPPED]), ASSESSMENT_SUMMARY_STATUS.INSUFFICIENT_DATA);
 });
 
 test("summary status distinguishes NONE_COMPLETED, PARTIAL, COMPLETE, and INSUFFICIENT_DATA", () => {
   // NONE_COMPLETED
   assert.equal(
-    computeSummaryStatus([TEST_STATUS.NOT_STARTED, TEST_STATUS.NOT_STARTED, TEST_STATUS.NOT_STARTED]),
-    ASSESSMENT_SUMMARY_STATUS.NONE_COMPLETED
-  );
-  assert.equal(
-    computeSummaryStatus([TEST_STATUS.SKIPPED, TEST_STATUS.SKIPPED, TEST_STATUS.SKIPPED]),
+    computeSummaryStatus([TEST_STATUS.SKIPPED, TEST_STATUS.SKIPPED]),
     ASSESSMENT_SUMMARY_STATUS.NONE_COMPLETED
   );
 
   // PARTIAL (1 or 2 completed)
   assert.equal(
-    computeSummaryStatus([TEST_STATUS.COMPLETED, TEST_STATUS.NOT_STARTED, TEST_STATUS.NOT_STARTED]),
+    computeSummaryStatus([TEST_STATUS.COMPLETED, TEST_STATUS.NOT_STARTED]),
     ASSESSMENT_SUMMARY_STATUS.PARTIAL
   );
   assert.equal(
-    computeSummaryStatus([TEST_STATUS.COMPLETED, TEST_STATUS.INVALID, TEST_STATUS.SKIPPED]),
+    computeSummaryStatus([TEST_STATUS.COMPLETED, TEST_STATUS.INVALID]),
     ASSESSMENT_SUMMARY_STATUS.PARTIAL
   );
   assert.equal(
-    computeSummaryStatus([TEST_STATUS.COMPLETED, TEST_STATUS.COMPLETED, TEST_STATUS.SKIPPED]),
-    ASSESSMENT_SUMMARY_STATUS.PARTIAL
-  );
-
-  // COMPLETE (all 3 completed)
-  assert.equal(
-    computeSummaryStatus([TEST_STATUS.COMPLETED, TEST_STATUS.COMPLETED, TEST_STATUS.COMPLETED]),
+    computeSummaryStatus([TEST_STATUS.COMPLETED, TEST_STATUS.COMPLETED]),
     ASSESSMENT_SUMMARY_STATUS.COMPLETE
   );
 
   // INSUFFICIENT_DATA (0 completed, >=1 invalid)
   assert.equal(
-    computeSummaryStatus([TEST_STATUS.INVALID, TEST_STATUS.SKIPPED, TEST_STATUS.NOT_STARTED]),
+    computeSummaryStatus([TEST_STATUS.INVALID, TEST_STATUS.SKIPPED]),
     ASSESSMENT_SUMMARY_STATUS.INSUFFICIENT_DATA
   );
 });
 
-test("CRITICAL: Assessment 1 valid and Assessment 2 failed preserves Assessment 1 and marks status PARTIAL", () => {
+test("both new assessments are included in aggregation and FTSST is absent", () => {
   let session = createSession();
 
   // 1. Shoulder completes validly
@@ -316,21 +325,22 @@ test("CRITICAL: Assessment 1 valid and Assessment 2 failed preserves Assessment 
   assert.equal(session.summary.status, ASSESSMENT_SUMMARY_STATUS.PARTIAL);
   assert.equal(session.summary.testsCompleted, 1);
 
-  // 2. FTSST fails (invalid attempt)
-  const ftsstResult = measuredResult("ftsst", {
+  // 2. One-leg stand fails (invalid attempt)
+  const balanceResult = measuredResult("balance", {
     valid: false,
     measurements: null,
     quality: { fps: 28, usableFrameRatio: 0.4 },
     invalidReasons: [REASON.INSUFFICIENT_REPETITIONS],
   });
-  session = withTestResult(session, "ftsst", ftsstResult);
+  session = withTestResult(session, "balance", balanceResult);
 
   // Assert Shoulder remains VALID and untouched
   assert.equal(session.tests.shoulder.status, TEST_STATUS.COMPLETED);
   assert.equal(session.tests.shoulder.measurements.left.finalElevationDeg, 140);
 
-  // Assert FTSST is recorded as INVALID
-  assert.equal(session.tests.ftsst.status, TEST_STATUS.INVALID);
+  // Assert One-Leg Stand is recorded as INVALID and no FTSST was created.
+  assert.equal(session.tests.balance.status, TEST_STATUS.INVALID);
+  assert.equal("ftsst" in session.tests, false);
 
   // Assert Summary is PARTIAL, NOT wiped or set to NO DATA
   assert.equal(session.summary.status, ASSESSMENT_SUMMARY_STATUS.PARTIAL);

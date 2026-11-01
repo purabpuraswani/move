@@ -3,15 +3,15 @@
  * assessment test id.
  *
  * The files live in `public/assessment-videos/` and are served statically.
- * There are three of them, and they show the three baseline movements, so
+ * There are two active assessment videos, so
  * they cover:
  *
- *   - the three assessment checks, by both their test id (shoulder,
- *     ftsst, balance) and their demonstration id
+ *   - the two assessment checks, by both their test id (shoulder,
+ *     balance) and their demonstration id
  *     (assessment-shoulder-raise, …), since the assessment flow has
  *     the latter to hand; and
- *   - the three library exercises that are the same movement
- *     (standing-shoulder-raise, chair-sit-to-stand,
+ *   - the library exercises that are the same movement
+ *     (standing-shoulder-raise,
  *     supported-single-leg-stand).
  *
  * Every other exercise has NO instructor video, and `getExerciseVideo`
@@ -35,11 +35,7 @@ export const INSTRUCTOR_VIDEOS = Object.freeze([
     caption: "Raise both arms out to the side, as far as is comfortable, then lower them under control.",
     movements: ["shoulder", "assessment-shoulder-raise", "standing-shoulder-raise"],
   },
-  {
-    file: "sit-to-stand.mp4",
-    caption: "Stand up fully from the chair and sit back down under control, without pushing off if you can.",
-    movements: ["ftsst", "assessment-chair-sit-to-stand", "chair-sit-to-stand"],
-  },
+
   {
     file: "one-leg-stand.mp4",
     caption: "Stand on one leg beside a support, lifting the other foot clear of the floor.",

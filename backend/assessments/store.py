@@ -18,9 +18,9 @@ records of one session.
 
 from datetime import datetime, timezone
 
-from bson import ObjectId
-from bson.errors import InvalidId
-from pymongo import ASCENDING, DESCENDING
+from database import ObjectId
+from database import InvalidId
+from database import ASCENDING, DESCENDING
 
 from database import assessments_collection
 
@@ -34,7 +34,6 @@ LIST_PROJECTION = {
     "created_at": 1,
     "summary": 1,
     "tests.shoulder.status": 1,
-    "tests.ftsst.status": 1,
     "tests.balance.status": 1,
 }
 
@@ -126,6 +125,36 @@ def latest_assessment(user_id: str):
     )
 
 
+def valid_assessment_history(user_id: str, limit: int = MAX_HISTORY_LIMIT) -> list:
+    """Return whole sessions with at least one usable active measurement.
+
+    Validity is determined from the same extractors used by Need Assessment
+    and Progress, so a status-only or legacy FTSST record cannot become the
+    current movement assessment. Each returned item remains one intact
+    session; values from different sessions are never merged.
+    """
+    from progress_agent.comparison import (
+        extract_balance_metric,
+        extract_shoulder_metric,
+    )
+
+    documents = list(
+        assessments_collection.find({"user_id": user_id})
+        .sort("started_at", DESCENDING)
+        .limit(max(1, min(limit, MAX_HISTORY_LIMIT)))
+    )
+    return [
+        document for document in documents
+        if extract_shoulder_metric(document.get("tests") or {}) is not None
+        or extract_balance_metric(document.get("tests") or {}) is not None
+    ]
+
+
+def latest_valid_assessment(user_id: str):
+    history = valid_assessment_history(user_id)
+    return history[0] if history else None
+
+
 def baseline_assessment(user_id: str):
     """The user's FIRST completed session — their immutable baseline.
 
@@ -140,10 +169,8 @@ def baseline_assessment(user_id: str):
     actual measured values, not session headers.
     """
 
-    return assessments_collection.find_one(
-        {"user_id": user_id},
-        sort=[("started_at", ASCENDING)],
-    )
+    valid = valid_assessment_history(user_id)
+    return valid[-1] if valid else None
 
 
 def previous_assessment(user_id: str):
@@ -156,13 +183,21 @@ def previous_assessment(user_id: str):
     NOT_ENOUGH_DATA rather than comparing a session against itself.
     """
 
-    sessions = list(
+    valid = valid_assessment_history(user_id)
+    return valid[1] if len(valid) > 1 else None
+
+
+def list_assessments_with_measurements(
+    user_id: str, limit: int = DEFAULT_HISTORY_LIMIT, skip: int = 0
+) -> list:
+    """The user's full session records for the Progress view, newest first."""
+    cursor = (
         assessments_collection.find({"user_id": user_id})
         .sort("started_at", DESCENDING)
-        .limit(2)
+        .skip(max(0, skip))
+        .limit(max(1, min(limit, MAX_HISTORY_LIMIT)))
     )
-
-    return sessions[1] if len(sessions) > 1 else None
+    return list(cursor)
 
 
 def list_assessments(user_id: str, limit: int = DEFAULT_HISTORY_LIMIT, skip: int = 0) -> list:
@@ -240,8 +275,34 @@ def _isoformat(value):
     return str(value)
 
 
-def _serialise_summary(summary) -> dict:
+def _serialise_summary(summary, tests=None) -> dict:
     summary = summary or {}
+
+    # Legacy documents may have a 3-test summary. Recompute from the two
+    # active test records so a retired FTSST result cannot mark a current
+    # session complete or inflate its progress count.
+    if tests is not None:
+        active_statuses = [
+            (tests.get(test_id) or {}).get("status", "not_started")
+            for test_id in ("shoulder", "balance")
+        ]
+        completed = active_statuses.count("completed")
+        invalid = active_statuses.count("invalid")
+        status = (
+            "COMPLETE" if completed == 2 else
+            "PARTIAL" if completed else
+            "INSUFFICIENT_DATA" if invalid else
+            "NONE_COMPLETED"
+        )
+
+        return {
+            "testsCompleted": completed,
+            "testsInvalid": invalid,
+            "testsSkipped": active_statuses.count("skipped"),
+            "testsNotStarted": active_statuses.count("not_started"),
+            "hasAnyUsableResult": completed > 0,
+            "status": status,
+        }
 
     return {
         "testsCompleted": summary.get("tests_completed", 0),
@@ -282,10 +343,10 @@ def serialise_assessment(document: dict) -> dict:
         "startedAt": _isoformat(document.get("started_at")),
         "completedAt": _isoformat(document.get("completed_at")),
         "createdAt": _isoformat(document.get("created_at")),
-        "summary": _serialise_summary(document.get("summary")),
+        "summary": _serialise_summary(document.get("summary"), tests),
         "tests": {
             test_id: _serialise_test(tests.get(test_id))
-            for test_id in ("shoulder", "ftsst", "balance")
+            for test_id in ("shoulder", "balance")
         },
     }
 
@@ -301,9 +362,9 @@ def serialise_assessment_listing(document: dict) -> dict:
         "protocolVersion": document.get("protocol_version"),
         "startedAt": _isoformat(document.get("started_at")),
         "completedAt": _isoformat(document.get("completed_at")),
-        "summary": _serialise_summary(document.get("summary")),
+        "summary": _serialise_summary(document.get("summary"), tests),
         "statuses": {
             test_id: (tests.get(test_id) or {}).get("status", "not_started")
-            for test_id in ("shoulder", "ftsst", "balance")
+            for test_id in ("shoulder", "balance")
         },
     }

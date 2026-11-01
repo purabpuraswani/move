@@ -131,7 +131,7 @@ class NoteTests(unittest.TestCase):
 
         note = next(note for note in result["notes"] if "treated as absent" in note)
 
-        self.assertIn("Standing up from a chair five times", note)
+        self.assertNotIn("Standing up from a chair five times", note)
         self.assertIn("Standing on one leg with eyes open", note)
 
     def test_a_single_source_is_flagged_as_general(self):

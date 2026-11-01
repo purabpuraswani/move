@@ -57,7 +57,10 @@ def _needs(mobility="LOW", stability="LOW", functional_movement="LOW", behaviour
 
 
 def _state(*, profile_doc=None, **need_kwargs):
-    state = build_user_state(profile_doc=profile_doc or {})
+    profile = dict(profile_doc or {})
+    profile.setdefault("food_allergies", [])
+    profile.setdefault("dietary_restrictions", [])
+    state = build_user_state(profile_doc=profile)
     state["current_needs"] = {"available": True, "reason": None, "data": _needs(**need_kwargs)}
     return state
 
@@ -216,7 +219,7 @@ class NutritionClosedLoopTests(unittest.TestCase):
             progress_tool_client=progress_client,
             progress_trigger={"reason": "periodic check"},
             baseline_assessment=_balance_doc(40, "2026-01-01T00:00:00Z"),
-            current_assessment=_balance_doc(40, "2026-09-05T00:00:00Z"),
+            current_assessment=_balance_doc(40, "2026-10-15T00:00:00Z"),
             **_clients("nonutr"),
         )
         progress_result = next(r for r in result["agent_results"] if r["agent"] == "progress")
@@ -243,7 +246,7 @@ class LowNeedDoesNotBlockProgressTriggeredReviewTests(unittest.TestCase):
             # A real, computed IMPROVED direction — never fabricated —
             # is what makes Progress recommend PROGRESS (-> physio) here.
             baseline_assessment=_balance_doc(40, "2026-01-01T00:00:00Z"),
-            current_assessment=_balance_doc(60, "2026-09-05T00:00:00Z"),
+            current_assessment=_balance_doc(60, "2026-10-15T00:00:00Z"),
             exercise_results=[],
             **_clients("lowneed"),
         )

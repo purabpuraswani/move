@@ -1,5 +1,9 @@
 # MoveWell-AI — Phase 6 Deliverable Report (Final Implementation Phase)
 
+> Historical Phase 6 report. Chair Sit-to-Stand was present in that phase's
+> catalog snapshot; it has since been retired from all active assessment and
+> recommendation paths. The historical details below remain for audit context.
+
 This is the final implementation phase of MoveWell-AI. No Phase 7 has
 been created, and none is proposed below.
 

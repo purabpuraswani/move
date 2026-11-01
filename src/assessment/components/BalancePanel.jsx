@@ -102,7 +102,7 @@ export default function BalancePanel({
   return (
     <AssessmentFlow
       testType="balance"
-      stepLabel={`Assessment 3 of 3 · ${supportLabel === "left" ? "Left" : "Right"} leg`}
+      stepLabel={`Assessment 2 of 2 · ${supportLabel === "left" ? "Left" : "Right"} leg`}
       title={`One-Leg Stand (${supportLabel === "left" ? "Left" : "Right"} leg)`}
       demoId="assessment-one-leg-stand"
       safetyNote="Only do this if you feel safe. Stand next to a wall, worktop, or sturdy chair so you have something to hold. You can skip this check entirely and the rest of your results are unaffected."

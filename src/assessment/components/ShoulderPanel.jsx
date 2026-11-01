@@ -100,10 +100,9 @@ export default function ShoulderPanel({ engine, onComplete, onSkip, onCameraStat
   return (
     <AssessmentFlow
       testType="shoulder"
-      stepLabel="Check 1 of 3"
       title="Shoulder movement"
-      stepLabel="Assessment 1 of 3"
-      title="Hand / Shoulder Raise"
+      stepLabel="Assessment 1 of 2"
+      title="Shoulder movement"
       demoId="assessment-shoulder-raise"
       description={`Stand facing the camera with your whole body in the frame, arms relaxed at your sides. Stand still for a moment first, then raise both arms out to the side and lower them again, ${SHOULDER.requiredRepetitions} times.`}
       instructionsList={[

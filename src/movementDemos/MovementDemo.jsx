@@ -10,8 +10,8 @@
  * registry.js) once a healthcare/physio reviewer has signed off on the
  * technique each one shows, per the project's safety principle.
  *
- * Extending this component to draw a sit-to-stand transition or a
- * single-leg stance is later-phase work. The interface it should keep
+ * Extending this component to draw another movement is later-phase work.
+ * The interface it should keep
  * satisfying is the one in schema.js: read `phases`, render whatever a
  * phase's `pose` describes, advance on `holdSeconds`. Adding a new pose
  * shape means adding a new small drawing function here, not a new

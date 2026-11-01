@@ -13,7 +13,7 @@ conditions that judgement cannot be made honestly.
 """
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
-from pymongo.errors import DuplicateKeyError, PyMongoError
+from database import DuplicateKeyError, StorageError
 
 from assessments.schema import AssessmentValidationError, validate_assessment_payload
 from assessments.store import (
@@ -83,7 +83,7 @@ def create_assessment(
         try:
             existing = get_assessment_by_session(user_id, document["session_id"])
 
-        except (AssessmentNotFoundError, PyMongoError):
+        except (AssessmentNotFoundError, StorageError):
             raise _database_error() from None
 
         return {
@@ -91,7 +91,7 @@ def create_assessment(
             "assessment": serialise_assessment(existing)
         }
 
-    except PyMongoError:
+    except StorageError:
         raise _database_error() from None
 
     return {
@@ -115,7 +115,7 @@ def read_latest_assessment(current_user: dict = Depends(get_current_user)):
         document = latest_assessment(user_id)
         total = count_assessments(user_id)
 
-    except PyMongoError:
+    except StorageError:
         raise _database_error() from None
 
     return {
@@ -138,7 +138,7 @@ def read_assessment_history(
         documents = list_assessments(user_id, limit=limit, skip=skip)
         total = count_assessments(user_id)
 
-    except PyMongoError:
+    except StorageError:
         raise _database_error() from None
 
     return {
@@ -172,7 +172,7 @@ def read_assessment(
             detail=str(error)
         ) from None
 
-    except PyMongoError:
+    except StorageError:
         raise _database_error() from None
 
     return {"assessment": serialise_assessment(document)}

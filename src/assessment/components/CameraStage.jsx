@@ -44,7 +44,7 @@ export default function CameraStage({
   const canvasRef = useRef(null);
   const badgeUpdatedRef = useRef(0);
 
-  const [tracking, setTracking] = useState({ visible: 0, fps: null });
+  const [tracking, setTracking] = useState({ visible: 0, fps: null, width: 0, height: 0 });
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -81,7 +81,7 @@ export default function CameraStage({
 
       if (frame.timestamp - badgeUpdatedRef.current >= BADGE_INTERVAL_MS) {
         badgeUpdatedRef.current = frame.timestamp;
-        setTracking({ visible, fps: getFps() });
+        setTracking({ visible, fps: getFps(), width, height });
       }
     };
 
@@ -115,7 +115,10 @@ export default function CameraStage({
 
   return (
     <div className={`assess-camera ${visible ? "" : "assess-camera--hidden"}`}>
-      <div className="assess-camera__frame">
+      <div
+        className="assess-camera__frame"
+        style={tracking.width && tracking.height ? { aspectRatio: `${tracking.width} / ${tracking.height}` } : undefined}
+      >
         <video
           ref={videoRef}
           className="assess-camera__video"
@@ -134,7 +137,7 @@ export default function CameraStage({
               preserveAspectRatio="xMidYMid meet"
             >
               {outline === "side" ? (
-                // Side orientation outline for chair sit-to-stand
+                // Side orientation outline for future assessment types.
                 <g stroke="rgba(255, 255, 255, 0.45)" strokeWidth="2.5" fill="none" strokeDasharray="6 6">
                   {/* Head */}
                   <circle cx="200" cy="70" r="32" />

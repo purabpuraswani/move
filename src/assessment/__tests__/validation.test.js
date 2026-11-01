@@ -10,14 +10,13 @@ import {
   QualityTracker,
   checkRequiredKeypoints,
   checkFrontFacing,
-  checkSideFacing,
   checkTrunkLean,
   checkHipShift,
   combineChecks,
 } from "../utils/validation.js";
-import { POSE, REASON, SHOULDER, FTSST } from "../config/protocol.js";
+import { POSE, REASON, SHOULDER } from "../config/protocol.js";
 import { getKeypoint, getKeypoints, meanScore, toFrame, otherSide } from "../utils/keypoints.js";
-import { frontFacingBase, sideFacingBase, makeFrame } from "../fixtures/syntheticPoses.js";
+import { frontFacingBase, makeFrame } from "../fixtures/syntheticPoses.js";
 
 function frontFrame(overrides = {}) {
   return makeFrame(0, { ...frontFacingBase(), ...overrides });
@@ -114,55 +113,6 @@ test("checkRequiredKeypoints handles a frame with no keypoints at all", () => {
   assert.equal(check.usable, false);
   assert.deepEqual(check.reasons, [REASON.KEYPOINTS_MISSING]);
   assert.equal(check.points, null);
-});
-
-test("a front-facing torso passes the front check and fails the side check", () => {
-  const points = frontFrame().keypoints;
-
-  const front = checkFrontFacing(points, SHOULDER.minFrontFacingRatio);
-
-  assert.equal(front.usable, true);
-  assert.ok(front.ratio > SHOULDER.minFrontFacingRatio);
-
-  const side = checkSideFacing(points, FTSST.maxSideFacingRatio);
-
-  assert.equal(side.usable, false);
-  assert.deepEqual(side.reasons, [REASON.NOT_SIDE_FACING]);
-});
-
-test("a side-facing torso passes the side check and fails the front check", () => {
-  const points = makeFrame(0, sideFacingBase(90)).keypoints;
-
-  const side = checkSideFacing(points, FTSST.maxSideFacingRatio);
-
-  assert.equal(side.usable, true);
-  assert.ok(side.ratio < FTSST.maxSideFacingRatio);
-
-  const front = checkFrontFacing(points, SHOULDER.minFrontFacingRatio);
-
-  assert.equal(front.usable, false);
-  assert.deepEqual(front.reasons, [REASON.NOT_FRONT_FACING]);
-});
-
-test("an unmeasurable orientation is skipped by the side check, not failed", () => {
-  // Zero torso length: the ratio cannot be computed at all.
-  const collapsed = {
-    left_shoulder: { x: 10, y: 10 },
-    right_shoulder: { x: 10, y: 10 },
-    left_hip: { x: 10, y: 10 },
-    right_hip: { x: 10, y: 10 },
-  };
-
-  const side = checkSideFacing(collapsed, FTSST.maxSideFacingRatio);
-
-  assert.equal(side.usable, true);
-  assert.equal(side.ratio, null);
-
-  // The front check is stricter, because tests 1 and 3 depend on it.
-  const front = checkFrontFacing(collapsed, SHOULDER.minFrontFacingRatio);
-
-  assert.equal(front.usable, false);
-  assert.deepEqual(front.reasons, [REASON.KEYPOINTS_MISSING]);
 });
 
 test("trunk lean is measured from mid-hip to mid-shoulder", () => {

@@ -13,7 +13,7 @@
 
 import { PROTOCOL_VERSION, TEST_STATUS } from "../config/protocol.js";
 
-export const TEST_IDS = ["shoulder", "ftsst", "balance"];
+export const TEST_IDS = ["shoulder", "balance"];
 
 /** A test that has not been attempted. */
 export function notStartedResult(testId) {
@@ -73,19 +73,8 @@ export function measuredResult(testId, { valid, measurements, quality, invalidRe
 }
 
 /** True only for a genuinely completed test. */
-/** True only for a genuinely completed test or valid assessment attempt. */
 export function isUsableResult(result) {
   return Boolean(result) && result.status === TEST_STATUS.COMPLETED;
-  if (!result) return false;
-  if (result.status === TEST_STATUS.COMPLETED) return true;
-  if (
-    result.status === TEST_STATUS.INVALID ||
-    result.status === TEST_STATUS.SKIPPED ||
-    result.status === TEST_STATUS.NOT_STARTED
-  ) {
-    return false;
-  }
-  return Boolean(result.valid) && (!result.invalidReasons || result.invalidReasons.length === 0);
 }
 
 /** Generate a session id without needing a dependency. */
@@ -137,11 +126,36 @@ export function buildSessionSummary(tests = {}) {
   };
 }
 
-/** A fresh session with all three tests marked not started. */
+/** One definition of completion shared by assessment and plan readiness. */
+export function assessmentCompletion(assessmentOrTests = {}) {
+  const tests = assessmentOrTests?.tests ?? assessmentOrTests ?? {};
+  const completed = TEST_IDS.filter((testId) => tests[testId]?.status === TEST_STATUS.COMPLETED);
+  const missing = TEST_IDS.filter((testId) => tests[testId]?.status !== TEST_STATUS.COMPLETED);
+  return {
+    complete: missing.length === 0,
+    completed,
+    missing,
+    completedCount: completed.length,
+    total: TEST_IDS.length,
+  };
+}
+
+/** Verify the server read back this exact session and its two active results. */
+export function savedAssessmentMatches(payload, saved) {
+  if (!payload || !saved || saved.sessionId !== payload.sessionId) return false;
+  return TEST_IDS.every((testId) => {
+    const expected = payload.tests?.[testId];
+    const actual = saved.tests?.[testId];
+    return Boolean(expected && actual)
+      && expected.status === actual.status
+      && JSON.stringify(expected.measurements) === JSON.stringify(actual.measurements);
+  });
+}
+
+/** A fresh session with both tests marked not started. */
 export function createSession({ sessionId = createSessionId(), startedAt = new Date().toISOString() } = {}) {
   const tests = {
     shoulder: notStartedResult("shoulder"),
-    ftsst: notStartedResult("ftsst"),
     balance: notStartedResult("balance"),
   };
 
@@ -150,11 +164,6 @@ export function createSession({ sessionId = createSessionId(), startedAt = new D
     protocolVersion: PROTOCOL_VERSION,
     startedAt,
     completedAt: null,
-    tests: {
-      shoulder: notStartedResult("shoulder"),
-      ftsst: notStartedResult("ftsst"),
-      balance: notStartedResult("balance"),
-    },
     summary: buildSessionSummary(tests),
     tests,
   };
@@ -173,7 +182,6 @@ export function withTestResult(session, testId, result) {
 
   return {
     ...session,
-    tests: { ...session.tests, [testId]: result },
     summary: buildSessionSummary(updatedTests),
     tests: updatedTests,
   };
@@ -182,22 +190,13 @@ export function withTestResult(session, testId, result) {
 /**
  * Close the session and add a summary of what it does and does not contain.
  * The summary counts statuses; it does not aggregate measurements, because
- * combining these three measurements into one number would be inventing a
+ * combining these measurements into one number would be inventing a
  * score.
  */
 export function finaliseSession(session, { completedAt = new Date().toISOString() } = {}) {
-  const statuses = TEST_IDS.map((testId) => session.tests[testId].status);
-
   return {
     ...session,
     completedAt,
-    summary: {
-      testsCompleted: statuses.filter((status) => status === TEST_STATUS.COMPLETED).length,
-      testsInvalid: statuses.filter((status) => status === TEST_STATUS.INVALID).length,
-      testsSkipped: statuses.filter((status) => status === TEST_STATUS.SKIPPED).length,
-      testsNotStarted: statuses.filter((status) => status === TEST_STATUS.NOT_STARTED).length,
-      hasAnyUsableResult: statuses.includes(TEST_STATUS.COMPLETED),
-    },
     summary: buildSessionSummary(session.tests),
   };
 }
@@ -284,9 +283,7 @@ export function toStoredPayload(session) {
         attempts: result.attempts ?? 0,
       };
 
-      // Setup metadata, where a test collected any. Chair seat height belongs
-      // with the result it affects: without it, two sit-to-stand times are not
-      // comparable at all.
+      // Setup metadata is kept with the result it affects.
       if (result.setup) accumulator[testId].setup = onlyMeasurements(result.setup);
 
       return accumulator;

@@ -90,6 +90,14 @@ def build_nutrition_evidence_view(user_state: dict, *, food_log_entries: list = 
             state=KNOWN,
         )
 
+    logged_meal_evidence = []
+    for entry in (food_log_entries or [])[:8]:
+        if not isinstance(entry, dict) or not entry.get("food_name"):
+            continue
+        meal = str(entry.get("meal") or "meal").replace("_", " ")
+        portion = f" ({entry['quantity']})" if entry.get("quantity") else ""
+        logged_meal_evidence.append(f"User-logged {meal}: {entry['food_name']}{portion}")
+
     answered = [
         name
         for name, entry in known(signals).items()
@@ -99,7 +107,7 @@ def build_nutrition_evidence_view(user_state: dict, *, food_log_entries: list = 
     return {
         "signals": signals,
         "status": STATUS_ASSESSED if answered else STATUS_INSUFFICIENT_EVIDENCE,
-        "evidence_used": evidence_lines(signals),
+        "evidence_used": evidence_lines(signals) + logged_meal_evidence,
         "missing_information": missing_labels(signals),
         "confidence": confidence_from(signals),
     }

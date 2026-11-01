@@ -36,13 +36,11 @@ pose engine  ->  test-specific measurement  ->  raw results
              ->  interpretation and scoring  ->  AI guidance
 ```
 
-**Three movement assessments**, each with a defined camera view and a defined
+**Two movement assessments**, each with a defined camera view and a defined
 measurand:
 
 - **Shoulder** — bilateral active shoulder abduction, front-facing camera,
   three repetitions. Measures arm elevation angle and left/right symmetry.
-- **FTSST** — five times sit-to-stand, side-facing camera. Measures the time to
-  complete five repetitions.
 - **Balance** — eyes-open single-leg stance, front-facing camera. Measures hold
   duration.
 
@@ -68,7 +66,7 @@ generic.
 ## Stack
 
 React 19 and Vite on the front end, with TensorFlow.js and MoveNet for pose
-detection. FastAPI and MongoDB on the back end, with bcrypt password hashing
+detection. FastAPI and SQLite on the back end, with bcrypt password hashing
 and JWT sessions. The AI provider is OpenRouter, reached over its
 OpenAI-compatible chat-completions API using `urllib` from the Python standard
 library — there is no vendor SDK, which is why swapping providers touched three
@@ -76,26 +74,26 @@ files and added no dependency.
 
 ## Getting started
 
-You will need Node 20 or newer, Python 3.10 or newer, and a MongoDB database
-(local or Atlas).
+You will need Node 20 or newer and Python 3.10 or newer. SQLite is included
+with Python, so no separate database server is needed.
 
 ```bash
 # Front end
 npm install
 
-# Back end
+# Back end (Windows PowerShell)
 cd backend
 python -m venv .venv
-.venv/bin/pip install -r requirements.txt      # .venv\Scripts\pip.exe on Windows
+.venv\Scripts\pip install -r requirements.txt
 ```
 
-Copy `backend/.env.example` to `backend/.env` and fill it in. The file is
-gitignored and must never be committed. At minimum:
+Copy `backend/.env.example` to `backend/.env` and set a unique JWT secret. The
+file is gitignored and must never be committed. SQLite creates
+`backend/movewell.sqlite3` automatically; the location can be changed with
+`SQLITE_PATH`.
 
 | Variable | Purpose |
 | --- | --- |
-| `MONGODB_URI` | connection string; `mongodb://localhost:27017` or an Atlas `mongodb+srv://` URI |
-| `MONGODB_DB_NAME` | database name |
 | `JWT_SECRET` | signing secret for session tokens; generate a long random value |
 | `OPENROUTER_API_KEY` | optional. Without it the app runs and the AI features report themselves unavailable |
 | `OPENROUTER_MODEL` | optional. Defaults to a model that supports both tool calling and image input |

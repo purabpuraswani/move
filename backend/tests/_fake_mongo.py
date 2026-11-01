@@ -18,7 +18,7 @@ what reports/store.py itself ever sends.
 
 import copy
 
-from bson import ObjectId
+from database import ObjectId
 
 ASCENDING = 1
 DESCENDING = -1

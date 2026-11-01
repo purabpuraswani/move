@@ -1,4 +1,4 @@
-"""The twenty intervention exercises, as data.
+"""The nineteen active intervention exercises, as data.
 
 The first ten (Phase 2) were drafted from two public, freely citable sources
 aimed at exactly this population — older or deconditioned adults, everyday
@@ -52,50 +52,6 @@ def _movenet(*, supported, implemented, metrics, notes=None):
 
 
 EXERCISES = [
-    {
-        "exercise_id": "chair-sit-to-stand",
-        "name": "Chair Sit-to-Stand",
-        "category": "lower_body_strength",
-        "target_capability": ["functional_movement", "strength"],
-        "target_body_area": ["legs", "hips", "core"],
-        "difficulty": "beginner",
-        "equipment": ["chair"],
-        "instructions": [
-            "Sit toward the front of a stable chair with no wheels, feet flat "
-            "on the floor about hip width apart.",
-            "Lean slightly forward and press through your feet to stand up "
-            "fully, using your hands on the armrests only as much as you "
-            "need to.",
-            "Pause briefly standing, then lower yourself back down under "
-            "control.",
-        ],
-        "sets": 2,
-        "repetitions": 10,
-        "duration_seconds": None,
-        "progression": "Reduce how much you push off the armrests, or use a lower seat.",
-        "regression": "Use a higher seat, or push off firmly with both hands.",
-        "common_mistakes": [
-            "Using momentum to rock up rather than pressing through the legs.",
-            "Not standing all the way up before sitting back down.",
-        ],
-        "safety_constraints": [
-            "Use a chair without wheels, on a stable, non-slip floor.",
-            "Stop if you feel dizzy, unsteady, or have joint pain.",
-        ],
-        "movenet_support": _movenet(
-            supported=True,
-            implemented=True,
-            metrics=["repetitions", "durationSeconds", "completion"],
-            notes=(
-                "Same measurable shape as the FTSST baseline test (a knee-"
-                "angle sit/stand transition), reusing the same kind of "
-                "detection approach rather than the same test."
-            ),
-        ),
-        "measurable_metrics": ["repetitions", "durationSeconds", "completion"],
-        "demonstration_id": "exercise-chair-sit-to-stand",
-        "reference": GO4LIFE_REFERENCE,
-    },
     {
         "exercise_id": "wall-sit",
         "name": "Wall Sit",

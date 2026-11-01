@@ -123,18 +123,6 @@ TEST_DESCRIPTIONS = {
             "anything about the shoulder joint itself"
         ),
     },
-    "ftsst": {
-        "name": "Standing up from a chair five times",
-        "observes": (
-            "how long the five repetitions took, timed automatically from the "
-            "knee angle the camera could see"
-        ),
-        "is_not": (
-            "a clinician-timed test, a leg strength measurement, or a fitness "
-            "score. The timing was started and stopped by software watching the "
-            "video, and the chair was whatever the user had"
-        ),
-    },
     "balance": {
         "name": "Standing on one leg with eyes open",
         "observes": (
@@ -148,7 +136,9 @@ TEST_DESCRIPTIONS = {
     },
 }
 
-TEST_ORDER = ("shoulder", "ftsst", "balance")
+# Guidance receives only the checks in the active protocol. Archived results
+# are not part of current specialist context.
+TEST_ORDER = ("shoulder", "balance")
 
 STATUS_EXPLANATIONS = {
     "completed": "completed, and produced measurements",
@@ -303,52 +293,6 @@ def _describe_shoulder(measurements: dict) -> list:
     return lines
 
 
-def _describe_ftsst(measurements: dict, setup) -> list:
-    lines = []
-
-    seconds = measurements.get("completionTimeSeconds")
-    detected = measurements.get("repetitionsDetected")
-    required = measurements.get("requiredRepetitions")
-
-    if seconds is None:
-        lines.append("No completion time was obtained.")
-
-    else:
-        lines.append(
-            f"The five repetitions took about {_number(seconds)} seconds in "
-            "total, timed by software watching the video."
-        )
-
-    if detected is not None and required is not None:
-        lines.append(
-            f"Repetitions the software recognised: {detected} of {required}."
-        )
-
-    if isinstance(setup, dict):
-        height = setup.get("chairSeatHeightCm")
-
-        if height is not None and setup.get("chairSeatHeightPlausible") is False:
-            lines.append(
-                "The seat height the user entered looked implausible, so this "
-                "time should not be compared against another session."
-            )
-
-        elif height is not None:
-            lines.append(
-                f"Chair seat height as entered by the user: {_number(height)} cm. "
-                "Seat height changes how hard the movement is, so a time from a "
-                "different chair is not comparable."
-            )
-
-        else:
-            lines.append(
-                "No seat height was recorded, so this time cannot be compared "
-                "against another session."
-            )
-
-    return lines
-
-
 def _describe_balance(measurements: dict) -> list:
     lines = []
 
@@ -391,7 +335,6 @@ def _describe_balance(measurements: dict) -> list:
 
 _DESCRIBERS = {
     "shoulder": lambda measurements, setup: _describe_shoulder(measurements),
-    "ftsst": _describe_ftsst,
     "balance": lambda measurements, setup: _describe_balance(measurements),
 }
 
@@ -410,7 +353,6 @@ def build_assessment_context(assessment) -> dict:
             "tests": [],
         }
 
-    summary = assessment.get("summary") or {}
     tests = assessment.get("tests") or {}
 
     described = []
@@ -459,6 +401,7 @@ def build_assessment_context(assessment) -> dict:
         })
 
     usable = [test for test in described if test["status"] == "completed"]
+    statuses = [test["status"] for test in described]
 
     return {
         "available": bool(usable),
@@ -469,10 +412,10 @@ def build_assessment_context(assessment) -> dict:
         "completedAt": assessment.get("completedAt") or assessment.get("createdAt"),
         "protocolVersion": assessment.get("protocolVersion"),
         "counts": {
-            "completed": summary.get("testsCompleted"),
-            "invalid": summary.get("testsInvalid"),
-            "skipped": summary.get("testsSkipped"),
-            "notStarted": summary.get("testsNotStarted"),
+            "completed": statuses.count("completed"),
+            "invalid": statuses.count("invalid"),
+            "skipped": statuses.count("skipped"),
+            "notStarted": statuses.count("not_started"),
         },
         "tests": described,
     }

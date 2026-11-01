@@ -36,6 +36,7 @@ def build_activity_view(
     user_state: dict,
     *,
     exercise_results: list = None,
+    daily_checkins: list = None,
     recovery_constraint: dict = None,
 ) -> dict:
     """Build the activity domain view.
@@ -53,6 +54,13 @@ def build_activity_view(
     days = _number(answers.get("exercise_days"))
     minutes = _number(answers.get("exercise_minutes"))
     sitting = _number(answers.get("daily_sitting_hours"))
+    movement_breaks = _number(answers.get("movement_breaks_per_day", answers.get("movement_breaks")))
+    break_records = [
+        row for row in (daily_checkins or [])[:7]
+        if isinstance(row, dict) and _number(row.get("movement_breaks")) is not None
+    ]
+    if break_records:
+        movement_breaks = sum(_number(row["movement_breaks"]) for row in break_records) / len(break_records)
     work_type = answers.get("work_type") or None
 
     weekly_minutes = days * minutes if days is not None and minutes is not None else None
@@ -68,6 +76,11 @@ def build_activity_view(
         ),
         "daily_sitting_hours": signal(
             "daily_sitting_hours", sitting, label="Daily sitting time", unit="hours/day"
+        ),
+        "movement_breaks_per_day": signal(
+            "movement_breaks_per_day", movement_breaks,
+            label="Movement breaks", unit="breaks/day",
+            state=KNOWN if movement_breaks is not None else MISSING,
         ),
         "work_type": signal("work_type", work_type, label="Work pattern"),
     }
@@ -102,4 +115,9 @@ def build_activity_view(
         "signals": signals,
         "pacing_need_levels": pacing_levels,
         "recovery_constraint": recovery_constraint or None,
+        "movement_breaks_context": {
+            "basis": "latest recorded check-ins with a movement-break value",
+            "dates": [row.get("date") for row in break_records if row.get("date")],
+            "days_observed": len(break_records),
+        },
     }

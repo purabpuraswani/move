@@ -11,11 +11,9 @@ import { HoldDurationEngine } from "../holdDurationEngine.js";
 import { EXERCISE_ENGINE_CONFIG } from "../config.js";
 
 // The exercises this application can actually assess with a camera. Was
-// nine; supported-calf-raise was removed (see below) and the four Phase 6
-// exercises that had been marked implemented in the library but had no
-// engine were wired, so it is twelve.
+// nine; supported-calf-raise and Chair Sit-to-Stand have since been removed,
+// and the Phase 6 exercises marked implemented have wired engines.
 const IMPLEMENTED_EXERCISE_IDS = [
-  "chair-sit-to-stand",
   "wall-sit",
   "standing-knee-raise",
   "wall-push-up",

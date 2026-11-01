@@ -15,7 +15,7 @@ only job is fetching the real documents and wiring them through.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pymongo.errors import PyMongoError
+from database import StorageError
 
 from auth.deps import require_staff_user
 from dashboard.serialisers import flatten_plan_history, mcp_status_report, safe_account_info
@@ -44,8 +44,8 @@ def _database_error() -> HTTPException:
 
 
 def _object_id_or_404(user_id: str):
-    from bson import ObjectId
-    from bson.errors import InvalidId
+    from database import ObjectId
+    from database import InvalidId
 
     try:
         return ObjectId(user_id)
@@ -66,7 +66,7 @@ def get_user_state_internal(user_id: str, _staff=Depends(require_staff_user)):
     try:
         user_doc = users_collection.find_one({"_id": object_id})
         state_doc = get_user_state(user_id)
-    except PyMongoError:
+    except StorageError:
         raise _database_error() from None
 
     if user_doc is None:
@@ -89,7 +89,7 @@ def get_plan_history(user_id: str, _staff=Depends(require_staff_user)):
 
     try:
         state_doc = get_user_state(user_id)
-    except PyMongoError:
+    except StorageError:
         raise _database_error() from None
 
     if state_doc is None:
@@ -112,7 +112,7 @@ def get_safety_result(user_id: str, _staff=Depends(require_staff_user)):
 
     try:
         state_doc = get_user_state(user_id)
-    except PyMongoError:
+    except StorageError:
         raise _database_error() from None
 
     if state_doc is None or state_doc.get("last_safety_result") is None:

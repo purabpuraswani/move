@@ -48,11 +48,8 @@ test("each baseline check resolves to the recording of that movement", () => {
     "/assessment-videos/shoulder-raise.mp4",
   );
 
-  assert.equal(getExerciseVideo("ftsst").src, "/assessment-videos/sit-to-stand.mp4");
-  assert.equal(
-    getExerciseVideo("assessment-chair-sit-to-stand").src,
-    "/assessment-videos/sit-to-stand.mp4",
-  );
+  assert.equal(getExerciseVideo("ftsst"), null);
+  assert.equal(getExerciseVideo("assessment-chair-sit-to-stand"), null);
 
   assert.equal(getExerciseVideo("balance").src, "/assessment-videos/one-leg-stand.mp4");
   assert.equal(
@@ -66,10 +63,7 @@ test("a library exercise only gets a video of its own movement", () => {
     getExerciseVideo("standing-shoulder-raise").src,
     "/assessment-videos/shoulder-raise.mp4",
   );
-  assert.equal(
-    getExerciseVideo("chair-sit-to-stand").src,
-    "/assessment-videos/sit-to-stand.mp4",
-  );
+  assert.equal(getExerciseVideo("chair-sit-to-stand"), null);
   assert.equal(
     getExerciseVideo("supported-single-leg-stand").src,
     "/assessment-videos/one-leg-stand.mp4",

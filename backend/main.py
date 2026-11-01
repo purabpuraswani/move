@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pymongo.errors import PyMongoError
+from database import StorageError
 
 from agents.store import ensure_indexes as ensure_guidance_indexes
 from assessments.store import ensure_indexes
@@ -15,6 +15,8 @@ from routes.assessments import router as assessments_router
 from routes.exercise_results import router as exercise_results_router
 from routes.behaviour_log import router as behaviour_log_router
 from routes.food_log import router as food_log_router
+from routes.daily_checkins import router as daily_checkins_router
+from routes.exercise_library import router as exercise_library_router
 from routes.guidance import router as guidance_router
 from routes.profile import router as profile_router
 from routes.reports import router as reports_router
@@ -24,6 +26,7 @@ from routes.progress import router as progress_router
 from routes.auth import router as auth_router
 from user_state.store import ensure_indexes as ensure_user_state_indexes
 from password_reset.store import ensure_indexes as ensure_password_reset_indexes
+from workflow_execution.store import ensure_indexes as ensure_workflow_execution_indexes
 
 
 LOCAL_CORS_ORIGINS = (
@@ -38,10 +41,8 @@ LOCAL_CORS_ORIGINS = (
 async def lifespan(_app: FastAPI):
     """Prepare the database on startup.
 
-    Index creation is the first thing that actually talks to MongoDB, so a
-    wrong or unreachable MONGODB_URI shows up here with a clear message. It is
-    not fatal: the API still starts so its own routes can report the problem,
-    rather than the process dying with a stack trace and no endpoint to ask.
+    SQLite index setup is local and synchronous. If the database file cannot
+    be prepared, the API still starts so its routes can report the problem.
     """
 
     try:
@@ -53,14 +54,15 @@ async def lifespan(_app: FastAPI):
         ensure_behaviour_log_indexes()
         ensure_user_state_indexes()
         ensure_password_reset_indexes()
+        ensure_workflow_execution_indexes()
 
-    except PyMongoError as error:
+    except StorageError as error:
         print(
             "MoveWell AI: could not prepare database indexes.\n"
             f"  {type(error).__name__}: {error}\n"
-            "  Check MONGODB_URI in backend/.env and that the database is "
-            "reachable. The API has started, but requests that need the "
-            "database will fail until this is fixed."
+            "  Check SQLITE_PATH in backend/.env and that the database file "
+            "can be created. The API has started, but requests that need "
+            "storage may fail until this is fixed."
         )
 
     yield
@@ -90,6 +92,8 @@ app.include_router(profile_router)
 app.include_router(assessments_router)
 app.include_router(exercise_results_router)
 app.include_router(food_log_router)
+app.include_router(daily_checkins_router)
+app.include_router(exercise_library_router)
 app.include_router(behaviour_log_router)
 app.include_router(reports_router)
 app.include_router(guidance_router)

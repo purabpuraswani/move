@@ -15,9 +15,9 @@ did not eat).
 
 from datetime import datetime, timezone
 
-from bson import ObjectId
-from bson.errors import InvalidId
-from pymongo import ASCENDING, DESCENDING
+from database import ObjectId
+from database import InvalidId
+from database import ASCENDING, DESCENDING
 
 from database import food_log_collection
 

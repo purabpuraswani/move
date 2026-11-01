@@ -64,6 +64,18 @@ def build_recovery_view(user_state: dict, *, exercise_results: list = None) -> d
         "planned_exercises": signal(
             "planned_exercises", planned, label="Exercises in the current programme", unit="exercises"
         ),
+        "stress_level": signal(
+            "stress_level",
+            answers.get("stress_level") if answers.get("stress_level") in ("low", "moderate", "high") else None,
+            label="Self-reported stress level",
+        ),
+        "recovery_difficulties": signal(
+            "recovery_difficulties",
+            (", ".join(answers["recovery_difficulties"]) or "none")
+            if isinstance(answers.get("recovery_difficulties"), list)
+            else None,
+            label="Self-reported recovery difficulties",
+        ),
     }
 
     if exercise_results is None:

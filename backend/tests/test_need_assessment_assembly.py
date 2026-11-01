@@ -36,14 +36,6 @@ def complete_user_state(**profile_overrides):
                     "observableDifferenceDeg": 5,
                 },
             },
-            "ftsst": {
-                "status": "completed",
-                "measurements": {
-                    "completionTimeSeconds": 18,
-                    "repetitionsDetected": 5,
-                    "requiredRepetitions": 5,
-                },
-            },
             "balance": {
                 "status": "completed",
                 "measurements": {
@@ -69,13 +61,13 @@ class CompleteAssessmentTests(unittest.TestCase):
             self.assertIn(dimension, profile)
             self.assertIn(profile[dimension]["level"], ("LOW", "MEDIUM", "HIGH", "NOT_ASSESSED"))
 
-        # This fixture is deliberately built to show real need: low elevation,
-        # a short balance hold, a slow sit-to-stand, and a sedentary
-        # questionnaire — all three physical dimensions and behaviour should
-        # come back assessed (not NOT_ASSESSED), with evidence attached.
-        for dimension in ("mobility_need", "stability_need", "functional_movement_need", "behaviour_need"):
+        # This fixture uses the active shoulder and balance checks plus a
+        # sedentary questionnaire. FTSST is no longer a current measurement.
+        for dimension in ("mobility_need", "stability_need", "behaviour_need"):
             self.assertNotEqual(profile[dimension]["level"], "NOT_ASSESSED")
             self.assertTrue(profile[dimension]["evidence"])
+
+        self.assertEqual(profile["functional_movement_need"]["level"], "NOT_ASSESSED")
 
         # Nutrition and safety have no source in this application yet.
         self.assertEqual(profile["nutrition_need"]["level"], "NOT_ASSESSED")

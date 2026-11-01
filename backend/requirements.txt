@@ -17,16 +17,6 @@ uvicorn[standard]==0.34.0
 pydantic[email]==2.10.4
 python-multipart==0.0.20
 
-# Database (pymongo also provides the bson package used for ObjectId)
-#
-# The [srv] extra pulls in dnspython, which pymongo requires to resolve a
-# MongoDB Atlas "mongodb+srv://" URI. Without it, MongoClient raises
-# ConfigurationError as soon as database.py is imported, so the API fails to
-# start rather than failing on the first query. Plain "mongodb://" URIs do not
-# need it, but installing it costs nothing and makes local and Atlas
-# configurations interchangeable, which is the point of MONGODB_URI.
-pymongo[srv]==4.10.1
-
 # Configuration
 python-dotenv==1.0.1
 

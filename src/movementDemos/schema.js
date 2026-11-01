@@ -2,9 +2,8 @@
  * The Movement Demonstration data shape.
  *
  * Phase 0 foundation only: this file defines the shape a demonstration's data
- * must have, and a small validator, so that both the three baseline assessment
- * tests (Hand/Shoulder Raise, Chair Sit-to-Stand, One-Leg Stand) and the future
- * 20-exercise library can be authored as data against the same interface,
+ * must have, and a small validator, so that the baseline assessment checks
+ * and exercise library can be authored as data against the same interface,
  * rendered by the same component (MovementDemo.jsx), instead of three
  * hand-built animations plus twenty more later.
  *

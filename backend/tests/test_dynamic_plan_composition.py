@@ -54,6 +54,8 @@ ACTIVE_HEALTHY = {
     "fruit_vegetable_servings": 5,
     "water_glasses_per_day": 8,
     "processed_food_frequency": "rarely",
+    "food_allergies": [],
+    "dietary_restrictions": [],
 }
 
 SEDENTARY = {
@@ -74,6 +76,8 @@ POOR_DIET = {
     "fruit_vegetable_servings": 1,
     "water_glasses_per_day": 2,
     "processed_food_frequency": "daily",
+    "food_allergies": [],
+    "dietary_restrictions": [],
 }
 
 NO_EVIDENCE = {"age": 30, "sex": "male"}
@@ -168,6 +172,13 @@ POOR_MOVEMENT = _assessment(shoulder=(95, 90), ftsst=16.5, balance=(3.5, 4.2))
 
 
 def _state(profile, assessment=None, reports=None):
+    profile = dict(profile or {})
+    for field in (
+        "diabetes", "hypertension", "heart_condition", "previous_injury",
+        "joint_pain", "back_neck_pain",
+    ):
+        profile.setdefault(field, "no")
+    profile.setdefault("other_conditions", "")
     state = build_user_state(
         profile_doc=profile, assessment_doc=assessment, confirmed_reports_doc=reports
     )
@@ -535,7 +546,7 @@ class SpecialistStatusTests(unittest.TestCase):
         # The Safety card deliberately speaks the Safety Gate's own
         # vocabulary rather than the advisory one: its job is to report
         # the gate's verdict, not whether it "contributed".
-        advisory_statuses = ("ACTIVE", "EVALUATED_NOT_REQUIRED", "NOT_ASSESSED", "MONITORING")
+        advisory_statuses = ("ACTIVE", "EVALUATED_NOT_REQUIRED", "NOT_ASSESSED", "MONITORING", "CONTEXT_REQUIRED")
         safety_statuses = ("ALLOW", "MODIFY", "PAUSE", "REFER", "NOT_ASSESSED")
 
         for card in build_specialists_team(

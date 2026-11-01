@@ -39,14 +39,14 @@ PROFILE_DOCUMENT = {
 
 
 def assessment(**overrides):
-    """A serialised session with all three tests completed."""
+    """A serialised current session with both active checks completed."""
 
     document = {
         "id": "a" * 24,
         "protocolVersion": "1.0.0",
         "completedAt": "2026-08-25T18:30:00+00:00",
         "summary": {
-            "testsCompleted": 3,
+            "testsCompleted": 2,
             "testsInvalid": 0,
             "testsSkipped": 0,
             "testsNotStarted": 0,
@@ -61,19 +61,6 @@ def assessment(**overrides):
                     "observableDifferenceDeg": 16.5,
                 },
                 "quality": {"meanFps": 24.4, "meanKeypointScore": 0.71},
-                "invalidReasons": [],
-                "attempts": 1,
-            },
-            "ftsst": {
-                "status": "completed",
-                "measurements": {
-                    "completionTimeSeconds": 11.84,
-                    "repetitionsDetected": 5,
-                    "requiredRepetitions": 5,
-                },
-                "setup": {"chairSeatHeightCm": 45,
-                          "chairSeatHeightPlausible": True},
-                "quality": {"meanFps": 25.0},
                 "invalidReasons": [],
                 "attempts": 1,
             },
@@ -231,19 +218,19 @@ class AssessmentContextTests(unittest.TestCase):
         # were not met, and describing them anyway is how an unusable number
         # becomes a finding.
         session = assessment()
-        session["tests"]["ftsst"]["status"] = "invalid"
-        session["tests"]["ftsst"]["invalidReasons"] = ["excessive_trunk_lean"]
+        session["tests"]["balance"]["status"] = "invalid"
+        session["tests"]["balance"]["invalidReasons"] = ["low_confidence"]
 
         context = build_assessment_context(session)
 
-        ftsst = next(t for t in context["tests"] if t["id"] == "ftsst")
+        balance = next(t for t in context["tests"] if t["id"] == "balance")
 
-        self.assertEqual(ftsst["observations"], [])
-        self.assertIn("did not meet", ftsst["statusExplanation"])
+        self.assertEqual(balance["observations"], [])
+        self.assertIn("did not meet", balance["statusExplanation"])
 
         digest = context_digest(build_context(assessment=session))
 
-        self.assertNotIn("11.84", digest)
+        self.assertNotIn("ftsst", digest)
 
     def test_a_missing_test_is_not_started_rather_than_absent(self):
         session = assessment()
@@ -258,7 +245,7 @@ class AssessmentContextTests(unittest.TestCase):
     def test_a_session_with_nothing_usable_is_unavailable(self):
         session = assessment()
 
-        for test_id in ("shoulder", "ftsst", "balance"):
+        for test_id in ("shoulder", "balance"):
             session["tests"][test_id]["status"] = "invalid"
 
         context = build_assessment_context(session)
@@ -288,16 +275,17 @@ class AssessmentContextTests(unittest.TestCase):
         self.assertFalse(any("low confidence" in observation
                              for observation in shoulder["observations"]))
 
-    def test_a_missing_seat_height_makes_the_time_incomparable(self):
+    def test_historical_ftsst_does_not_appear_in_current_guidance_context(self):
         session = assessment()
-        session["tests"]["ftsst"]["setup"] = {"chairSeatHeightCm": None}
+        session["tests"]["ftsst"] = {
+            "status": "completed",
+            "measurements": {"completionTimeSeconds": 11.84},
+        }
 
         context = build_assessment_context(session)
 
-        ftsst = next(t for t in context["tests"] if t["id"] == "ftsst")
-
-        self.assertTrue(any("cannot be compared" in line
-                            for line in ftsst["observations"]))
+        self.assertEqual([test["id"] for test in context["tests"]], ["shoulder", "balance"])
+        self.assertEqual(context["counts"]["completed"], 2)
 
     def test_an_unattempted_balance_side_has_no_duration(self):
         session = assessment()
@@ -374,8 +362,9 @@ class DigestTests(unittest.TestCase):
         digest = context_digest(build_context(assessment=assessment()))
 
         self.assertIn("What it is not: a clinical range of motion", digest)
-        self.assertIn("a clinician-timed test", digest)
+        self.assertIn("Standing on one leg with eyes open", digest)
         self.assertIn("fall risk score", digest)
+        self.assertNotIn("ftsst", digest.lower())
 
     def test_the_digest_never_contains_an_identifier(self):
         digest = context_digest(

@@ -38,11 +38,11 @@ const EXPECTED_SPECIALISTS = [
     icon: "🧠"
   },
   {
-    id: "safety",
-    alias: "safety",
-    title: "Safety & Clinical Escalation",
-    route: "/specialist/safety",
-    icon: "🛡️"
+    id: "progress",
+    alias: "progress",
+    title: "Progress & Reassessment",
+    route: "/progress",
+    icon: "📈"
   }
 ];
 
@@ -54,10 +54,10 @@ test("exactly 6 specialists are defined with proper titles and routes", () => {
   assert.ok(routes.includes("/specialist/nutrition"));
   assert.ok(routes.includes("/specialist/recovery"));
   assert.ok(routes.includes("/specialist/behaviour"));
-  assert.ok(routes.includes("/specialist/safety"));
+  assert.ok(routes.includes("/progress"));
 });
 
-test("each specialist has a unique id, route, and clinical title", () => {
+test("each specialist has a unique id, route, and user-facing title", () => {
   const ids = new Set(EXPECTED_SPECIALISTS.map(s => s.id));
   const titles = new Set(EXPECTED_SPECIALISTS.map(s => s.title));
   const routes = new Set(EXPECTED_SPECIALISTS.map(s => s.route));
@@ -96,8 +96,30 @@ import {
   normalizeEvidence,
   normalizeRecommendation,
   normalizeRecommendations,
-  isPlainRenderable
+  isPlainRenderable,
+  selectedInterventionAgentIds,
+  agentIdForSpecialistCard,
 } from "../specialistData.js";
+
+test("only selected specialists with actual approved recommendations enter the plan", () => {
+  const ids = selectedInterventionAgentIds({
+    agent_journey: [
+      { id: "physio", selection_status: "SELECTED", recommendations: [{ id: "safe-exercise" }] },
+      { id: "nutrition", selection_status: "SELECTED", recommendations: [] },
+      { id: "recovery", selection_status: "SELECTED – CONTEXT REQUIRED", recommendations: [{ id: "clarify" }] },
+      { id: "behaviour", selection_status: "NOT SELECTED", recommendations: [{ id: "habit" }] },
+      { id: "progress", selection_status: "SELECTED", recommendations: [{ id: "milestone" }] },
+    ],
+    execution_results: { nutrition: { status: "completed" } },
+  });
+  assert.deepEqual([...ids], ["physio"]);
+});
+
+test("active plan cards map to specialist ids, never the safety review", () => {
+  assert.equal(agentIdForSpecialistCard({ title: "Movement" }), "physio");
+  assert.equal(agentIdForSpecialistCard({ title: "Exercise & Physical Activity" }), "exercise_activity");
+  assert.equal(agentIdForSpecialistCard({ title: "Safety & Clinical Escalation" }), null);
+});
 
 test("normalizeRecommendation handles Behaviour specialist object without returning raw object children", () => {
   const behaviourRaw = {

@@ -6,15 +6,13 @@ explicitly passes a "now" (see agent.py's reassessment check, not this
 module). This is what makes the Progress Agent's output verifiable rather
 than a black box.
 
-Three physical baseline metrics are supported, each reusing exactly the
+Two physical baseline metrics are supported, each reusing exactly the
 same raw-value extraction logic need_assessment/rules.py already applies
 to the same tests, so this module can never quietly disagree with the
 Need Profile about what a test's own measurement means:
 
     mobility_shoulder_elevation_deg     higher is better (more elevation)
     stability_balance_hold_seconds      higher is better (longer hold)
-    functional_movement_ftsst_seconds   LOWER is better (faster completion)
-
 Each metric's "direction" is a named, documented constant — never assumed.
 STABLE is not "close to zero change"; it is "change too small, in this
 project's own opinion, to call improved or declined" — a system-decision
@@ -29,7 +27,6 @@ DIRECTION_LOWER_IS_BETTER = "lower_is_better"
 METRIC_DIRECTIONS = {
     "mobility_shoulder_elevation_deg": DIRECTION_HIGHER_IS_BETTER,
     "stability_balance_hold_seconds": DIRECTION_HIGHER_IS_BETTER,
-    "functional_movement_ftsst_seconds": DIRECTION_LOWER_IS_BETTER,
 }
 
 # System decision tolerances — see module docstring. A change smaller than
@@ -37,7 +34,6 @@ METRIC_DIRECTIONS = {
 STABLE_TOLERANCE = {
     "mobility_shoulder_elevation_deg": 5,
     "stability_balance_hold_seconds": 2,
-    "functional_movement_ftsst_seconds": 1,
 }
 
 IMPROVED = "IMPROVED"
@@ -96,26 +92,9 @@ def extract_balance_metric(tests: dict):
     return min(holds) if holds else None
 
 
-def extract_ftsst_metric(tests: dict):
-    """Sit-to-stand x5 completion time, in seconds — the same value
-    need_assessment.rules.assess_functional_movement_need() bases its level
-    on. Lower is better for this one metric — see METRIC_DIRECTIONS.
-    """
-
-    test = (tests or {}).get("ftsst") or {}
-
-    if test.get("status") != "completed":
-        return None
-
-    seconds = (test.get("measurements") or {}).get("completionTimeSeconds")
-
-    return seconds if isinstance(seconds, (int, float)) else None
-
-
 _METRIC_EXTRACTORS = {
     "mobility_shoulder_elevation_deg": extract_shoulder_metric,
     "stability_balance_hold_seconds": extract_balance_metric,
-    "functional_movement_ftsst_seconds": extract_ftsst_metric,
 }
 
 
@@ -165,7 +144,7 @@ def compare_metric(baseline_value, current_value, metric_name: str) -> dict:
 def compare_physical_assessments(
     baseline_assessment_doc, previous_assessment_doc, current_assessment_doc
 ) -> dict:
-    """Compare all three physical baseline metrics across baseline/previous/
+    """Compare the two active physical baseline metrics across baseline/previous/
     current raw assessment documents (assessments/schema.py's stored
     shape — the same shape assessments/store.py returns). Any of the three
     documents may be None (e.g. no previous session exists yet, or the

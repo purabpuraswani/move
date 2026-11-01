@@ -53,8 +53,12 @@ async function readResponse(response, fallbackMessage) {
  * plan. It is never sent speculatively: the Progress Agent runs because there
  * is new evidence, not on a timer.
  */
-export async function runWorkflow({ progressTrigger = null } = {}) {
+export async function runWorkflow({ progressTrigger = null, idempotencyKey = null } = {}) {
   const body = progressTrigger ? { progress_trigger: progressTrigger } : {};
+  const requestKey = idempotencyKey || (
+    globalThis.crypto?.randomUUID?.()
+    ?? `workflow-${Date.now()}-${Math.random().toString(16).slice(2)}`
+  );
 
   // Long timeout: this runs the specialists, so it is an AI-latency
   // request, not a database read.
@@ -62,7 +66,11 @@ export async function runWorkflow({ progressTrigger = null } = {}) {
     `${getApiUrl()}/api/workflow/run`,
     {
       method: "POST",
-      headers: { ...authHeader(), "Content-Type": "application/json" },
+      headers: {
+        ...authHeader(),
+        "Content-Type": "application/json",
+        "Idempotency-Key": requestKey,
+      },
       body: JSON.stringify(body),
     },
     WORKFLOW_RUN_TIMEOUT_MS,

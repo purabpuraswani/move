@@ -29,7 +29,7 @@ from fastapi import (
     UploadFile,
     status,
 )
-from pymongo.errors import PyMongoError
+from database import StorageError as DatabaseError
 
 from auth.deps import get_current_user
 from reports.extraction import (
@@ -160,7 +160,7 @@ def upload_report(
                 detail=str(error)
             ) from error
 
-        except StorageError as error:
+        except (DatabaseError, StorageError) as error:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=f"The file could not be stored. {error}"
@@ -192,7 +192,7 @@ def upload_report(
     try:
         stored = create_report(document)
 
-    except PyMongoError as error:
+    except (DatabaseError, StorageError) as error:
         if stored_file:
             storage.delete(stored_file.key)
 
@@ -230,7 +230,7 @@ def run_extraction(
     except ReportNotFoundError as error:
         raise _not_found() from error
 
-    except PyMongoError as error:
+    except (DatabaseError, StorageError) as error:
         raise _database_error() from error
 
     if not report.get("file"):
@@ -262,7 +262,7 @@ def run_extraction(
             detail=str(error)
         ) from error
 
-    except PyMongoError as error:
+    except (DatabaseError, StorageError) as error:
         raise _database_error() from error
 
     storage = get_storage()
@@ -270,7 +270,7 @@ def run_extraction(
     try:
         file_bytes = storage.read_bytes(report["file"]["key"])
 
-    except StorageError as error:
+    except (DatabaseError, StorageError) as error:
         save_extraction_failure(
             user_id, report["_id"], str(error), STATUS_FAILED
         )
@@ -336,7 +336,7 @@ def run_extraction(
             detail=str(error)
         ) from error
 
-    except PyMongoError as error:
+    except (DatabaseError, StorageError) as error:
         raise _database_error() from error
 
     return {
@@ -393,7 +393,7 @@ def read_confirmed_reports(current_user: dict = Depends(get_current_user)):
     try:
         return confirmed_values_for_user(user_id)
 
-    except PyMongoError as error:
+    except (DatabaseError, StorageError) as error:
         raise _database_error() from error
 
 
@@ -411,7 +411,7 @@ def read_reports(
         documents = list_reports(user_id, limit=limit, skip=skip)
         total = count_reports(user_id)
 
-    except PyMongoError as error:
+    except (DatabaseError, StorageError) as error:
         raise _database_error() from error
 
     return {
@@ -436,7 +436,7 @@ def read_report(
     except ReportNotFoundError as error:
         raise _not_found() from error
 
-    except PyMongoError as error:
+    except (DatabaseError, StorageError) as error:
         raise _database_error() from error
 
     return {
@@ -471,7 +471,7 @@ def update_report_fields(
     except ReportNotFoundError as error:
         raise _not_found() from error
 
-    except PyMongoError as error:
+    except (DatabaseError, StorageError) as error:
         raise _database_error() from error
 
     try:
@@ -492,7 +492,7 @@ def update_report_fields(
     except ReportNotFoundError as error:
         raise _not_found() from error
 
-    except PyMongoError as error:
+    except (DatabaseError, StorageError) as error:
         raise _database_error() from error
 
     return {
@@ -525,7 +525,7 @@ def confirm_report_values(
             detail=str(error)
         ) from error
 
-    except PyMongoError as error:
+    except (DatabaseError, StorageError) as error:
         raise _database_error() from error
 
     return {
@@ -561,7 +561,7 @@ def reopen_report_values(
             detail=str(error)
         ) from error
 
-    except PyMongoError as error:
+    except (DatabaseError, StorageError) as error:
         raise _database_error() from error
 
     return {
@@ -585,7 +585,7 @@ def remove_report(
     except ReportNotFoundError as error:
         raise _not_found() from error
 
-    except PyMongoError as error:
+    except (DatabaseError, StorageError) as error:
         raise _database_error() from error
 
     file_record = removed.get("file")

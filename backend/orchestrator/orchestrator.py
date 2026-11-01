@@ -47,17 +47,13 @@ from nutrition_agent.tool_client import NutritionToolClient
 from orchestration.agent_result import validate_agent_result
 from orchestration.ids import TraceContext, start_workflow
 from orchestrator.decision import (
-    decide_behaviour_required,
-    decide_exercise_activity_required,
-    decide_nutrition_required,
-    decide_physio_required,
-    decide_progress_required,
-    decide_recovery_required,
+    evaluate_specialist_selection,
 )
 from orchestrator.state_update import (
     apply_behaviour_plan,
     apply_nutrition_plan,
     apply_physio_plan,
+    apply_physio_safety_review,
     refresh_plan_evidence,
 )
 from physio_agent.agent import run_physio_agent
@@ -122,6 +118,8 @@ _ADVICE_AGENT_TYPES = {
 # advice instead of a plan, and the recommendation type that advice takes.
 _ADVICE_ONLY_MODES = {
     "report_context_only": "nutrition_guidance",
+    "maintenance_review": "nutrition_guidance",
+    "general_maintenance": "behaviour_guidance",
 }
 
 
@@ -144,6 +142,17 @@ def _build_result(
         "updated_user_state": updated_user_state,
         "errors": errors,
     }
+
+
+def _record_progress_dispatch(selection_explanations, agent_id, reason):
+    """Record a specialist selected by a completed Progress finding."""
+    entry = selection_explanations[agent_id]
+    entry["selection_status"] = "SELECTED"
+    entry["reason_for_selection"] = reason
+    entry["evidence_used"] = list(entry.get("evidence_used") or []) + [reason]
+    entry["missing_required_information"] = []
+    entry["context_readiness"] = "READY"
+    entry["execution_eligibility"] = True
 
 
 def _confirmed_medical_context(user_state: dict):
@@ -422,8 +431,10 @@ def run_workflow(
     previous_assessment: dict = None,
     current_assessment: dict = None,
     exercise_results: list = None,
+    daily_checkins: list = None,
     nutrition_food_log_previous_period: list = None,
     nutrition_food_log_current_period: list = None,
+    nutrition_food_log_entries: list = None,
     # Recorded behaviour actions -- the evidence a habit plan is reviewed
     # against. Supplied by the caller (routes/workflow.py reads them from
     # behaviour_log/store.py) rather than fetched here, for the same reason
@@ -431,6 +442,7 @@ def run_workflow(
     behaviour_actions: list = None,
     nutrition_period_previous: dict = None,
     nutrition_period_current: dict = None,
+    execute_all_agents: bool = False,
     workflow_id: str = None,
     request_id: str = None,
 ) -> dict:
@@ -576,16 +588,24 @@ def run_workflow(
     current_nutrition_plan = _current_plan_of("nutrition_plan")
     current_behaviour_plan = _current_plan_of("behaviour")
 
-    physio_decision = decide_physio_required(
-        need_profile, exercise_plan_exists=exercise_plan_exists
+    selection_decisions, selection_explanations = evaluate_specialist_selection(
+        user_state,
+        need_profile,
+        progress_trigger,
+        exercise_plan_exists=exercise_plan_exists,
+        behaviour_actions=behaviour_actions,
+        progress_context={
+            "baseline_assessment": baseline_assessment,
+            "previous_assessment": previous_assessment,
+            "current_assessment": current_assessment,
+        },
     )
-    behaviour_decision = decide_behaviour_required(need_profile)
-    nutrition_decision = decide_nutrition_required(need_profile, user_state)
-    progress_decision = decide_progress_required(progress_trigger)
-    exercise_activity_decision = decide_exercise_activity_required(
-        user_state, need_profile
-    )
-    recovery_decision = decide_recovery_required(user_state)
+    physio_decision = selection_decisions["physio"]
+    behaviour_decision = selection_decisions["behaviour"]
+    nutrition_decision = selection_decisions["nutrition"]
+    progress_decision = selection_decisions["progress"]
+    exercise_activity_decision = selection_decisions["exercise_activity"]
+    recovery_decision = selection_decisions["recovery"]
 
     orchestrator_decision = {
         "physio_required": physio_decision["physio_required"],
@@ -600,6 +620,7 @@ def run_workflow(
         "progress": progress_decision,
         "exercise_activity": exercise_activity_decision,
         "recovery": recovery_decision,
+        "selection_explanations": selection_explanations,
     }
 
     # Selection order is execution order, and it matters in one place:
@@ -612,19 +633,29 @@ def run_workflow(
     selected_agents = [
         agent_id
         for agent_id, required in (
-            ("physio", physio_decision["physio_required"]),
-            ("behaviour", behaviour_decision["behaviour_required"]),
-            ("nutrition", nutrition_decision["nutrition_required"]),
-            ("recovery", recovery_decision["recovery_required"]),
+            ("physio", selection_explanations["physio"]["execution_eligibility"]),
+            ("behaviour", selection_explanations["behaviour"]["execution_eligibility"]),
+            ("nutrition", selection_explanations["nutrition"]["execution_eligibility"]),
+            ("recovery", selection_explanations["recovery"]["execution_eligibility"]),
             (
                 "exercise_activity",
-                exercise_activity_decision["exercise_activity_required"],
+                selection_explanations["exercise_activity"]["execution_eligibility"],
             ),
         )
         if required
     ]
 
-    if not selected_agents and not progress_decision["progress_required"]:
+    if execute_all_agents:
+        # The HTTP workflow is a wellness review, so every existing
+        # specialist analyses its own available evidence each run. The
+        # selection explanations above remain need-based and continue to
+        # control personalized plan creation and the Safety Gate.
+        selected_agents = [
+            "physio", "nutrition", "behaviour", "recovery",
+            "exercise_activity", "progress",
+        ]
+
+    if not selected_agents and not selection_explanations["progress"]["execution_eligibility"]:
         return _build_result(
             workflow_id=workflow_id,
             request_id=request_id,
@@ -712,7 +743,8 @@ def run_workflow(
                     nutrition_tool_client,
                     parent_trace=parent_trace,
                     previous_plan=current_nutrition_plan,
-                    food_log_entries=nutrition_food_log_current_period,
+                    food_log_entries=nutrition_food_log_entries if nutrition_food_log_entries is not None else nutrition_food_log_current_period,
+                    adherence_food_log_entries=nutrition_food_log_current_period,
                     period_start=(nutrition_period_current or {}).get("start"),
                     period_end=(nutrition_period_current or {}).get("end"),
                 )
@@ -748,6 +780,7 @@ def run_workflow(
                 user_state,
                 parent_trace=parent_trace,
                 exercise_results=exercise_results,
+                daily_checkins=daily_checkins,
                 recovery_constraint=recovery_constraint,
             )
             validate_agent_result(result)
@@ -768,7 +801,7 @@ def run_workflow(
     # ------------------------------------------------------------------
     adaptation_info = {}
 
-    if progress_decision["progress_required"]:
+    if progress_decision["progress_required"] or execute_all_agents:
         if progress_tool_client is None:
             errors.append(
                 "Progress review is required but no ProgressToolClient was "
@@ -821,10 +854,18 @@ def run_workflow(
                 errors.append(f"Progress Agent run failed: {error}")
                 progress_result = None
 
-            if progress_result is not None and progress_result.get("status") == "completed":
+            if (
+                progress_decision["progress_required"]
+                and progress_result is not None
+                and progress_result.get("status") == "completed"
+            ):
                 findings = progress_result.get("findings") or {}
                 recommendation = findings.get("adaptation_recommendation")
                 dispatch_agent = _ADAPTATION_DISPATCH.get(recommendation)
+                if dispatch_agent and selection_explanations[dispatch_agent].get(
+                    "missing_required_information"
+                ):
+                    dispatch_agent = None
 
                 if dispatch_agent:
                     reassessment = findings.get("reassessment") or {}
@@ -833,6 +874,9 @@ def run_workflow(
                         f"Progress Agent recommended {recommendation} "
                         f"(overall_direction={direction}, "
                         f"reassessment_required={reassessment.get('required')})"
+                    )
+                    _record_progress_dispatch(
+                        selection_explanations, dispatch_agent, reason
                     )
 
                     # If the dispatch-target agent already ran in Phase A
@@ -976,12 +1020,21 @@ def run_workflow(
                 if nutrition_progress is not None:
                     nutrition_recommendation = nutrition_progress.get("adaptation_recommendation")
                     nutrition_dispatch_agent = _NUTRITION_ADAPTATION_DISPATCH.get(nutrition_recommendation)
+                    if nutrition_dispatch_agent and selection_explanations[
+                        nutrition_dispatch_agent
+                    ].get("missing_required_information"):
+                        nutrition_dispatch_agent = None
 
                     if nutrition_dispatch_agent:
                         nutrition_reason = (
                             f"Progress Agent recommended {nutrition_recommendation} for "
                             f"nutrition (nutrition_progress_status={nutrition_progress.get('status')}, "
                             f"current_adherence_status={nutrition_progress.get('current_adherence_status')})"
+                        )
+                        _record_progress_dispatch(
+                            selection_explanations,
+                            nutrition_dispatch_agent,
+                            nutrition_reason,
                         )
 
                         # Same no-double-run rule as the physical dispatch
@@ -1003,8 +1056,9 @@ def run_workflow(
                                         parent_trace=parent_trace,
                                         previous_plan=current_nutrition_plan,
                                         food_log_entries=(
-                                            nutrition_food_log_current_period
+                                            nutrition_food_log_entries if nutrition_food_log_entries is not None else nutrition_food_log_current_period
                                         ),
+                                        adherence_food_log_entries=nutrition_food_log_current_period,
                                         period_start=(
                                             nutrition_period_current or {}
                                         ).get("start"),
@@ -1041,6 +1095,49 @@ def run_workflow(
                                 "reason": nutrition_reason,
                                 "triggered_by": "progress_agent",
                             }
+
+    # Add domain-specific monitoring actions to each real result. These
+    # are evidence-collection steps, not clinical interventions, so they
+    # never bypass the Safety Gate as recommendations.
+    tracking_actions = {
+        "physio": ("Record the next Shoulder Raise and One-Leg Stand using the same assessment protocol.", "Keep movement measurements comparable across sessions.", "/assessment"),
+        "nutrition": ("Record meals and any food details you choose to share in the existing nutrition log.", "A food log can establish a pattern without assuming a dietary problem or prescribing a change.", "/daily-tracking"),
+        "behaviour": ("Choose one habit that suits you and record it in the existing habit log.", "A recorded action gives future reviews evidence without treating missing logs as non-adherence.", "/daily-tracking"),
+        "recovery": ("Record sleep and recovery values in Daily Tracking when available.", "Repeated self-reports can show a trend; unreported stress or recovery difficulty remains unknown.", "/daily-tracking"),
+        "exercise_activity": ("Record steps, walking, sitting, or movement breaks in Daily Tracking.", "These entries let the Activity Agent compare future activity with your own baseline.", "/daily-tracking"),
+        "progress": ("Keep the latest valid assessment as the baseline and compare it with your next completed session.", "A trend requires comparable measurements from separate valid sessions; missing history is not progress or decline.", "/progress"),
+    }
+    for agent_id in ("physio", "nutrition", "behaviour", "recovery", "exercise_activity", "progress"):
+        result = agent_results.get(agent_id)
+        if not isinstance(result, dict) or result.get("status") != "completed":
+            continue
+        findings = result.setdefault("findings", {})
+        action, rationale, route = tracking_actions[agent_id]
+        explanation = selection_explanations.get(agent_id, {})
+        evidence = (
+            findings.get("evidence_used") or findings.get("evidence")
+            or explanation.get("evidence_used") or []
+        )
+        findings.setdefault("evidence_used", list(evidence))
+        findings.setdefault(
+            "contribution_reason",
+            findings.get("reason") or explanation.get("reason_for_selection")
+            or "This specialist reviewed the available user-specific information.",
+        )
+        missing = findings.get("missing_information") or explanation.get("missing_required_information") or []
+        findings.setdefault("missing_information", list(missing))
+        findings.setdefault("next_action", {"label": action, "route": route})
+        findings.setdefault("tracking_activities", [{
+            "id": f"{agent_id}_monitoring",
+            "type": "tracking",
+            "title": action,
+            "action": action,
+            "reason": rationale,
+            "evidence": list(evidence),
+            "responsible_agent": agent_id,
+            "completion_state": "NOT_RECORDED",
+            "next_action": {"label": action, "route": route},
+        }])
 
     coordination_summary = _coordination_summary(agent_results, need_profile)
 
@@ -1166,6 +1263,15 @@ def run_workflow(
             state_updates.append(section_name)
         except (ValueError, UserStateValidationError) as error:
             errors.append(f"could not apply {agent_id} plan to User State: {error}")
+
+    physio_result = agent_results.get("physio")
+    if physio_result is not None and physio_result.get("status") == "completed":
+        try:
+            reviewed_state = apply_physio_safety_review(updated_user_state, physio_result)
+            if reviewed_state is not updated_user_state:
+                updated_user_state = reviewed_state
+        except (ValueError, UserStateValidationError) as error:
+            errors.append(f"could not persist Physio safety review: {error}")
 
     coordination_summary = _coordination_summary(agent_results, need_profile)
 

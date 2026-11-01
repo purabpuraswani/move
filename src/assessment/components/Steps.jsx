@@ -5,13 +5,13 @@
 
 import { useState } from "react";
 
-import { BALANCE, FTSST, SHOULDER } from "../config/protocol.js";
+import { BALANCE, SHOULDER } from "../config/protocol.js";
 
 export function IntroStep({ onContinue, onExit }) {
   return (
     <div className="assess-card">
       <span className="assess-card__eyebrow">Movement check</span>
-      <h1>Three short movement checks</h1>
+      <h1>Two short movement checks</h1>
 
       <p className="assess-card__lead">
         Your camera watches how you move and records a small number of
@@ -24,8 +24,8 @@ export function IntroStep({ onContinue, onExit }) {
           <ul>
             <li>Estimates the position of your body from the camera image.</li>
             <li>
-              Measures three things: how far your arms move out to the side, how
-              long five sit-to-stands take, and how long you can stand on one leg.
+              Measures two things: how far your arms move out to the side and how
+              long you can stand on one leg.
             </li>
             <li>Records those numbers, and how good the recording conditions were.</li>
           </ul>
@@ -56,8 +56,7 @@ export function IntroStep({ onContinue, onExit }) {
           <h3>What you will need</h3>
           <ul>
             <li>Space to stand with your whole body in the frame.</li>
-            <li>A stable chair without wheels for the second check.</li>
-            <li>Somewhere steady to hold on to for the third check.</li>
+            <li>Somewhere steady to hold on to during the one-leg stand.</li>
           </ul>
         </section>
       </div>
@@ -73,7 +72,6 @@ export function IntroStep({ onContinue, onExit }) {
     </div>
   );
 }
-
 export function SafetyStep({ onAccept, onExit }) {
   const [acknowledged, setAcknowledged] = useState(false);
 
@@ -109,10 +107,6 @@ export function SafetyStep({ onAccept, onExit }) {
         <li>
           Arm movement, facing the camera: {SHOULDER.requiredRepetitions} repetitions
           on each side.
-        </li>
-        <li>
-          Sit to stand, side-on to the camera: {FTSST.requiredRepetitions} stands,
-          timed automatically.
         </li>
         <li>
           Standing on one leg, facing the camera: up to{" "}
@@ -154,67 +148,3 @@ export function SafetyStep({ onAccept, onExit }) {
   );
 }
 
-export function ChairSetupStep({ onContinue, onSkip }) {
-  const [value, setValue] = useState("");
-
-  const parsed = value.trim() === "" ? null : Number(value);
-  const isNumber = typeof parsed === "number" && Number.isFinite(parsed);
-  const outOfRange =
-    isNumber && (parsed < FTSST.chairHeightMinCm || parsed > FTSST.chairHeightMaxCm);
-
-  return (
-    <div className="assess-panel">
-      <span className="assess-panel__step">Check 2 of 3 · setup</span>
-      <h2>How high is the chair seat?</h2>
-
-      <p>
-        Measure from the floor to the top of the seat. Seat height changes how hard
-        standing up is, so this is recorded alongside the result. Two sessions can
-        only be compared if the chair was the same.
-      </p>
-
-      <label className="assess-field">
-        <span>Seat height in centimetres (optional)</span>
-        <input
-          type="number"
-          inputMode="decimal"
-          min="10"
-          max="120"
-          step="0.5"
-          value={value}
-          placeholder="e.g. 45"
-          onChange={(event) => setValue(event.target.value)}
-        />
-      </label>
-
-      {outOfRange && (
-        <p className="assess-panel__warning">
-          That is outside the usual range of {FTSST.chairHeightMinCm}–
-          {FTSST.chairHeightMaxCm} cm. You can continue, and it will be recorded
-          exactly as entered with a note that it looks unusual.
-        </p>
-      )}
-
-      {!isNumber && value.trim() !== "" && (
-        <p className="assess-panel__warning">Enter a number, or leave this blank.</p>
-      )}
-
-      <p className="assess-panel__caveat">
-        If you leave this blank it is stored as not provided. It is never guessed.
-      </p>
-
-      <div className="assess-panel__actions">
-        <button type="button" className="assess-btn assess-btn--ghost" onClick={onSkip}>
-          Skip this check
-        </button>
-        <button
-          type="button"
-          className="assess-btn assess-btn--primary"
-          onClick={() => onContinue(isNumber ? parsed : null)}
-        >
-          Continue to Sit-to-Stand →
-        </button>
-      </div>
-    </div>
-  );
-}

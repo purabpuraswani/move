@@ -1,5 +1,10 @@
 # MoveWell AI — implementation report
 
+> Historical report: this records the implementation as of 2026-08-26.
+> The active system now has two movement assessments and no FTSST or Chair
+> Sit-to-Stand exercise recommendation. References below describe prior
+> implementation state only.
+
 Written 2026-08-26 at the end of a single working session that implemented the
 remaining project in six batches. Everything below is scoped to what is in the
 working tree now, and every claim about testing says which command produced it.

@@ -4,18 +4,14 @@ Mirrors physio_agent/input_contract.py's data-minimization discipline
 exactly. The Orchestrator hands the Nutrition Agent this contract, never
 the raw User State. `relevant_nutrition_signals` is exactly
 user_state["nutrition"]["data"] (the four Phase 4 self-reported fields) —
-never any raw food-tracking data, because this application collects none.
+and a minimized set of the caller's saved meal-log fields.
 
 confirmed_medical_context is read the same way physio_agent's is: only
 from `medical_context.data.confirmed_reports`, never self-reported, never
 unconfirmed report extraction.
 
-food_preferences is always None in Phase 4: no preference-collection UI
-exists yet for food preferences specifically (this application's
-onboarding does not ask). This field exists, structured but empty, so a
-later phase that adds one does not need to change this contract's shape —
-the same discipline exercise_preferences uses in physio_agent's contract.
-This agent must never invent a value for it.
+Nutrition context is copied only from the user's own profile answers.
+Missing values remain None; empty lists represent explicit "none" answers.
 """
 
 REQUIRED_FIELDS = (
@@ -27,6 +23,10 @@ REQUIRED_FIELDS = (
     "relevant_lifestyle_constraints",
     "confirmed_medical_context",
     "food_preferences",
+    "dietary_restrictions",
+    "food_allergies",
+    "nutrition_goals",
+    "recent_meal_logs",
 )
 
 NUTRITION_RELEVANT_NEED_DIMENSIONS = ("nutrition_need",)
@@ -41,7 +41,8 @@ def _fail(message: str):
 
 
 def build_nutrition_agent_input(
-    user_state: dict, *, workflow_id: str, request_id: str, agent_run_id: str
+    user_state: dict, *, workflow_id: str, request_id: str, agent_run_id: str,
+    meal_log_entries: list | None = None,
 ) -> dict:
     """Build the minimized Nutrition Agent input from a validated User State.
 
@@ -91,8 +92,14 @@ def build_nutrition_agent_input(
             else None
         ),
         "confirmed_medical_context": confirmed_medical_context,
-        # No food-preference-collection UI exists yet. See module docstring.
-        "food_preferences": None,
+        "food_preferences": (nutrition_section.get("data") or {}).get("food_preferences"),
+        "dietary_restrictions": (nutrition_section.get("data") or {}).get("dietary_restrictions"),
+        "food_allergies": (nutrition_section.get("data") or {}).get("food_allergies"),
+        "nutrition_goals": (nutrition_section.get("data") or {}).get("nutrition_goals"),
+        "recent_meal_logs": [
+            {key: entry.get(key) for key in ("meal", "food_name", "quantity", "notes", "recorded_at")}
+            for entry in (meal_log_entries or []) if isinstance(entry, dict)
+        ],
     }
 
     validate_nutrition_agent_input(payload)
@@ -129,6 +136,17 @@ def validate_nutrition_agent_input(payload) -> None:
         payload["relevant_nutrition_signals"], dict
     ):
         _fail("relevant_nutrition_signals must be null or an object")
+
+    for field in ("food_preferences", "dietary_restrictions", "food_allergies", "nutrition_goals"):
+        value = payload[field]
+        if value is not None and (
+            not isinstance(value, list)
+            or any(not isinstance(item, str) or not item.strip() for item in value)
+        ):
+            _fail(f"{field} must be null or a list of non-empty strings")
+
+    if not isinstance(payload["recent_meal_logs"], list) or any(not isinstance(item, dict) for item in payload["recent_meal_logs"]):
+        _fail("recent_meal_logs must be an array of meal records")
 
     # Same second line of defence as physio_agent.input_contract: nothing
     # shaped like raw pose/frame/food-image data may cross this boundary.

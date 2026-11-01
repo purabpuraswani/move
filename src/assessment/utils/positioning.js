@@ -8,7 +8,7 @@
  * human-friendly instructions. No raw frame or keypoint data leaves the client.
  */
 
-import { shoulderTorsoRatio } from "./geometry.js";
+import { POSE } from "../config/protocol.js";
 
 export const POSITIONING_STATUS = {
   SEARCHING: "searching",
@@ -18,19 +18,25 @@ export const POSITIONING_STATUS = {
 };
 
 export const STABLE_PREFLIGHT_FRAMES = 10;
-const MIN_CONFIDENCE = 0.28;
+const MIN_CONFIDENCE = POSE.minRequiredKeypointScore;
+
+function normalizedY(frame, point) {
+  if (!point || !Number.isFinite(point.y)) return null;
+  return frame.height > 0 ? point.y / frame.height : point.y;
+}
 
 /**
  * Evaluates landmark visibility and camera framing for the given assessment.
  *
  * @param {object} frame - Current pose frame with keypoints
- * @param {"shoulder"|"ftsst"|"balance"} testType - Assessment type
+ * @param {"shoulder"|"balance"} testType - Assessment type
  * @param {object} [options]
  * @param {number} [options.stableCount] - Consecutive stable frames so far
  * @returns {object} Positioning assessment with checklist, guidance, and status
  */
-export function evaluatePositioning(frame, testType, { stableCount = 0 } = {}) {
+export function evaluatePositioning(frame, testType, { stableCount = 0, droppedFrames = 0 } = {}) {
   if (!frame || !frame.keypoints || Object.keys(frame.keypoints).length === 0) {
+    const retainedStableFrames = droppedFrames < 3 ? stableCount : 0;
     return {
       status: POSITIONING_STATUS.SEARCHING,
       ready: false,
@@ -43,9 +49,9 @@ export function evaluatePositioning(frame, testType, { stableCount = 0 } = {}) {
         knees: false,
         feet: false,
       },
-      stableFrames: 0,
+      stableFrames: retainedStableFrames,
       targetStableFrames: STABLE_PREFLIGHT_FRAMES,
-      progress: 0,
+      progress: Math.min(1, retainedStableFrames / STABLE_PREFLIGHT_FRAMES),
       trackingQuality: "repositioning",
     };
   }
@@ -63,27 +69,19 @@ export function evaluatePositioning(frame, testType, { stableCount = 0 } = {}) {
 
   const hasLeftShoulder = Boolean(kp.left_shoulder && kp.left_shoulder.score >= MIN_CONFIDENCE);
   const hasRightShoulder = Boolean(kp.right_shoulder && kp.right_shoulder.score >= MIN_CONFIDENCE);
-  const hasShoulders = testType === "ftsst"
-    ? hasLeftShoulder || hasRightShoulder
-    : hasLeftShoulder && hasRightShoulder;
+  const hasShoulders = hasLeftShoulder && hasRightShoulder;
 
   const hasLeftHip = Boolean(kp.left_hip && kp.left_hip.score >= MIN_CONFIDENCE);
   const hasRightHip = Boolean(kp.right_hip && kp.right_hip.score >= MIN_CONFIDENCE);
-  const hasHips = testType === "ftsst"
-    ? hasLeftHip || hasRightHip
-    : hasLeftHip || hasRightHip;
+  const hasHips = testType === "balance" ? hasLeftHip && hasRightHip : hasLeftHip || hasRightHip;
 
   const hasLeftKnee = Boolean(kp.left_knee && kp.left_knee.score >= MIN_CONFIDENCE);
   const hasRightKnee = Boolean(kp.right_knee && kp.right_knee.score >= MIN_CONFIDENCE);
-  const hasKnees = testType === "ftsst"
-    ? hasLeftKnee || hasRightKnee
-    : hasLeftKnee || hasRightKnee;
+  const hasKnees = testType === "balance" ? hasLeftKnee && hasRightKnee : hasLeftKnee || hasRightKnee;
 
   const hasLeftAnkle = Boolean(kp.left_ankle && kp.left_ankle.score >= MIN_CONFIDENCE);
   const hasRightAnkle = Boolean(kp.right_ankle && kp.right_ankle.score >= MIN_CONFIDENCE);
-  const hasFeet = testType === "ftsst"
-    ? hasLeftAnkle || hasRightAnkle
-    : hasLeftAnkle || hasRightAnkle;
+  const hasFeet = testType === "balance" ? hasLeftAnkle && hasRightAnkle : hasLeftAnkle || hasRightAnkle;
 
   // Test-specific requirements
   const hasLeftElbow = Boolean(kp.left_elbow && kp.left_elbow.score >= MIN_CONFIDENCE);
@@ -109,17 +107,20 @@ export function evaluatePositioning(frame, testType, { stableCount = 0 } = {}) {
   let actionableTip = null;
 
   // Check top clipping (head)
-  const headY = kp.nose?.y ?? Math.min(kp.left_eye?.y ?? 1, kp.right_eye?.y ?? 1);
+  const headY = normalizedY(frame, kp.nose) ?? Math.min(
+    normalizedY(frame, kp.left_eye) ?? 1,
+    normalizedY(frame, kp.right_eye) ?? 1
+  );
   if (hasHead && headY < 0.05) {
     guidance = "Move the camera slightly higher.";
     actionableTip = "Tilt your screen up or step back slightly.";
   }
 
-  // Check bottom clipping (feet) for sit-to-stand and balance
+  // Check bottom clipping (feet) for the full-body balance check.
   if (testType !== "shoulder") {
     const maxY = Math.max(
-      hasLeftAnkle ? kp.left_ankle.y : 0,
-      hasRightAnkle ? kp.right_ankle.y : 0
+      hasLeftAnkle ? normalizedY(frame, kp.left_ankle) ?? 0 : 0,
+      hasRightAnkle ? normalizedY(frame, kp.right_ankle) ?? 0 : 0
     );
     if (maxY > 0.96) {
       guidance = "Please step back so your feet are visible.";
@@ -129,8 +130,8 @@ export function evaluatePositioning(frame, testType, { stableCount = 0 } = {}) {
 
   // Check distance: too close (torso spans > 80% vertical frame)
   if (hasShoulders && hasHips) {
-    const shoulderY = Math.min(kp.left_shoulder?.y ?? 1, kp.right_shoulder?.y ?? 1);
-    const hipY = Math.max(kp.left_hip?.y ?? 0, kp.right_hip?.y ?? 0);
+    const shoulderY = Math.min(normalizedY(frame, kp.left_shoulder) ?? 1, normalizedY(frame, kp.right_shoulder) ?? 1);
+    const hipY = Math.max(normalizedY(frame, kp.left_hip) ?? 0, normalizedY(frame, kp.right_hip) ?? 0);
     const torsoSpan = Math.abs(hipY - shoulderY);
 
     if (torsoSpan > 0.55 && testType !== "shoulder") {
@@ -139,20 +140,6 @@ export function evaluatePositioning(frame, testType, { stableCount = 0 } = {}) {
     } else if (torsoSpan < 0.12) {
       guidance = "Move a little closer.";
       actionableTip = "Step slightly closer to the camera.";
-    }
-  }
-
-  // Check orientation for sit-to-stand: requires side orientation
-  if (!guidance && testType === "ftsst" && hasLeftShoulder && hasRightShoulder && hasLeftHip && hasRightHip) {
-    const ratio = shoulderTorsoRatio(
-      kp.left_shoulder,
-      kp.right_shoulder,
-      kp.left_hip,
-      kp.right_hip
-    );
-    if (ratio !== null && ratio > 0.48) {
-      guidance = "Turn slightly sideways.";
-      actionableTip = "Place your chair sideways to the camera.";
     }
   }
 
@@ -181,7 +168,8 @@ export function evaluatePositioning(frame, testType, { stableCount = 0 } = {}) {
 
   // If positioning passed all checks, evaluate stability
   const isFramed = allVisible && !guidance;
-  let nextStableCount = isFramed ? stableCount + 1 : 0;
+  const hasTemporaryLandmarkDrop = !allVisible && droppedFrames < 3;
+  let nextStableCount = isFramed ? stableCount + 1 : hasTemporaryLandmarkDrop ? stableCount : 0;
   const isReady = nextStableCount >= STABLE_PREFLIGHT_FRAMES;
 
   if (isFramed && !isReady) {

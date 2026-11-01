@@ -53,6 +53,15 @@ CONSTRAINED_PROGRESSION_RATIO = 0.10
 # never beyond this ceiling without new evidence.
 MAX_SESSION_DAYS_PER_WEEK = 5
 
+# Components for a transparent, project-defined indicator. These are the
+# existing planning markers (plus the five-day planning ceiling), not clinical
+# targets. Missing inputs are omitted from the average rather than scored 0.
+ACTIVITY_SCORE_STEPS_MARKER = STEPS_LOW_THRESHOLD
+ACTIVITY_SCORE_WEEKLY_MINUTES_MARKER = WEEKLY_EXERCISE_MINUTES_LOW_THRESHOLD
+ACTIVITY_SCORE_EXERCISE_DAYS_MARKER = MAX_SESSION_DAYS_PER_WEEK
+ACTIVITY_SCORE_SITTING_MARKER = SITTING_HOURS_HIGH_THRESHOLD
+ACTIVITY_SCORE_MOVEMENT_BREAKS_MARKER = 3
+
 # Core signals: at least one must be KNOWN for this domain to say anything.
 CORE_SIGNALS = (
     "daily_steps",
@@ -75,6 +84,74 @@ def _step_target(current, *, constrained):
 
 def _finding(name, text, *, value=None):
     return {"signal": name, "finding": text, "value": value, "measured": True}
+
+
+def _activity_score(signals, movement_breaks_context=None):
+    """Equal-weight available activity dimensions; unknowns are not zeroes."""
+    values = {name: signals.get(name, {}).get("value") for name in (
+        "daily_steps", "exercise_days", "weekly_exercise_minutes",
+        "daily_sitting_hours", "movement_breaks_per_day",
+    )}
+    formulas = {
+        "daily_steps": lambda value: min(value / ACTIVITY_SCORE_STEPS_MARKER, 1.0) * 100,
+        "exercise_days": lambda value: min(value / ACTIVITY_SCORE_EXERCISE_DAYS_MARKER, 1.0) * 100,
+        "weekly_exercise_minutes": lambda value: min(value / ACTIVITY_SCORE_WEEKLY_MINUTES_MARKER, 1.0) * 100,
+        "daily_sitting_hours": lambda value: (1.0 - min(value / ACTIVITY_SCORE_SITTING_MARKER, 1.0)) * 100,
+        "movement_breaks_per_day": lambda value: min(value / ACTIVITY_SCORE_MOVEMENT_BREAKS_MARKER, 1.0) * 100,
+    }
+    labels = {
+        "daily_steps": "Daily steps",
+        "exercise_days": "Exercise days per week",
+        "weekly_exercise_minutes": "Weekly exercise minutes",
+        "daily_sitting_hours": "Daily sitting time",
+        "movement_breaks_per_day": "Movement breaks per day",
+    }
+    units = {
+        "daily_steps": "steps/day",
+        "exercise_days": "days/week",
+        "weekly_exercise_minutes": "minutes/week",
+        "daily_sitting_hours": "hours/day",
+        "movement_breaks_per_day": "breaks/day",
+    }
+    thresholds = {
+        "daily_steps": ACTIVITY_SCORE_STEPS_MARKER,
+        "exercise_days": ACTIVITY_SCORE_EXERCISE_DAYS_MARKER,
+        "weekly_exercise_minutes": ACTIVITY_SCORE_WEEKLY_MINUTES_MARKER,
+        "daily_sitting_hours": ACTIVITY_SCORE_SITTING_MARKER,
+        "movement_breaks_per_day": ACTIVITY_SCORE_MOVEMENT_BREAKS_MARKER,
+    }
+    components = []
+    for metric, value in values.items():
+        available = isinstance(value, (int, float)) and not isinstance(value, bool)
+        score = round(formulas[metric](value), 1) if available and metric in formulas else None
+        components.append({
+            "metric": metric,
+            "label": labels[metric],
+            "unit": units[metric],
+            "project_marker": thresholds[metric],
+            "direction": "lower_is_better" if metric == "daily_sitting_hours" else "higher_is_better",
+            "input_value": value if available else None,
+            "score": score,
+            "status": "AVAILABLE" if score is not None else "UNKNOWN",
+        })
+    scored = [item["score"] for item in components if item["score"] is not None]
+    return {
+        "value": round(sum(scored) / len(scored), 1) if scored else None,
+        "scale": "0–100",
+        "label": "MoveWell Activity Indicator",
+        "interpretation": "Project-defined activity summary, not a medically validated clinical score.",
+        "method": "Each available input is normalized against its listed project marker (sitting is inverse); component scores are equally weighted and unknown inputs are excluded.",
+        "inputs": values,
+        "thresholds": {
+            **thresholds,
+        },
+        "components": components,
+        "movement_breaks_observation": movement_breaks_context or {
+            "basis": "No daily check-in movement-break values were supplied.",
+            "dates": [],
+            "days_observed": 0,
+        },
+    }
 
 
 def assess_activity(view: dict) -> dict:
@@ -128,6 +205,7 @@ def assess_activity(view: dict) -> dict:
             "constraints": constraints,
             "missing_information": missing_labels(signals),
             "confidence": 0.0,
+            "activity_score": _activity_score(signals, view.get("movement_breaks_context")),
         }
 
     findings = []
@@ -293,4 +371,5 @@ def assess_activity(view: dict) -> dict:
         "constraints": constraints,
         "missing_information": missing_labels(signals),
         "confidence": confidence_from(signals),
+        "activity_score": _activity_score(signals, view.get("movement_breaks_context")),
     }

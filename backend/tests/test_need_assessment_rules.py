@@ -5,8 +5,6 @@ from need_assessment.rules import (
     SHOULDER_MEDIUM_NEED_BELOW_DEG,
     BALANCE_HIGH_NEED_BELOW_SECONDS,
     BALANCE_MEDIUM_NEED_BELOW_SECONDS,
-    FTSST_HIGH_NEED_ABOVE_SECONDS,
-    FTSST_MEDIUM_NEED_ABOVE_SECONDS,
     assess_behaviour_need,
     assess_exercise_need,
     assess_functional_movement_need,
@@ -15,6 +13,8 @@ from need_assessment.rules import (
     assess_safety_status,
     assess_stability_need,
 )
+from need_assessment.assessment import assemble_need_profile
+from orchestrator.decision import decide_physio_required
 from user_state.schema import build_user_state
 
 
@@ -30,7 +30,6 @@ def shoulder_state(left_deg, right_deg, difference=None):
                         "observableDifferenceDeg": difference,
                     },
                 },
-                "ftsst": {"status": "not_started"},
                 "balance": {"status": "not_started"},
             }
         }
@@ -48,7 +47,6 @@ def balance_state(left_seconds, right_seconds):
         assessment_doc={
             "tests": {
                 "shoulder": {"status": "not_started"},
-                "ftsst": {"status": "not_started"},
                 "balance": {
                     "status": "completed",
                     "measurements": {
@@ -57,25 +55,6 @@ def balance_state(left_seconds, right_seconds):
                         "observableDifferenceMs": None,
                     },
                 },
-            }
-        }
-    )
-
-
-def ftsst_state(seconds, detected=5, required=5):
-    return build_user_state(
-        assessment_doc={
-            "tests": {
-                "shoulder": {"status": "not_started"},
-                "ftsst": {
-                    "status": "completed",
-                    "measurements": {
-                        "completionTimeSeconds": seconds,
-                        "repetitionsDetected": detected,
-                        "requiredRepetitions": required,
-                    },
-                },
-                "balance": {"status": "not_started"},
             }
         }
     )
@@ -180,35 +159,41 @@ class StabilityNeedTests(unittest.TestCase):
 
 
 class FunctionalMovementNeedTests(unittest.TestCase):
-    def test_no_assessment_is_not_assessed(self):
-        entry = assess_functional_movement_need(build_user_state())
+    def test_retired_ftsst_does_not_create_a_current_functional_need(self):
+        state = build_user_state(
+            assessment_doc={
+                "tests": {
+                    "shoulder": {"status": "not_started"},
+                    "balance": {"status": "not_started"},
+                    "ftsst": {
+                        "status": "completed",
+                        "measurements": {"completionTimeSeconds": 40},
+                    },
+                }
+            }
+        )
+        entry = assess_functional_movement_need(state)
+
         self.assertEqual(entry["level"], "NOT_ASSESSED")
+        self.assertIn("not measured by the current assessment protocol", entry["evidence"][0])
 
-    def test_a_long_completion_time_is_high_need(self):
-        state = ftsst_state(FTSST_HIGH_NEED_ABOVE_SECONDS + 5)
-        entry = assess_functional_movement_need(state)
+    def test_historical_ftsst_does_not_select_physio(self):
+        state = build_user_state(
+            assessment_doc={
+                "tests": {
+                    "shoulder": {"status": "not_started"},
+                    "balance": {"status": "not_started"},
+                    "ftsst": {
+                        "status": "completed",
+                        "measurements": {"completionTimeSeconds": 40},
+                    },
+                }
+            }
+        )
+        profile = assemble_need_profile(state)
 
-        self.assertEqual(entry["level"], "HIGH")
-        self.assertEqual(entry["confidence"], "HIGH")
-
-    def test_a_moderate_completion_time_is_medium_need(self):
-        midpoint = (FTSST_MEDIUM_NEED_ABOVE_SECONDS + FTSST_HIGH_NEED_ABOVE_SECONDS) / 2
-        state = ftsst_state(midpoint)
-        entry = assess_functional_movement_need(state)
-
-        self.assertEqual(entry["level"], "MEDIUM")
-
-    def test_a_short_completion_time_is_low_need(self):
-        state = ftsst_state(6)
-        entry = assess_functional_movement_need(state)
-
-        self.assertEqual(entry["level"], "LOW")
-
-    def test_partial_repetitions_are_named_in_evidence(self):
-        state = ftsst_state(FTSST_HIGH_NEED_ABOVE_SECONDS + 1, detected=3, required=5)
-        entry = assess_functional_movement_need(state)
-
-        self.assertTrue(any("3 of 5" in item for item in entry["evidence"]))
+        self.assertEqual(profile["functional_movement_need"]["level"], "NOT_ASSESSED")
+        self.assertFalse(decide_physio_required(profile)["physio_required"])
 
 
 class BehaviourNeedTests(unittest.TestCase):

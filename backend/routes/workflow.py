@@ -47,29 +47,27 @@ import logging
 import os
 from datetime import datetime, time, timedelta, timezone
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status
-from pymongo.errors import PyMongoError
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, status
+from database import StorageError
 
 from agents.sources import load_profile
 from assessments.store import (
     baseline_assessment,
     latest_assessment,
+    latest_valid_assessment,
     previous_assessment,
 )
 from auth.deps import get_current_user
 from behaviour_log.store import list_behaviour_actions
+from daily_checkins.store import list_daily_checkins
 from exercise_assessment.store import list_exercise_results
 from food_log.store import list_food_log_entries
-from orchestrator.decision import (
-    decide_behaviour_required,
-    decide_nutrition_required,
-    decide_physio_required,
-    decide_progress_required,
-)
-from orchestrator.orchestrator import run_workflow
+from orchestrator.decision import evaluate_specialist_selection
+from orchestrator.orchestrator import _candidate_recommendations, run_workflow
 from orchestration.ids import start_workflow
 from reports.store import confirmed_values_for_user
 from user_state.store import get_user_state, save_user_state
+from workflow_execution.store import get_execution, latest_execution, list_executions, save_execution
 from workflow.assembly import assemble_user_state_from_documents
 from workflow.response import never_run_response, serialise_workflow_state
 
@@ -391,10 +389,10 @@ def _progress_inputs(user_state: dict, user_id: str) -> dict:
     )
     nutrition_plan_record = nutrition_plans[-1] if nutrition_plans else None
 
-    physical_section = user_state.get("physical_assessment") or {}
-    current_assessment = (
-        physical_section.get("data") if physical_section.get("available") else None
-    )
+    # Use one complete saved session as the Progress Agent's current input.
+    # User State may be assembled from legacy records, so choose the latest
+    # session that contains an extractable active measurement.
+    current_assessment = latest_valid_assessment(user_id)
 
     period_previous, period_current = _nutrition_periods(nutrition_plan_record)
 
@@ -425,14 +423,70 @@ def _progress_inputs(user_state: dict, user_id: str) -> dict:
         "exercise_results": list_exercise_results(user_id),
         "nutrition_food_log_previous_period": food_log_previous,
         "nutrition_food_log_current_period": food_log_current,
+        "nutrition_food_log_entries": list_food_log_entries(user_id, limit=100),
         "nutrition_period_previous": period_previous,
         "nutrition_period_current": period_current,
     }
 
 
+def _latest_execution_response(
+    user_state: dict,
+    execution: dict,
+    *,
+    selection_explanations: dict | None = None,
+    last_safety_result: dict | None = None,
+) -> dict:
+    """Rebuild the response envelope from saved results using current rules.
+
+    Execution results, selection decisions, User State and Safety Gate result
+    are read from storage; no specialist is rerun. Re-serializing lets
+    response fixes and clarified source data take effect after refresh while
+    preserving the actual historical agent outputs.
+    """
+    snapshot = (execution or {}).get("response")
+    agent_executions = (execution or {}).get("agent_executions") or {}
+    created_at = (execution or {}).get("created_at")
+    workflow_created_at = created_at.isoformat() if hasattr(created_at, "isoformat") else created_at
+    if not agent_executions and isinstance(snapshot, dict):
+        # Compatibility for early execution records that saved only their
+        # response snapshot, with no dedicated execution result map.
+        return {"available": True, **snapshot, "workflow_created_at": workflow_created_at}
+    safety_result = last_safety_result or (execution or {}).get("safety_result")
+    approved_recommendations = []
+    if safety_result is not None:
+        blocked = set(safety_result.get("blocked_recommendation_ids") or [])
+        candidates = _candidate_recommendations(agent_executions)
+        if safety_result.get("status") == "REFER":
+            blocked.update(item.get("id") for item in candidates)
+        modified = set(safety_result.get("modified_recommendation_ids") or [])
+        for item in candidates:
+            if item.get("id") in blocked:
+                continue
+            approved = dict(item)
+            if safety_result.get("status") == "MODIFY" and item.get("id") in modified:
+                approved["safety_note_added"] = True
+            approved_recommendations.append(approved)
+
+    explanations = selection_explanations or (execution or {}).get(
+        "orchestrator_decision", {}
+    ).get("selection_explanations", {})
+    result = serialise_workflow_state(
+        user_state,
+        safety_status=(safety_result or {}).get("status"),
+        safety_result=safety_result,
+        agent_executions=agent_executions,
+        selection_explanations=explanations,
+        approved_recommendations=approved_recommendations,
+        errors=(execution or {}).get("errors", []),
+    )
+    result["selection_explanations"] = explanations
+    return {"available": True, **result, "workflow_created_at": workflow_created_at}
+
+
 @router.post("/run")
 def run_user_workflow(
     payload: dict | None = Body(None),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     current_user: dict = Depends(get_current_user),
 ):
     """Build the caller's User State and run the Orchestrator against it.
@@ -443,6 +497,20 @@ def run_user_workflow(
     """
 
     user_id = str(current_user["_id"])
+
+    if idempotency_key is not None:
+        idempotency_key = idempotency_key.strip()
+        if not idempotency_key or len(idempotency_key) > 128:
+            raise HTTPException(status_code=400, detail="Idempotency-Key must contain 1 to 128 characters")
+        try:
+            previous = get_execution(user_id, idempotency_key)
+        except StorageError:
+            raise _database_error() from None
+        if previous and isinstance(previous.get("response"), dict):
+            prior_response = dict(previous["response"])
+            created_at = previous.get("created_at")
+            prior_response["workflow_created_at"] = created_at.isoformat() if hasattr(created_at, "isoformat") else created_at
+            return prior_response
 
     progress_trigger = None
     if payload:
@@ -457,7 +525,7 @@ def run_user_workflow(
 
     try:
         user_state = build_user_state_for_user(user_id)
-    except PyMongoError:
+    except StorageError:
         raise _database_error() from None
 
     current_needs_section = user_state.get("current_needs") or {}
@@ -467,10 +535,43 @@ def run_user_workflow(
         else None
     )
 
-    need_physio = decide_physio_required(need_profile)["physio_required"]
-    need_behaviour = decide_behaviour_required(need_profile)["behaviour_required"]
-    need_nutrition = decide_nutrition_required(need_profile)["nutrition_required"]
-    need_progress = decide_progress_required(progress_trigger)["progress_required"]
+    try:
+        behaviour_actions = list_behaviour_actions(user_id)
+    except StorageError:
+        raise _database_error() from None
+
+    try:
+        daily_checkins = list_daily_checkins(user_id, limit=7)
+    except StorageError:
+        raise _database_error() from None
+
+    # Progress runs on every wellness workflow to report the baseline and
+    # what history is still missing. Adaptation dispatch remains gated by a
+    # real progress trigger inside the Orchestrator.
+    try:
+        progress_kwargs = _progress_inputs(user_state, user_id)
+    except StorageError:
+        raise _database_error() from None
+
+    _, selection_explanations = evaluate_specialist_selection(
+        user_state, need_profile, progress_trigger,
+        behaviour_actions=behaviour_actions,
+        progress_context=progress_kwargs,
+    )
+    # Every specialist analyses available evidence on a workflow run;
+    # selection eligibility still governs whether it may create a tailored
+    # intervention or dispatch a Progress adaptation.
+    need_physio = need_behaviour = need_nutrition = need_progress = True
+
+    # A completed Progress finding can dispatch a plan adaptation to one of
+    # these specialists. Prepare only the clients a supported dispatch could
+    # need; the specialist itself still runs only after that finding exists.
+    nutrition_plans = (
+        ((user_state.get("nutrition_plan") or {}).get("data") or {}).get("plans") or []
+    )
+    need_physio = need_physio or need_progress
+    need_behaviour = need_behaviour or need_progress
+    need_nutrition = need_nutrition or (need_progress and bool(nutrition_plans))
 
     trace = start_workflow()
 
@@ -496,26 +597,16 @@ def run_user_workflow(
             detail=RECOMMENDATION_ENGINE_UNAVAILABLE,
         ) from None
 
-    progress_kwargs = {}
-    if need_progress:
-        try:
-            progress_kwargs = _progress_inputs(user_state, user_id)
-        except PyMongoError:
-            raise _database_error() from None
-
-    try:
-        behaviour_actions = list_behaviour_actions(user_id)
-    except PyMongoError:
-        raise _database_error() from None
-
     result = run_workflow(
         user_state,
         behaviour_actions=behaviour_actions,
+        daily_checkins=daily_checkins,
         tool_client=clients.get("tool_client"),
         behaviour_tool_client=clients.get("behaviour_tool_client"),
         nutrition_tool_client=clients.get("nutrition_tool_client"),
         progress_tool_client=clients.get("progress_tool_client"),
         progress_trigger=progress_trigger,
+        execute_all_agents=True,
         workflow_id=trace.workflow_id,
         request_id=trace.request_id,
         **progress_kwargs,
@@ -536,15 +627,69 @@ def run_user_workflow(
     safety_result = result["safety_result"]
 
     try:
-        save_user_state(user_id, updated_user_state, safety_result=safety_result)
-    except PyMongoError:
+        save_user_state(
+            user_id,
+            updated_user_state,
+            safety_result=safety_result,
+            selection_explanations=result["orchestrator_decision"].get(
+                "selection_explanations", selection_explanations
+            ),
+        )
+    except StorageError:
         raise _database_error() from None
 
-    return serialise_workflow_state(
+    agent_executions = {
+        item.get("agent"): item
+        for item in (result.get("agent_results") or [])
+        if isinstance(item, dict) and item.get("agent")
+    }
+    response = serialise_workflow_state(
         updated_user_state,
         safety_status=safety_result["status"] if safety_result else None,
         safety_result=safety_result,
+        agent_executions=agent_executions,
+        selection_explanations=result["orchestrator_decision"].get(
+            "selection_explanations", selection_explanations
+        ),
+        approved_recommendations=result.get("final_recommendations", []),
+        errors=result.get("errors", []),
     )
+    response["selection_explanations"] = result["orchestrator_decision"].get(
+        "selection_explanations", selection_explanations
+    )
+    execution_key = idempotency_key or result["workflow_id"]
+    final_explanations = result["orchestrator_decision"].get(
+        "selection_explanations", selection_explanations
+    )
+    progress_dispatches = {
+        agent_id: {
+            "reason": explanation.get("reason_for_selection"),
+            "evidence": explanation.get("evidence_used", []),
+        }
+        for agent_id, explanation in final_explanations.items()
+        if "Progress Agent recommended" in (explanation.get("reason_for_selection") or "")
+    }
+    try:
+        saved_execution = save_execution(
+            user_id,
+            execution_key,
+            {
+                "workflow_id": result["workflow_id"],
+                "selected_agents": result.get("selected_agents", []),
+                "orchestrator_decision": result.get("orchestrator_decision", {}),
+                "progress_dispatches": progress_dispatches,
+                "agent_executions": agent_executions,
+                "unified_plan": response.get("unified_plan"),
+                "safety_result": safety_result,
+                "errors": result.get("errors", []),
+                "response": response,
+            },
+        )
+    except StorageError:
+        raise _database_error() from None
+    created_at = saved_execution.get("created_at") if isinstance(saved_execution, dict) else None
+    response["workflow_created_at"] = created_at.isoformat() if hasattr(created_at, "isoformat") else created_at
+    return response
 
 
 @router.get("/latest")
@@ -557,13 +702,14 @@ def read_latest_workflow_state(current_user: dict = Depends(get_current_user)):
 
     try:
         document = get_user_state(user_id)
-    except PyMongoError:
+        execution = latest_execution(user_id)
+    except StorageError:
         raise _database_error() from None
 
     if document is None:
         try:
             assessment_doc = latest_assessment(user_id)
-        except PyMongoError:
+        except StorageError:
             raise _database_error() from None
 
         if assessment_doc is not None:
@@ -584,7 +730,17 @@ def read_latest_workflow_state(current_user: dict = Depends(get_current_user)):
 
         return never_run_response()
 
-    return {
+    # Prefer the saved response for current snapshots. Legacy snapshots are
+    # reserialized from their actual saved executions so refreshes expose the
+    # current response contract without rerunning specialists.
+    if execution:
+        return _latest_execution_response(
+            document["state"], execution,
+            selection_explanations=document.get("last_selection_explanations", {}),
+            last_safety_result=document.get("last_safety_result"),
+        )
+
+    response = {
         "available": True,
         **serialise_workflow_state(
             document["state"],
@@ -592,6 +748,36 @@ def read_latest_workflow_state(current_user: dict = Depends(get_current_user)):
             if document.get("last_safety_result")
             else None,
             safety_result=document.get("last_safety_result"),
+            agent_executions=(execution or {}).get("agent_executions"),
         ),
+    }
+    response["selection_explanations"] = document.get(
+        "last_selection_explanations", {}
+    )
+    return response
+
+
+@router.get("/history")
+def read_workflow_history(
+    limit: int = 20,
+    current_user: dict = Depends(get_current_user),
+):
+    """Return this caller's workflow execution history, newest first."""
+    user_id = str(current_user["_id"])
+    try:
+        records = list_executions(user_id, limit)
+    except StorageError:
+        raise _database_error() from None
+    return {
+        "available": bool(records),
+        "executions": [
+            {
+                "created_at": record.get("created_at"),
+                "selected_agents": record.get("selected_agents", []),
+                "results": ((record.get("response") or {}).get("execution_results") or {}),
+                "response": record.get("response"),
+            }
+            for record in records
+        ],
     }
 

@@ -6,10 +6,11 @@ Exercise & Physical Activity (how much). It is "will they actually do it,
 and if not, what is in the way?". This module answers only that, from two
 sources and no others:
 
-  * the user's own recorded actions, as counted by
-    behaviour_agent/adherence.py; and
-  * the `common_barriers` the behaviour library already publishes for the
-    topics this user's plan actually selected.
+  * the user's own reported barriers; and
+  * recorded action evidence, as counted by behaviour_agent/adherence.py.
+
+The library's `common_barriers` are returned separately as unconfirmed
+suggestions. They are never stated as facts about the user.
 
 Nothing here invents a barrier, and nothing here recommends an exercise.
 An absence of recorded actions is reported as an absence of evidence, not
@@ -25,42 +26,54 @@ from behaviour_agent.adherence import ADHERED, INSUFFICIENT_DATA, NOT_ADHERED, N
 MAX_GOALS_WHEN_STRUGGLING = 2
 
 
-def identify_barriers(adherence: dict, topics: list) -> list:
-    """Barriers, each tied to the evidence that produced it."""
+def identify_barriers(
+    adherence: dict, topics: list = None, reported_barriers: list = None
+) -> list:
+    """Return only user-reported or evidence-backed barriers.
+
+    Catalog examples are intentionally not returned here; use
+    `catalog_barrier_suggestions()` to keep unconfirmed possibilities apart.
+    """
 
     barriers = []
     status = (adherence or {}).get("status")
+
+    for text in reported_barriers or []:
+        barriers.append({
+            "barrier": text,
+            "barrier_type": "user_reported",
+            "source": "user_reported_profile",
+            "evidence": f"You reported: {text}",
+            "confirmed_by_user": True,
+        })
 
     if status == NOT_ADHERED:
         barriers.append(
             {
                 "barrier": "inconsistent_adherence",
+                "barrier_type": "inferred_from_recorded_behaviour",
                 "source": "recorded_actions",
                 "evidence": (adherence or {}).get("summary")
                 or "Recorded actions show fewer completions than the plan asked for.",
+                "confirmed_by_user": False,
             }
         )
-    elif status in (NOT_LOGGED, INSUFFICIENT_DATA):
-        barriers.append(
-            {
-                "barrier": "not_enough_recorded_evidence",
-                "source": "recorded_actions",
-                "evidence": (adherence or {}).get("summary")
-                or "Not enough recorded actions yet to say how the plan is going.",
-            }
-        )
-
-    for topic in topics or []:
-        for text in topic.get("common_barriers") or []:
-            barriers.append(
-                {
-                    "barrier": "known_barrier_for_topic",
-                    "source": f"behaviour_library:{topic.get('topic_id')}",
-                    "evidence": text,
-                }
-            )
 
     return barriers
+
+
+def catalog_barrier_suggestions(topics: list) -> list:
+    """General library suggestions, explicitly unconfirmed for this user."""
+    return [
+        {
+            "suggestion": text,
+            "topic_id": topic.get("topic_id"),
+            "source": f"behaviour_library:{topic.get('topic_id')}",
+            "confirmed_by_user": False,
+        }
+        for topic in topics or []
+        for text in topic.get("common_barriers") or []
+    ]
 
 
 def behaviour_interventions(adherence: dict, barriers: list, goal_count: int) -> list:
@@ -112,7 +125,7 @@ def behaviour_interventions(adherence: dict, barriers: list, goal_count: int) ->
             }
         )
 
-    if "not_enough_recorded_evidence" in barrier_types:
+    if status in (NOT_LOGGED, INSUFFICIENT_DATA):
         interventions.append(
             {
                 "id": "record_one_action",

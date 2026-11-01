@@ -310,13 +310,13 @@ function Dashboard() {
   );
 
 
-  // How many of the three checks recorded a usable measurement. This is a
+  // How many of the two active checks recorded a usable measurement. This is a
   // count of completed checks, not a rating of how well anything was done.
   const checksRecorded =
     latest?.summary?.testsCompleted ?? 0;
 
   const checksRecordedPercent =
-    Math.round((checksRecorded / 3) * 100);
+    Math.round((checksRecorded / 2) * 100);
 
 
   // Confirmed means the user checked the values against their own document and
@@ -687,7 +687,7 @@ function Dashboard() {
 
                   <strong>
                     {latest
-                      ? `${checksRecorded}/3`
+                      ? `${checksRecorded}/2`
                       : "—"}
                   </strong>
 
@@ -758,7 +758,7 @@ function Dashboard() {
             <button
               className="text-button"
               onClick={() =>
-                navigate("/onboarding")
+                navigate("/profile")
               }
             >
               Update answers →
@@ -1025,10 +1025,10 @@ function Dashboard() {
               />
 
               <Specialist
-                emoji="🛡️"
-                title="Safety & Clinical Escalation"
-                text="Clinical gatekeeping & contraindication checks"
-                onClick={() => navigate("/specialist/safety")}
+                emoji="📈"
+                title="Progress & Reassessment"
+                text="Saved baselines, comparisons & activity history"
+                onClick={() => navigate("/progress")}
               />
             </div>
 

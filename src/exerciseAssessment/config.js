@@ -34,16 +34,6 @@ export const ENGINE_TYPES = Object.freeze({
 });
 
 export const EXERCISE_ENGINE_CONFIG = {
-  "chair-sit-to-stand": {
-    engineType: ENGINE_TYPES.REP_COUNTING,
-    signal: "kneeExtensionAngleDeg",
-    enterThreshold: 155,
-    exitThreshold: 120,
-    minDurationMs: 500,
-    maxDurationMs: 15000,
-    smoothingWindow: 5,
-    targetRepetitions: 10,
-  },
   "wall-sit": {
     engineType: ENGINE_TYPES.HOLD_DURATION,
     signal: "kneeFlexionAngleDeg",
@@ -163,8 +153,7 @@ export const EXERCISE_ENGINE_CONFIG = {
 
   "seated-knee-extension": {
     engineType: ENGINE_TYPES.REP_COUNTING,
-    // Interior knee angle, as in the sit-to-stand: ~90 seated, straightening
-    // toward 180 as the leg extends.
+    // Interior knee angle while the seated leg extends toward straight.
     signal: "kneeExtensionAngleDeg",
     enterThreshold: 160,
     exitThreshold: 110,

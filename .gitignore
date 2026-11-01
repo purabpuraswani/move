@@ -40,3 +40,4 @@ backend/uploads/
 
 # Local development database (created at runtime, not source)
 backend/movewell.db
+backend/movewell.sqlite3*

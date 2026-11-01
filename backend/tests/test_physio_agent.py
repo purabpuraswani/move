@@ -48,6 +48,21 @@ def _state_with_needs(mobility, stability, functional_movement):
         "available": True, "reason": None,
         "data": _needs(mobility, stability, functional_movement),
     }
+    state["medical_context"] = {
+        "available": True,
+        "reason": None,
+        "data": {
+            "self_reported": {
+                "source": "self_reported_onboarding",
+                "values": {
+                    "diabetes": "no", "hypertension": "no", "heart_condition": "no",
+                    "previous_injury": "no", "joint_pain": "no", "back_neck_pain": "no",
+                    "other_conditions": "",
+                },
+            },
+            "confirmed_reports": {"source": "user_confirmed_medical_report", "reports": []},
+        },
+    }
     return state
 
 
@@ -81,6 +96,62 @@ class PhysioAgentHighNeedTests(unittest.TestCase):
         }
         for entry in plan["exercises"]:
             self.assertIn(entry["exercise_id"], all_exercise_ids)
+
+    def test_movement_limitation_without_reported_medical_concerns_is_not_clinical_approval(self):
+        evaluations = self.result["findings"]["exercise_safety_evaluations"]
+        self.assertTrue(evaluations)
+        self.assertTrue(all(item["status"] == "NO_REPORTED_CONFLICT" for item in evaluations))
+        self.assertTrue(all(item["clinical_approval"] is False for item in evaluations))
+        self.assertTrue(all(item["assessment_evidence"] for item in evaluations))
+
+    def test_multiple_needs_are_recorded_for_each_candidate(self):
+        targets = {item["target_need"] for item in self.result["findings"]["exercise_safety_evaluations"]}
+        self.assertTrue({"mobility_need", "stability_need"}.issubset(targets))
+
+    def test_reported_injury_defers_candidates_and_records_review_reason(self):
+        state = _state_with_needs("HIGH", "LOW", "LOW")
+        state["medical_context"]["data"]["self_reported"]["values"]["previous_injury"] = "yes"
+        result, _ = _run(state)
+        self.assertEqual(result["findings"]["plan"]["exercises"], [])
+        self.assertTrue(result["findings"]["rejected_candidates"])
+        self.assertTrue(all(
+            item["safety_evaluation"]["status"] == "DEFERRED_HEALTHCARE_REVIEW"
+            for item in result["findings"]["rejected_candidates"]
+        ))
+
+    def test_confirmed_report_defers_candidates_without_interpreting_values(self):
+        state = _state_with_needs("LOW", "HIGH", "LOW")
+        state["medical_context"]["data"]["confirmed_reports"]["reports"] = [
+            {"id": "report-1", "condition": "heart_condition", "values": [{"key": "x", "value": "recorded"}]}
+        ]
+        result, _ = _run(state)
+        self.assertEqual(result["findings"]["plan"]["exercises"], [])
+        self.assertTrue(all(
+            item["status"] == "DEFERRED_HEALTHCARE_REVIEW"
+            for item in result["findings"]["exercise_safety_evaluations"]
+        ))
+        self.assertNotIn("recorded", str(result["findings"]["exercise_safety_evaluations"]))
+
+    def test_reported_pain_without_details_is_deferred(self):
+        state = _state_with_needs("HIGH", "LOW", "LOW")
+        state["medical_context"]["data"]["self_reported"]["values"]["joint_pain"] = "sometimes"
+        result, _ = _run(state)
+        self.assertEqual(result["findings"]["plan"]["exercises"], [])
+        self.assertTrue(all(
+            item["status"] == "DEFERRED_HEALTHCARE_REVIEW"
+            for item in result["findings"]["exercise_safety_evaluations"]
+        ))
+
+    def test_incomplete_health_screen_is_unknown_and_defers(self):
+        state = _state_with_needs("HIGH", "LOW", "LOW")
+        state["medical_context"]["data"]["self_reported"]["values"] = {"diabetes": "no"}
+        result, _ = _run(state)
+        self.assertEqual(result["findings"]["plan"]["exercises"], [])
+        self.assertEqual(result["findings"]["reported_health_context_status"], "INCOMPLETE")
+        self.assertTrue(all(
+            item["status"] == "DEFERRED_CONTEXT_REQUIRED"
+            for item in result["findings"]["exercise_safety_evaluations"]
+        ))
 
     def test_every_plan_entry_has_a_non_diagnostic_rationale(self):
         for entry in self.result["findings"]["plan"]["exercises"]:

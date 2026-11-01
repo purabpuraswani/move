@@ -11,7 +11,29 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { PLAN_STATES, hasAnyPlan, planState } from "../planState.js";
+import {
+  PLAN_STATES,
+  hasAnyPlan,
+  planState,
+  profileChangedSinceWorkflow,
+  shouldGenerateWorkflowForAssessment,
+  workflowMatchesAssessment,
+} from "../planState.js";
+
+test("profile changes pause an older plan but unchanged or older profiles do not", () => {
+  assert.equal(profileChangedSinceWorkflow("2026-11-01T10:00:00Z", "2026-11-01T09:00:00Z"), true);
+  assert.equal(profileChangedSinceWorkflow("2026-11-01T09:00:00Z", "2026-11-01T10:00:00Z"), false);
+  assert.equal(profileChangedSinceWorkflow("2026-11-01T10:00:00Z", null), true);
+  assert.equal(profileChangedSinceWorkflow(null, "2026-11-01T10:00:00Z"), false);
+});
+
+test("partial results and drafts do not qualify for automatic workflow execution", () => {
+  assert.equal(shouldGenerateWorkflowForAssessment(null, null), false);
+  assert.equal(shouldGenerateWorkflowForAssessment(null, {
+    sessionId: "draft",
+    tests: { shoulder: { status: "completed" }, balance: { status: "not_started" } },
+  }), false);
+});
 
 const NEVER_RUN_RESPONSE = {
   available: false,
@@ -53,9 +75,9 @@ const NO_PLAN_RESPONSE = {
       "Your assessment was completed, but some of it could not be measured.",
     missing: [
       {
-        capability: "Sit-to-stand strength",
+        capability: "Standing balance",
         reason:
-          "The chair sit-to-stand x5 baseline test has not produced a usable result for this user.",
+          "The one-leg stand check has not produced a usable result for this user.",
       },
     ],
     next_action: { label: "Redo the movement assessment", route: "/assessment" },
@@ -78,6 +100,19 @@ test("state B: a response carrying a plan is PLAN_AVAILABLE", () => {
   assert.ok(hasAnyPlan(PLAN_AVAILABLE_RESPONSE));
 });
 
+test("an assessment-backed starter guidance response opens the plan rather than the empty state", () => {
+  const result = planState({
+    plan_state: {
+      state: "STARTER_GUIDANCE_AVAILABLE",
+      reason: "Movement need found; personalized exercises need clarification.",
+      missing: [],
+      next_action: { route: "/onboarding", label: "Complete health screen" },
+    },
+  });
+  assert.equal(result.state, PLAN_STATES.STARTER_GUIDANCE_AVAILABLE);
+  assert.equal(result.nextAction.route, "/onboarding");
+});
+
 test("state C: a completed assessment with no plan is NOT reported as NEVER_RUN", () => {
   const result = planState(NO_PLAN_RESPONSE);
 
@@ -91,8 +126,8 @@ test("state C carries what was missing, why, and what to do next", () => {
   const result = planState(NO_PLAN_RESPONSE);
 
   assert.equal(result.missing.length, 1);
-  assert.equal(result.missing[0].capability, "Sit-to-stand strength");
-  assert.match(result.missing[0].reason, /sit-to-stand/i);
+  assert.equal(result.missing[0].capability, "Standing balance");
+  assert.match(result.missing[0].reason, /one-leg stand/i);
   assert.equal(result.nextAction.label, "Redo the movement assessment");
   assert.ok(result.reason.length > 0);
 });
@@ -155,4 +190,25 @@ test("PlanPage receives a plan_version it can show, and it is not reset", () => 
 
   assert.equal(v2.state, PLAN_STATES.PLAN_AVAILABLE);
   assert.equal(PLAN_AVAILABLE_RESPONSE.exercise_plan.plan_version, 1);
+});
+
+test("workflow readiness follows the latest saved session and requires both active checks", () => {
+  const assessment = {
+    sessionId: "session-new",
+    tests: {
+      shoulder: { status: "completed" },
+      balance: { status: "completed" },
+    },
+  };
+  const oldWorkflow = { available: true, assessment_summary: { session_key: "session-old" } };
+  const currentWorkflow = { available: true, assessment_summary: { session_key: "session-new" } };
+
+  assert.equal(workflowMatchesAssessment(oldWorkflow, assessment), false);
+  assert.equal(shouldGenerateWorkflowForAssessment(oldWorkflow, assessment), true);
+  assert.equal(shouldGenerateWorkflowForAssessment({ available: false }, assessment), true);
+  assert.equal(shouldGenerateWorkflowForAssessment(currentWorkflow, assessment), false);
+  assert.equal(shouldGenerateWorkflowForAssessment(oldWorkflow, {
+    ...assessment,
+    tests: { ...assessment.tests, balance: { status: "invalid" } },
+  }), false);
 });

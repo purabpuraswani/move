@@ -5,7 +5,7 @@
  * exercise measured by "a single numeric signal crosses a threshold and
  * comes back, N times" — a knee lift angle, a calf-raise heel angle, a
  * side-leg-raise angle, a hip-extension angle, a push-up elbow-bend angle,
- * a sit-to-stand transition angle. It does not re-implement repetition
+ * a configured joint angle. It does not re-implement repetition
  * detection: it is a thin, documented configuration layer over
  * RepetitionDetector (src/assessment/utils/peaks.js) and MedianFilter
  * (src/assessment/utils/smoothing.js), the same primitives the three

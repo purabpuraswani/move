@@ -78,9 +78,13 @@ class ExerciseMcpServerToolsTests(unittest.TestCase):
         self.assertEqual(result["renderedBy"], "src/movementDemos (client-side)")
 
     def test_check_exercise_constraints_tool_valid_id(self):
-        result = self.server.check_exercise_constraints_tool("chair-sit-to-stand")
+        result = self.server.check_exercise_constraints_tool("wall-sit")
         self.assertIn("safetyConstraints", result)
         self.assertIn("metadata", result)
+
+    def test_retired_chair_sit_to_stand_is_not_available_through_tools(self):
+        result = self.server.get_exercise_details_tool("chair-sit-to-stand")
+        self.assertIn("error", result)
 
     def test_record_exercise_result_tool_accepts_a_valid_result(self):
         result = self.server.record_exercise_result_tool(

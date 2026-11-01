@@ -332,6 +332,49 @@ export function isPlainRenderable(value) {
   return typeof value === "string" || typeof value === "number";
 }
 
+/**
+ * Specialist ids that earned a place in the current user-facing plan.
+ * Execution alone is not enough: the recorded selection must be SELECTED
+ * and the persisted workflow must contain an actual approved recommendation.
+ * Context-required, tracking-only, unselected and Progress records stay in
+ * their own clarification/history views.
+ */
+export function selectedInterventionAgentIds(workflow) {
+  const journey = Array.isArray(workflow?.agent_journey) ? workflow.agent_journey : [];
+  const selected = new Set(
+    journey
+      .filter((item) => item?.selection_status === "SELECTED"
+        && item.id !== "progress"
+        && Array.isArray(item.recommendations)
+        && item.recommendations.length > 0)
+      .map((item) => item.id),
+  );
+  if (journey.length) return selected;
+
+  // Older saved responses had no selection explanation. Retain only their
+  // explicitly active cards with actual recommendation content.
+  for (const item of Array.isArray(workflow?.specialists_team) ? workflow.specialists_team : []) {
+    if (item?.status === "ACTIVE" && item.id !== "safety" && item.id !== "progress"
+      && Array.isArray(item.recommendations) && item.recommendations.length > 0) {
+      selected.add(item.id);
+    }
+  }
+  return selected;
+}
+
+export function agentIdForSpecialistCard(specialist) {
+  const id = String(specialist?.id || "").toLowerCase();
+  if (["physio", "nutrition", "behaviour", "recovery", "exercise_activity", "progress"].includes(id)) return id;
+  const title = String(specialist?.title || "").toLowerCase();
+  if (title.includes("movement") || title.includes("physio")) return "physio";
+  if (title.includes("nutrition")) return "nutrition";
+  if (title.includes("behaviour") || title.includes("habit")) return "behaviour";
+  if (title.includes("recovery")) return "recovery";
+  if (title.includes("exercise") || title.includes("activity")) return "exercise_activity";
+  if (title.includes("progress")) return "progress";
+  return null;
+}
+
 export const helpers = {
   toArray,
   safeDisplayValue,
@@ -339,5 +382,7 @@ export const helpers = {
   normalizeEvidence,
   normalizeRecommendations,
   isPlainRenderable,
+  selectedInterventionAgentIds,
+  agentIdForSpecialistCard,
 };
 

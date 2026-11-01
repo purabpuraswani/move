@@ -1,9 +1,7 @@
 """Progress Agent — deterministic comparison engine (Phase 5).
 
-Covers: improvement, stable, decline, missing data (both sides), a
-direction-aware metric (functional_movement_ftsst_seconds, where LOWER is
-better), and an explicit determinism check (identical input -> identical
-output, called twice).
+Covers active shoulder and balance metrics, missing data, and an explicit
+determinism check (identical input -> identical output, called twice).
 """
 
 import unittest
@@ -16,7 +14,6 @@ from progress_agent.comparison import (
     compare_metric,
     compare_physical_assessments,
     extract_balance_metric,
-    extract_ftsst_metric,
     extract_shoulder_metric,
     overall_direction,
 )
@@ -48,10 +45,6 @@ def _balance_doc(left_hold, right_hold, status="completed", valid=True):
             },
         },
     }
-
-
-def _ftsst_doc(seconds, status="completed"):
-    return {"tests": {"ftsst": {"status": status, "measurements": {"completionTimeSeconds": seconds}}}}
 
 
 class CompareMetricTests(unittest.TestCase):
@@ -89,24 +82,6 @@ class CompareMetricTests(unittest.TestCase):
         result = compare_metric(40, 41, "stability_balance_hold_seconds")
         self.assertEqual(result["direction"], STABLE)
 
-    def test_lower_is_better_improvement_is_a_decrease(self):
-        # FTSST: 15s -> 10s is an IMPROVEMENT (faster), even though the
-        # raw number went down — this is the direction-aware check.
-        result = compare_metric(15, 10, "functional_movement_ftsst_seconds")
-        self.assertEqual(result["direction"], IMPROVED)
-        self.assertEqual(result["change"], -5)
-
-    def test_lower_is_better_decline_is_an_increase(self):
-        # FTSST: 10s -> 15s is a DECLINE (slower)
-        result = compare_metric(10, 15, "functional_movement_ftsst_seconds")
-        self.assertEqual(result["direction"], DECLINED)
-        self.assertEqual(result["change"], 5)
-
-    def test_lower_is_better_stable_within_tolerance(self):
-        # tolerance for ftsst is 1s
-        result = compare_metric(10, 10.5, "functional_movement_ftsst_seconds")
-        self.assertEqual(result["direction"], STABLE)
-
     def test_deterministic(self):
         r1 = compare_metric(40, 65, "mobility_shoulder_elevation_deg")
         r2 = compare_metric(40, 65, "mobility_shoulder_elevation_deg")
@@ -130,16 +105,17 @@ class ExtractorTests(unittest.TestCase):
         tests = _balance_doc(30, 45)["tests"]
         self.assertEqual(extract_balance_metric(tests), 30)
 
-    def test_ftsst_extractor_reads_completion_time(self):
-        tests = _ftsst_doc(12.5)["tests"]
-        self.assertEqual(extract_ftsst_metric(tests), 12.5)
-
-    def test_ftsst_extractor_none_when_missing(self):
-        tests = {}
-        self.assertIsNone(extract_ftsst_metric(tests))
-
 
 class ComparePhysicalAssessmentsTests(unittest.TestCase):
+    def test_historical_ftsst_is_not_compared_as_an_active_metric(self):
+        archived = {"tests": {"ftsst": {"status": "completed", "measurements": {"completionTimeSeconds": 8.0}}}}
+        result = compare_physical_assessments(archived, archived, archived)
+        self.assertEqual(set(result), {
+            "mobility_shoulder_elevation_deg",
+            "stability_balance_hold_seconds",
+        })
+        self.assertEqual(overall_direction(result), NOT_ENOUGH_DATA)
+
     def test_all_documents_none_is_not_enough_data_for_every_metric(self):
         result = compare_physical_assessments(None, None, None)
         for metric_name, entry in result.items():

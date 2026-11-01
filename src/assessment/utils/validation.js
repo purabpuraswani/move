@@ -21,8 +21,6 @@ export const REQUIRED_KEYPOINTS = {
     "left_hip",
     "right_hip",
   ],
-  ftsstLeft: ["left_shoulder", "left_hip", "left_knee", "left_ankle"],
-  ftsstRight: ["right_shoulder", "right_hip", "right_knee", "right_ankle"],
   balance: [
     "left_shoulder",
     "right_shoulder",
@@ -76,26 +74,6 @@ export function checkFrontFacing(points, minRatio) {
   return {
     usable: ratio >= minRatio,
     reasons: ratio >= minRatio ? [] : [REASON.NOT_FRONT_FACING],
-    ratio,
-  };
-}
-
-/** Side-facing check for test 2: the shoulder line should appear narrow. */
-export function checkSideFacing(points, maxRatio) {
-  const ratio = shoulderTorsoRatio(
-    points.left_shoulder,
-    points.right_shoulder,
-    points.left_hip,
-    points.right_hip
-  );
-
-  if (ratio === null) {
-    return { usable: true, reasons: [], ratio: null };
-  }
-
-  return {
-    usable: ratio <= maxRatio,
-    reasons: ratio <= maxRatio ? [] : [REASON.NOT_SIDE_FACING],
     ratio,
   };
 }

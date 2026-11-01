@@ -211,8 +211,8 @@ test("the camera and demonstration are stretched to equal heights", () => {
   );
 });
 
-test("the camera preview still fills its frame without distortion", () => {
-  assert.match(cssRules, /\.assess-camera__video[\s\S]{0,300}?object-fit:\s*cover/);
+test("the camera preview preserves the full webcam image without cropping", () => {
+  assert.match(cssRules, /\.assess-camera__video[\s\S]{0,300}?object-fit:\s*contain/);
 });
 
 test("the demonstration is letterboxed rather than cropped", () => {
@@ -271,10 +271,18 @@ test("the countdown stays inside the camera frame", () => {
   assert.match(cssRules, /\.assess-camera__countdown-overlay[\s\S]{0,200}?position:\s*absolute/);
 });
 
-test("all three baseline checks still have their own demonstration", () => {
+test("the two active baseline checks have their own demonstration", () => {
   const videos = codeOf("movementDemos/exerciseVideos.js");
 
-  for (const file of ["shoulder-raise.mp4", "sit-to-stand.mp4", "one-leg-stand.mp4"]) {
+  for (const file of ["shoulder-raise.mp4", "one-leg-stand.mp4"]) {
     assert.ok(videos.includes(file), `${file} is no longer mapped`);
   }
+});
+
+test("the active page sequence contains shoulder and One-Leg Stand only", () => {
+  const page = codeOf("pages/AssessmentPage.jsx");
+
+  assert.doesNotMatch(page, /STEP\.(?:CHAIR|FTSST)/);
+  assert.doesNotMatch(page, /FtsstPanel|ChairSetupStep/);
+  assert.match(page, /STEP\.BALANCE_LEFT/);
 });

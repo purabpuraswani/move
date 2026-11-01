@@ -30,13 +30,12 @@ reasonable to offer a conservative, beginner-level plan*, never *that a
 deficit exists*.
 """
 
-# The three physical Need dimensions the Physio Agent is responsible for.
-# Kept here (rather than re-listed in decision.py and agent.py) so there is
-# one definition, not three that can drift.
+# Need dimensions measured by the active assessment protocol. The legacy
+# functional_movement_need field remains in the Need Profile schema, but the
+# retired FTSST check cannot supply current evidence or select Physio.
 PHYSICAL_NEED_DIMENSIONS = (
     "mobility_need",
     "stability_need",
-    "functional_movement_need",
 )
 
 # A dimension at one of these levels is a real, measured need that requires

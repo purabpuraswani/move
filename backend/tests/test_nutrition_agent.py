@@ -3,6 +3,7 @@ import unittest
 from orchestration.agent_result import validate_agent_result
 from orchestration.ids import start_workflow
 from nutrition_agent.agent import AGENT_ID, run_nutrition_agent
+from nutrition_agent.input_contract import build_nutrition_agent_input
 from nutrition_agent.tool_client import NutritionToolClient, InProcessNutritionToolClient
 from user_state.schema import build_user_state, validate_user_state
 
@@ -39,7 +40,12 @@ def _needs(nutrition_level):
 
 
 def _state(nutrition_level, profile_doc=None):
-    state = build_user_state(profile_doc=profile_doc or {})
+    profile = dict(profile_doc or {})
+    # These plan-generation fixtures represent a user who answered both
+    # safety-context questions and has no reported items.
+    profile.setdefault("food_allergies", [])
+    profile.setdefault("dietary_restrictions", [])
+    state = build_user_state(profile_doc=profile)
     state["current_needs"] = {
         "available": True, "reason": None, "data": _needs(nutrition_level),
     }
@@ -105,13 +111,61 @@ class ValidInputHighNeedTests(unittest.TestCase):
                 self.assertNotIn(banned, text)
 
 
+class GeneralMaintenanceActivityTests(unittest.TestCase):
+    def test_low_need_uses_real_catalog_activity_and_labels_it_general(self):
+        result, _ = _run(_state("LOW"))
+        self.assertEqual(result["findings"]["mode"], "maintenance_review")
+        activity = result["findings"]["activities"][0]
+        self.assertEqual(activity["id"], "build_a_regular_meal_pattern")
+        self.assertIn("GENERAL_EDUCATION", activity["personalization_status"])
+        self.assertTrue(activity["action"])
+        self.assertTrue(activity["safety_notes"])
+        self.assertEqual(result["recommendations"][0]["id"], activity["id"])
+
+
 class MissingNutritionDataTests(unittest.TestCase):
-    def test_nutrition_need_not_assessed_produces_empty_plan_not_a_crash(self):
+    def test_agent_contract_preserves_known_unknown_and_explicit_empty_values(self):
+        state = _state("HIGH", {
+            "fruit_vegetable_servings": 1,
+            "food_preferences": ["fruit"],
+            "food_allergies": [],
+            "dietary_restrictions": None,
+            "nutrition_goals": ["more produce"],
+        })
+        payload = build_nutrition_agent_input(
+            state, workflow_id="wf", request_id="req", agent_run_id="run"
+        )
+        self.assertEqual(payload["food_preferences"], ["fruit"])
+        self.assertEqual(payload["food_allergies"], [])
+        self.assertIsNone(payload["dietary_restrictions"])
+        self.assertEqual(payload["nutrition_goals"], ["more produce"])
+
+    def test_saved_meal_logs_are_included_in_nutrition_agent_input(self):
+        state = _state("LOW")
+        entry = {
+            "meal": "lunch", "food_name": "dal and rice", "quantity": "1 bowl",
+            "notes": "at home", "recorded_at": "2026-11-01T10:00:00Z", "user_id": "must-not-cross",
+        }
+        payload = build_nutrition_agent_input(
+            state, workflow_id="wf", request_id="req", agent_run_id="run",
+            meal_log_entries=[entry],
+        )
+        self.assertEqual(payload["recent_meal_logs"], [{
+            "meal": "lunch", "food_name": "dal and rice", "quantity": "1 bowl",
+            "notes": "at home", "recorded_at": "2026-11-01T10:00:00Z",
+        }])
+        from nutrition_agent.evidence import build_nutrition_evidence_view
+        evidence = build_nutrition_evidence_view(state, food_log_entries=[entry])
+        self.assertIn("User-logged lunch: dal and rice (1 bowl)", evidence["evidence_used"])
+
+    def test_nutrition_need_not_assessed_produces_general_catalog_activity_not_a_plan(self):
         state = _state("NOT_ASSESSED")
         result, _ = _run(state)
         validate_agent_result(result)
         self.assertEqual(result["status"], "completed")
-        self.assertEqual(result["recommendations"], [])
+        self.assertFalse(result["findings"].get("plan"))
+        self.assertEqual(result["recommendations"][0]["id"], "build_a_regular_meal_pattern")
+        self.assertIn("GENERAL_EDUCATION", result["findings"]["activities"][0]["personalization_status"])
 
     def test_high_need_but_unrecognised_signal_values_still_handled(self):
         # current_needs says HIGH (constructed directly for this unit
@@ -129,7 +183,8 @@ class NutritionNeedLowTests(unittest.TestCase):
         state = _state("LOW", profile_doc={"meal_pattern": "regular"})
         result, client = _run(state)
         self.assertEqual(result["status"], "completed")
-        self.assertEqual(result["recommendations"], [])
+        self.assertFalse(result["findings"].get("plan"))
+        self.assertEqual(result["recommendations"][0]["id"], "build_a_regular_meal_pattern")
 
 
 class PreferenceHandlingTests(unittest.TestCase):
@@ -139,9 +194,59 @@ class PreferenceHandlingTests(unittest.TestCase):
             profile_doc={"fruit_vegetable_servings": 1},
         )
         result, _ = _run(state)
-        # The agent never invents a food preference the user was never
-        # asked about — nothing in the result should mention preferences.
-        self.assertNotIn("preference", str(result).lower().replace("preferences.md", ""))
+        # Missing preference remains unknown while explicit empty allergy /
+        # restriction answers permit evidence-based general guidance.
+        self.assertEqual(result["status"], "completed")
+        self.assertTrue(result["findings"].get("plan"))
+
+    def test_missing_allergy_and_restriction_answers_request_clarification(self):
+        state = build_user_state(profile_doc={"fruit_vegetable_servings": 1})
+        state["current_needs"] = {"available": True, "reason": None, "data": _needs("HIGH")}
+        result, _ = _run(state)
+        self.assertEqual(result["findings"]["mode"], "context_required")
+        self.assertEqual(result["findings"]["missing_information"], ["food allergies", "dietary restrictions"])
+
+    def test_restriction_filters_literal_catalog_example(self):
+        state = _state("HIGH", {
+            "processed_food_frequency": "daily",
+            "food_allergies": ["nuts"], "dietary_restrictions": [],
+        })
+        result, _ = _run(state)
+        goals = result["findings"]["plan"]["nutrition_goals"]
+        self.assertTrue(goals)
+        self.assertNotIn("nuts", " ".join(goal["practical_goal"] for goal in goals).lower())
+
+    def test_unusable_catalog_topic_is_deferred_with_reason(self):
+        state = _state("HIGH", {
+            "fruit_vegetable_servings": 1,
+            "food_allergies": [],
+            "dietary_restrictions": ["fruit", "vegetables"],
+        })
+        result, _ = _run(state)
+        self.assertEqual(result["findings"]["mode"], "context_required")
+        excluded = result["findings"]["excluded_topics"][0]
+        self.assertEqual(excluded["target_signal"], "fruit_vegetable_servings")
+        self.assertTrue(excluded["reason"])
+        self.assertTrue(excluded["additional_information_required"])
+
+    def test_preference_selects_matching_catalog_goal_example(self):
+        state = _state("HIGH", {
+            "fruit_vegetable_servings": 1,
+            "food_allergies": [], "dietary_restrictions": [],
+            "food_preferences": ["fruit"],
+        })
+        result, _ = _run(state)
+        goal = result["findings"]["plan"]["nutrition_goals"][0]
+        self.assertIn("fruit", goal["practical_goal"].lower())
+
+    def test_user_stated_goal_prioritizes_matching_signal(self):
+        state = _state("HIGH", {
+            "meal_pattern": "skips_meals", "water_glasses_per_day": 1,
+            "food_allergies": [], "dietary_restrictions": [],
+            "nutrition_goals": ["drink more water"],
+        })
+        result, _ = _run(state)
+        self.assertEqual(result["findings"]["triggered_signals"][0], "water_glasses_per_day")
 
 
 class PlanCreationTests(unittest.TestCase):
@@ -162,6 +267,24 @@ class PlanCreationTests(unittest.TestCase):
         validate_nutrition_plan(plan)
         self.assertLessEqual(len(plan["nutrition_goals"]), 4)
 
+    def test_serialized_response_preserves_agent_goal_and_rationale(self):
+        from orchestrator.state_update import apply_nutrition_plan
+        from workflow.response import serialise_workflow_state
+
+        state = _state("HIGH", {
+            "fruit_vegetable_servings": 1,
+            "food_allergies": [], "dietary_restrictions": [],
+            "food_preferences": ["fruit"],
+        })
+        result, _ = _run(state)
+        persisted = apply_nutrition_plan(state, result)
+        response = serialise_workflow_state(persisted)
+        entry = result["findings"]["plan"]["nutrition_goals"][0]
+        displayed = response["nutrition_plan"]["recommendations"][0]
+        self.assertEqual(displayed["action"], entry["practical_goal"])
+        self.assertEqual(displayed["why"], entry["rationale"])
+        self.assertEqual(displayed["evidence_used"], entry["evidence_used"])
+
 
 class InvalidInputTests(unittest.TestCase):
     def test_missing_current_needs_key_is_handled_not_crashed(self):
@@ -171,7 +294,8 @@ class InvalidInputTests(unittest.TestCase):
         result = run_nutrition_agent(state, client, parent_trace=trace)
         validate_agent_result(result)
         self.assertEqual(result["status"], "completed")
-        self.assertEqual(result["recommendations"], [])
+        self.assertEqual(result["recommendations"][0]["id"], "build_a_regular_meal_pattern")
+        self.assertIn("GENERAL_EDUCATION", result["findings"]["activities"][0]["personalization_status"])
 
 
 class McpFailureTests(unittest.TestCase):

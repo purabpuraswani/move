@@ -1,6 +1,6 @@
 import unittest
 
-from orchestrator.decision import decide_physio_required
+from orchestrator.decision import decide_exercise_activity_required, decide_physio_required
 
 
 def _entry(level):
@@ -47,12 +47,26 @@ class MissingNeedProfileTests(unittest.TestCase):
 
 
 class ExplainabilityTests(unittest.TestCase):
-    def test_evaluated_dimensions_always_reports_all_three_when_present(self):
+    def test_evaluated_dimensions_reports_only_active_assessment_dimensions(self):
         decision = decide_physio_required(_profile("HIGH", "LOW", "NOT_ASSESSED"))
         self.assertEqual(
             decision["evaluated_dimensions"],
-            {"mobility_need": "HIGH", "stability_need": "LOW", "functional_movement_need": "NOT_ASSESSED"},
+            {"mobility_need": "HIGH", "stability_need": "LOW"},
         )
+
+
+class ActivitySelectionTests(unittest.TestCase):
+    def test_seven_hours_sitting_selects_activity_even_with_high_structured_exercise(self):
+        state = {"questionnaire": {"available": True, "data": {
+            "daily_steps": 6961,
+            "daily_sitting_hours": 7,
+            "exercise_days": 6,
+            "exercise_minutes": 60,
+        }}}
+        result = decide_exercise_activity_required(state)
+        self.assertTrue(result["exercise_activity_required"])
+        self.assertIn("Daily sitting: 7 hours", result["evidence"])
+        self.assertIn("7 hours", result["reason"])
 
 
 if __name__ == "__main__":

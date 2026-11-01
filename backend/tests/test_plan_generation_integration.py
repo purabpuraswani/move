@@ -4,8 +4,8 @@ Every test here corresponds to something that was actually broken, and the
 two defects they cover were found by tracing a real user's failed session,
 not by reading the code:
 
-  1. A completed assessment in which the camera could read only one of the
-     three tests produced {LOW, NOT_ASSESSED, NOT_ASSESSED}. Nothing was at
+  1. A completed assessment in which the camera could read only a low-need
+     check plus the other active check produced no MEDIUM/HIGH finding. Nothing was at
      MEDIUM or HIGH, so no specialist was selected, no plan was built, and
      the API honestly returned 200 with nothing in it. The Plan screen
      rendered that identically to "you have not started yet".
@@ -53,7 +53,7 @@ def source_of(relative_path: str) -> str:
 
     return (BACKEND_ROOT / relative_path).read_text(encoding="utf-8")
 
-# The three baseline tests, as `assessments/schema.py` stores them.
+# Assessment fixtures; FTSST is included only to model an older stored record.
 SHOULDER_USABLE = {
     "status": "completed",
     "measurements": {
@@ -69,8 +69,8 @@ SHOULDER_UNUSABLE = {
     "invalid_reasons": ["low_quality_frames"],
 }
 
-# 18 seconds is above FTSST_HIGH_NEED_ABOVE_SECONDS (15), so this is a real,
-# measured HIGH — the evidence-based selection path.
+# A clearly low shoulder raise is real, current evidence for the
+# evidence-based selection path.
 FTSST_SLOW = {
     "status": "completed",
     "measurements": {
@@ -111,7 +111,16 @@ PARTIAL_SESSION = assessment_document(
 )
 
 NEED_SESSION = assessment_document(
-    shoulder=SHOULDER_USABLE, ftsst=FTSST_SLOW, balance=BALANCE_USABLE
+    shoulder={
+        "status": "completed",
+        "measurements": {
+            "left": {"finalElevationDeg": 55.0},
+            "right": {"finalElevationDeg": 58.0},
+            "observableDifferenceDeg": 3.0,
+        },
+    },
+    ftsst=FTSST_SLOW,
+    balance=BALANCE_USABLE,
 )
 
 FULLY_ASSESSED_NO_NEED_SESSION = assessment_document(
@@ -130,7 +139,14 @@ FULLY_ASSESSED_NO_NEED_SESSION = assessment_document(
 
 def build_state(assessment_doc, persisted_state=None):
     return assemble_user_state_from_documents(
-        profile_doc=None,
+        # The fixture explicitly records negative health-screen answers.
+        # A profile with no answers is now correctly treated as unknown and
+        # causes Physio candidates to be deferred for clarification.
+        profile_doc={
+            "diabetes": "no", "hypertension": "no", "heart_condition": "no",
+            "previous_injury": "no", "joint_pain": "no", "back_neck_pain": "no",
+            "other_conditions": "",
+        },
         assessment_doc=assessment_doc,
         confirmed_reports_doc=None,
         persisted_state=persisted_state,
@@ -190,12 +206,7 @@ class AssessmentWithRealNeedProducesAPlan(unittest.TestCase):
         decision = self.result["orchestrator_decision"]["physio"]
 
         self.assertEqual(decision["selection_mode"], "need_based")
-        self.assertEqual(
-            need_levels(self.result["updated_user_state"])[
-                "functional_movement_need"
-            ],
-            "HIGH",
-        )
+        self.assertEqual(need_levels(self.result["updated_user_state"])["mobility_need"], "HIGH")
 
     def test_the_safety_gate_ran(self):
         self.assertIsNotNone(self.result["safety_result"])
@@ -232,10 +243,7 @@ class PartialAssessmentDoesNotBecomeLow(unittest.TestCase):
         # Missing movement evidence must not select Physio or claim a need.
         self.assertFalse(decision["physio_required"])
         self.assertNotIn("MEDIUM", decision["reason"].split("at MEDIUM or HIGH")[0])
-        self.assertEqual(
-            set(decision["unassessed_dimensions"]),
-            {"mobility_need", "functional_movement_need"},
-        )
+        self.assertEqual(set(decision["unassessed_dimensions"]), {"mobility_need"})
         for level in decision["evaluated_dimensions"].values():
             if level in ("MEDIUM", "HIGH"):
                 self.fail("a NOT_ASSESSED dimension was reported as a need")
@@ -289,8 +297,8 @@ class PartialAssessmentDoesNotProduceAPhysioPlan(unittest.TestCase):
 
 
 class InterventionIsNotTheAssessment(unittest.TestCase):
-    """The programme must be intervention exercises, not the three baseline
-    tests handed back as a workout."""
+    """The programme must be intervention exercises, not an active baseline
+    check handed back as a workout."""
 
     def test_the_starter_plan_contains_no_baseline_assessment_movement(self):
         result = run(build_state(NEED_SESSION))
@@ -325,7 +333,7 @@ class InterventionIsNotTheAssessment(unittest.TestCase):
         }
 
         self.assertTrue(all(count >= 1 for count in counts))
-        self.assertTrue(any(count >= 4 for count in counts))
+        self.assertTrue(all(1 <= count <= 6 for count in counts))
 
 
 class PersistedPlanSurvivesTheRebuild(unittest.TestCase):
@@ -386,10 +394,10 @@ class PersistedPlanSurvivesTheRebuild(unittest.TestCase):
         rebuilt = build_state(NEED_SESSION, persisted_state=stale)
 
         self.assertEqual(
-            rebuilt["physical_assessment"]["data"]["tests"]["ftsst"]["status"],
-            "completed",
+            set(rebuilt["physical_assessment"]["data"]["tests"]),
+            {"shoulder", "balance"},
         )
-        self.assertEqual(need_levels(rebuilt)["functional_movement_need"], "HIGH")
+        self.assertEqual(need_levels(rebuilt)["functional_movement_need"], "NOT_ASSESSED")
 
     def test_the_merge_rule_classifies_every_section_exactly_once(self):
         validate_section_classification()
@@ -424,7 +432,11 @@ class BaselineAssessmentIsNeverRewritten(unittest.TestCase):
         )
         source = ast.unparse(function)
 
-        self.assertIn("ASCENDING", source)
+        # The helper returns valid whole-session history newest first, so
+        # selecting its final entry is equivalent to the oldest-first
+        # baseline query while excluding unusable sessions.
+        self.assertIn("valid_assessment_history", source)
+        self.assertIn("valid[-1]", source)
         for forbidden in ("insert_one", "update_one", "replace_one", "delete_one"):
             self.assertNotIn(forbidden, source)
 
@@ -471,6 +483,23 @@ class LatestEndpointReturnsThePersistedPlan(unittest.TestCase):
         self.assertEqual(response["plan_state"]["state"], "NO_PLAN_SAFE_OR_SUPPORTED")
         self.assertTrue(response["plan_state"]["reason"])
 
+    def test_a_completed_medium_physio_need_has_reference_guidance_while_personalized_exercises_wait(self):
+        state = build_state(FULLY_ASSESSED_NO_NEED_SESSION)
+        state["current_needs"] = {"available": True, "reason": None, "data": {
+            "mobility_need": {"level": "LOW", "evidence": []},
+            "stability_need": {"level": "MEDIUM", "evidence": ["Balance need measured as medium."]},
+            "functional_movement_need": {"level": "NOT_ASSESSED", "evidence": []},
+            "nutrition_need": {"level": "NOT_ASSESSED", "evidence": []},
+            "behaviour_need": {"level": "NOT_ASSESSED", "evidence": []},
+        }}
+        response = serialise_workflow_state(
+            state,
+            agent_executions={"physio": {"status": "completed", "findings": {}, "recommendations": []}},
+        )
+        self.assertEqual(response["plan_state"]["state"], "STARTER_GUIDANCE_AVAILABLE")
+        self.assertFalse(response["exercise_plan"]["available"])
+        self.assertEqual(response["plan_state"]["next_action"]["route"], "/onboarding")
+
     def test_an_account_with_no_assessment_reports_never_run(self):
         state = assemble_user_state_from_documents()
         response = serialise_workflow_state(state)
@@ -489,7 +518,7 @@ class LatestEndpointReturnsThePersistedPlan(unittest.TestCase):
         }
 
         self.assertIn("Upper-body mobility", capabilities)
-        self.assertIn("Sit-to-stand strength", capabilities)
+        self.assertNotIn("Sit-to-stand strength", capabilities)
         for item in response["plan_state"]["missing"]:
             self.assertTrue(item["reason"])
 

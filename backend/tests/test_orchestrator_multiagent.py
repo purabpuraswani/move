@@ -39,7 +39,13 @@ def _needs(mobility, stability, functional_movement, behaviour, nutrition):
 
 
 def _state(mobility, stability, functional_movement, behaviour, nutrition, profile_doc=None):
-    state = build_user_state(profile_doc=profile_doc or {})
+    profile = dict(profile_doc or {})
+    profile.setdefault("food_allergies", [])
+    profile.setdefault("dietary_restrictions", [])
+    for field in ("diabetes", "hypertension", "heart_condition", "previous_injury", "joint_pain", "back_neck_pain"):
+        profile.setdefault(field, "no")
+    profile.setdefault("other_conditions", "")
+    state = build_user_state(profile_doc=profile)
     state["current_needs"] = {
         "available": True, "reason": None,
         "data": _needs(mobility, stability, functional_movement, behaviour, nutrition),
@@ -106,6 +112,7 @@ class MultiAgentEndToEndTests(unittest.TestCase):
             "exercise_days": 0, "exercise_minutes": 0,
             "meal_pattern": "skips_meals", "fruit_vegetable_servings": 1,
             "water_glasses_per_day": 2, "processed_food_frequency": "daily",
+            "food_allergies": [], "dietary_restrictions": [],
         }
         assessment_doc = {
             "tests": {
@@ -121,6 +128,11 @@ class MultiAgentEndToEndTests(unittest.TestCase):
                 "balance": {"status": "not_started"},
             }
         }
+        profile_doc.update({
+            "diabetes": "no", "hypertension": "no", "heart_condition": "no",
+            "previous_injury": "no", "joint_pain": "no", "back_neck_pain": "no",
+            "other_conditions": "",
+        })
         state = build_user_state(profile_doc=profile_doc, assessment_doc=assessment_doc)
         state = run_need_assessment(state)
 
@@ -199,11 +211,10 @@ class PartialFailureTests(unittest.TestCase):
         self.assertIsNotNone(result["safety_result"])
 
 
-class SafetyOverrideTests(unittest.TestCase):
-    """A rejected/modified candidate must not appear unchanged in the
-    final approved set, nor be written to the User State unchanged."""
+class RetiredAssessmentDoesNotSelectPhysioTests(unittest.TestCase):
+    """An archived FTSST result cannot trigger a current specialist run."""
 
-    def test_paused_exercise_is_absent_from_final_recommendations_and_state(self):
+    def test_historical_ftsst_does_not_select_physio_or_run_safety(self):
         from need_assessment.assessment import run_need_assessment
 
         assessment_doc = {
@@ -218,25 +229,15 @@ class SafetyOverrideTests(unittest.TestCase):
             profile_doc={}, assessment_doc=assessment_doc, confirmed_reports_doc=confirmed_reports_doc
         )
         state = run_need_assessment(state)
-        self.assertEqual(state["current_needs"]["data"]["functional_movement_need"]["level"], "HIGH")
+        self.assertEqual(state["current_needs"]["data"]["functional_movement_need"]["level"], "NOT_ASSESSED")
 
         result = run_workflow(
             state, tool_client=InProcessExerciseToolClient(workflow_id="wfs", request_id="reqs")
         )
 
-        original_ids = {e["exercise_id"] for e in result["agent_results"][0]["findings"]["plan"]["exercises"]}
-        self.assertIn("wall-sit", original_ids)  # the agent DID propose it
-
-        self.assertEqual(result["safety_result"]["status"], "PAUSE")
-        self.assertIn("wall-sit", result["safety_result"]["blocked_recommendation_ids"])
-
-        final_ids = {r["id"] for r in result["final_recommendations"]}
-        self.assertNotIn("wall-sit", final_ids)
-
-        persisted_ids = set(
-            result["updated_user_state"]["exercise_history"]["data"]["plans"][0]["exercise_ids"]
-        )
-        self.assertNotIn("wall-sit", persisted_ids)
+        self.assertNotIn("physio", result["selected_agents"])
+        self.assertEqual(result["agent_results"], [])
+        self.assertIsNone(result["safety_result"])
 
 
 if __name__ == "__main__":

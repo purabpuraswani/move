@@ -6,8 +6,8 @@ request body, form fields, or query string.
 """
 
 import jwt
-from bson import ObjectId
-from bson.errors import InvalidId
+from database import ObjectId
+from database import InvalidId
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 

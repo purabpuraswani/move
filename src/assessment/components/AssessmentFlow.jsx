@@ -1,7 +1,7 @@
 /**
  * Reusable Assessment Flow component.
  *
- * Implements the standard 6-phase lifecycle required across all 3 baseline tests:
+ * Implements the standard 6-phase lifecycle used by both baseline assessments:
  * Instructions -> Position Yourself -> Live Setup Check -> Ready -> 3s Countdown -> Assessment -> Result.
  *
  * Ensures no counting occurs while the user is positioning themselves, provides
@@ -26,8 +26,6 @@ import {
 import {
   toArray,
   safeDisplayValue,
-  normalizeRecommendation,
-  normalizeEvidence,
 } from "../../services/specialistData.js";
 
 const FLOW_PHASE = {
@@ -63,6 +61,7 @@ export default function AssessmentFlow({
   const [countdown, setCountdown] = useState(3);
 
   const stableFramesRef = useRef(0);
+  const positioningDropFramesRef = useRef(0);
   const countdownTimerRef = useRef(null);
   const [debugPhase, setDebugPhase] = useState(null);
   const [debugResult, setDebugResult] = useState(null);
@@ -104,7 +103,7 @@ export default function AssessmentFlow({
 
     engine?.startLoop?.();
 
-    const outlineType = testType === "ftsst" ? "side" : testType === "shoulder" ? "upper" : "front";
+    const outlineType = testType === "shoulder" ? "upper" : "front";
 
     // Immediate initial sync on entering positioning
     onCameraStateChange?.({
@@ -118,12 +117,16 @@ export default function AssessmentFlow({
     const handleFrame = (frame) => {
       const evaluation = evaluatePositioning(frame, testType, {
         stableCount: stableFramesRef.current,
+        droppedFrames: positioningDropFramesRef.current,
       });
 
       stableFramesRef.current = evaluation.stableFrames;
+      positioningDropFramesRef.current = Object.values(evaluation.checklist || {}).every(Boolean)
+        ? 0
+        : positioningDropFramesRef.current + 1;
       setPositioning(evaluation);
 
-      const outlineType = testType === "ftsst" ? "side" : testType === "shoulder" ? "upper" : "front";
+      const outlineType = testType === "shoulder" ? "upper" : "front";
 
       onCameraStateChange?.({
         outline: outlineType,
@@ -233,18 +236,21 @@ export default function AssessmentFlow({
 
   const handleStartSetup = useCallback(() => {
     stableFramesRef.current = 0;
+    positioningDropFramesRef.current = 0;
     setPhase(FLOW_PHASE.POSITIONING);
   }, []);
 
   const handleRetry = useCallback(() => {
     clear();
     stableFramesRef.current = 0;
+    positioningDropFramesRef.current = 0;
     setCountdown(null);
     setPhase(FLOW_PHASE.POSITIONING);
   }, [clear]);
 
   const handleBackToInstructions = useCallback(() => {
     stableFramesRef.current = 0;
+    positioningDropFramesRef.current = 0;
     setPhase(FLOW_PHASE.INSTRUCTIONS);
     onCameraStateChange?.({
       outline: null,
@@ -256,9 +262,10 @@ export default function AssessmentFlow({
   }, [onCameraStateChange]);
 
   const handleManualStart = useCallback(() => {
+    if (!positioning.ready || positioning.stableFrames < STABLE_PREFLIGHT_FRAMES) return;
     setCountdown(3);
     setPhase(FLOW_PHASE.COUNTDOWN);
-  }, []);
+  }, [positioning.ready, positioning.stableFrames]);
 
   // Phase 1: Instructions
   if (phase === FLOW_PHASE.INSTRUCTIONS) {
@@ -324,11 +331,9 @@ export default function AssessmentFlow({
         <h2>Let's get you ready</h2>
 
         <p className="assess-setup-instruction">
-          {testType === "ftsst"
-            ? "Place your chair sideways to the camera so your full body is visible."
-            : testType === "shoulder"
+          {testType === "shoulder"
               ? "Stand where your upper body and both arms are clearly visible."
-              : "Stand facing the camera with support nearby if needed."}
+              : "Move the laptop or webcam far enough away to fit your whole body, including both feet. Face it beside stable support."}
         </p>
 
         <div className="assess-checklist">
@@ -388,6 +393,7 @@ export default function AssessmentFlow({
             type="button"
             className="assess-btn assess-btn--primary"
             onClick={handleManualStart}
+            disabled={!positioning.ready || positioning.stableFrames < STABLE_PREFLIGHT_FRAMES}
           >
             I'm ready · Start test
           </button>

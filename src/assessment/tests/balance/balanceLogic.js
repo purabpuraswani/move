@@ -16,7 +16,7 @@
  * and combines the two with combineBalanceResults.
  */
 
-import { BALANCE, POSE, REASON, SHOULDER, TEST_STATUS } from "../../config/protocol.js";
+import { BALANCE, POSE, REASON, TEST_STATUS } from "../../config/protocol.js";
 import { distance, midpoint, tiltFromVertical, round } from "../../utils/geometry.js";
 import { MedianFilter } from "../../utils/smoothing.js";
 import { measuredResult, skippedResult } from "../../utils/results.js";
@@ -123,7 +123,10 @@ export class SingleLegStanceTest {
         state.poseLostFor > (this.config.maxRecoveryMs ?? POSE.maxPoseLossMs)
       ) {
         this.#end(frame.timestamp, END_REASON.POSE_LOST);
-      } else if (this.phase === BALANCE_PHASE.STABILISING) {
+      } else if (
+        this.phase === BALANCE_PHASE.STABILISING &&
+        state.poseLostFor > (this.config.maxRecoveryMs ?? POSE.maxPoseLossMs)
+      ) {
         this.validPositionSince = null;
         this.phase = BALANCE_PHASE.WAITING;
       }

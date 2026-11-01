@@ -427,3 +427,17 @@
 
   color: var(--text-muted, #64748b);
 }
+
+.progress-assessment-status {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--border, #dbe4df);
+  border-radius: 14px;
+  color: var(--text, #e6f3ed);
+  background: rgba(7, 17, 15, 0.32);
+  overflow-wrap: anywhere;
+}
+
+.progress-assessment-status p { margin: 5px 0 10px; line-height: 1.55; }
+.progress-assessment-status ul { margin: 6px 0 12px; padding-left: 20px; }
+.progress-agent-findings { max-height: 220px; overflow: auto; white-space: pre-wrap; font-size: 12px; }

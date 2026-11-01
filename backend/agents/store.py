@@ -16,7 +16,7 @@ than a check afterwards, and documents are serialised explicitly on the way out.
 
 from datetime import datetime, timezone
 
-from pymongo import ASCENDING, DESCENDING
+from database import ASCENDING, DESCENDING
 
 from database import db
 

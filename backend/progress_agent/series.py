@@ -26,14 +26,17 @@ MIN_POINTS_FOR_TREND = 2
 METRIC_LABELS = {
     "mobility_shoulder_elevation_deg": "Shoulder elevation",
     "stability_balance_hold_seconds": "One-leg balance hold",
-    "functional_movement_ftsst_seconds": "Sit-to-stand x5 time",
 }
 
 METRIC_UNITS = {
     "mobility_shoulder_elevation_deg": "degrees",
     "stability_balance_hold_seconds": "seconds",
-    "functional_movement_ftsst_seconds": "seconds",
 }
+
+
+def _has_active_measurement(document) -> bool:
+    tests = (document or {}).get("tests") or {}
+    return any(extract(tests) is not None for extract in _METRIC_EXTRACTORS.values())
 
 
 def _day(value) -> str:
@@ -131,11 +134,15 @@ def movement_metric_series(assessment_documents) -> list:
             if value is None:
                 continue
 
+            test_id = "shoulder" if metric == "mobility_shoulder_elevation_deg" else "balance"
+            test_record = (document.get("tests") or {}).get(test_id) or {}
             points.append(
                 {
                     "date": _day(str(completed_at)) if completed_at else None,
                     "recordedAt": str(completed_at) if completed_at else None,
                     "value": value,
+                    "sessionId": document.get("session_id"),
+                    "measurements": test_record.get("measurements"),
                 }
             )
 
@@ -245,9 +252,41 @@ def build_progress_series(
     metrics = movement_metric_series(assessment_documents)
     plans = plan_version_history(user_state)
 
+    latest_valid = next(
+        (
+            document for document in sorted(
+                (item for item in assessment_documents or [] if isinstance(item, dict)),
+                key=lambda item: str(item.get("completed_at") or item.get("started_at") or ""),
+                reverse=True,
+            )
+            if _has_active_measurement(document)
+        ),
+        None,
+    )
+    current_tests = (latest_valid or {}).get("tests") or {}
+    latest_assessment = None
+    if latest_valid is not None:
+        shoulder = current_tests.get("shoulder") or {}
+        balance = current_tests.get("balance") or {}
+        latest_assessment = {
+            "sessionId": latest_valid.get("session_id"),
+            "completedAt": str(latest_valid.get("completed_at") or "") or None,
+            "shoulder": {
+                "status": shoulder.get("status", "not_started"),
+                "measurements": shoulder.get("measurements"),
+                "unit": "degrees",
+            },
+            "balance": {
+                "status": balance.get("status", "not_started"),
+                "measurements": balance.get("measurements"),
+                "unit": "seconds",
+            },
+        }
+
     return {
         "completions": completions,
         "movementMetrics": metrics,
+        "latestAssessment": latest_assessment,
         "planHistory": plans,
         "recentCompletions": recent_completions(exercise_results),
         # One flag the interface can trust instead of re-deriving the

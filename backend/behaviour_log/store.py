@@ -15,7 +15,7 @@ user failed to do it.
 
 from datetime import datetime, timezone
 
-from pymongo import ASCENDING, DESCENDING
+from database import ASCENDING, DESCENDING
 
 from database import behaviour_log_collection
 

@@ -1,7 +1,7 @@
 /**
  * The dashboard's movement snapshot, derived from stored assessment sessions.
  *
- * Everything here describes what was recorded. Nothing combines the three
+ * Everything here describes what was recorded. Nothing combines the two
  * checks into one number, compares a result to a population, or says whether
  * a result is good, bad, better or worse: this application has no validated
  * thresholds that would make any of that meaningful. A value that was not
@@ -17,13 +17,6 @@ export const SNAPSHOT_TESTS = [
     shortTitle: "Shoulder",
     area: "Upper body movement",
     icon: "🖐",
-  },
-  {
-    id: "ftsst",
-    title: "Chair Sit-to-Stand ×5",
-    shortTitle: "Sit-to-Stand",
-    area: "Functional lower-body movement",
-    icon: "🪑",
   },
   {
     id: "balance",
@@ -94,18 +87,6 @@ export function describeMeasurements(testId, measurements) {
     return { value, details, compact };
   }
 
-  if (testId === "ftsst") {
-    const time = m.completionTimeSeconds;
-    const value = isNumber(time) ? `${time.toFixed(1)} seconds` : null;
-    const details = [];
-
-    if (isNumber(m.repetitionsDetected)) {
-      details.push(`Time for ${m.repetitionsDetected} sit-to-stands`);
-    }
-
-    return { value, details, compact: value };
-  }
-
   if (testId === "balance") {
     const left = holdSeconds(m.left);
     const right = holdSeconds(m.right);
@@ -136,7 +117,7 @@ export function describeMeasurements(testId, measurements) {
   return { value: null, details: [], compact: null };
 }
 
-/** How many of the three checks are "completed" in a session. */
+/** How many of the two active checks are "completed" in a session. */
 export function countCompleted(session) {
   if (!session?.tests) return 0;
   return SNAPSHOT_TESTS.filter((t) => session.tests[t.id]?.status === "completed").length;
@@ -145,7 +126,7 @@ export function countCompleted(session) {
 /**
  * From a newest-first history listing ({ id, startedAt, statuses }), the most
  * recent earlier session in which each check was completed.
- * Returns { shoulder: listing|null, ftsst: ..., balance: ... }.
+ * Returns { shoulder: listing|null, balance: listing|null }.
  */
 export function previousCompletedSessions(listings, latestId) {
   const earlier = (listings || []).filter((entry) => entry && entry.id !== latestId);

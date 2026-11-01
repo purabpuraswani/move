@@ -6,7 +6,7 @@ Executes and asserts all 15 verification areas required by the final specificati
 - Two-way communication cycles (Physio, Nutrition, Behaviour)
 - Plan Versioning (Plan V1 -> Plan V2)
 - Exercise execution data pipeline
-- 20-exercise catalog audit & camera scoring integrity
+- 19-exercise catalog audit & camera scoring integrity
 - MCP real vs in-process fallback honesty
 - User State persistence round-trip
 - API contract verification
@@ -56,7 +56,7 @@ def verify_workflow():
         "data": {
             "schemaVersion": "1.0.0",
             "completed_at": "2026-01-01T00:00:00Z",
-            "tests": {"shoulder": {"status": "completed"}, "ftsst": {"status": "completed"}, "balance": {"status": "completed"}},
+            "tests": {"shoulder": {"status": "completed"}, "balance": {"status": "completed"}},
         },
     }
     updated_low, safety_low = build_maintenance_starter_plan(
@@ -77,7 +77,7 @@ def verify_workflow():
         "data": {
             "mobility_need": {"level": "HIGH", "evidence": ["Shoulder bilateral elevation difference > 20 deg"]},
             "functional_movement_need": {"level": "LOW", "evidence": []},
-            "stability_need": {"level": "LOW", "evidence": []},
+            "functional_movement_need": {"level": "NOT_ASSESSED", "evidence": []},
             "exercise_readiness": {"level": "LOW", "evidence": []},
             "safety_status": {"level": "LOW", "evidence": []},
         },
@@ -96,11 +96,11 @@ def verify_workflow():
     safety_res = evaluate_safety(
         need_profile={"safety_status": {"level": "HIGH", "evidence": ["Acute chest pain on exertion"]}},
         confirmed_medical_context=None,
-        candidate_recommendations=[{"id": "chair-sit-to-stand", "agent": "physio", "type": "exercise", "difficulty": "beginner"}],
+        candidate_recommendations=[{"id": "wall-sit", "agent": "physio", "type": "exercise", "difficulty": "beginner"}],
     )
     assert safety_res["status"] == "REFER", f"Expected REFER, got {safety_res['status']}"
     assert safety_res["requires_referral"] is True
-    assert "chair-sit-to-stand" in safety_res["blocked_recommendation_ids"]
+    assert "wall-sit" in safety_res["blocked_recommendation_ids"]
 
     # Starter plan also refuses when safety is REFER
     state_refer = build_user_state()
@@ -136,7 +136,7 @@ def verify_personalization():
         "data": {
             "mobility_need": {"level": "HIGH", "evidence": ["Shoulder deficit"]},
             "functional_movement_need": {"level": "LOW", "evidence": []},
-            "stability_need": {"level": "LOW", "evidence": []},
+            "functional_movement_need": {"level": "NOT_ASSESSED", "evidence": []},
             "exercise_readiness": {"level": "LOW", "evidence": []},
             "safety_status": {"level": "LOW", "evidence": []},
         },
@@ -145,15 +145,15 @@ def verify_personalization():
     r1 = run_workflow(s1, tool_client=t1, workflow_id="wf_p1", request_id="req_p1")
     plan1 = r1["updated_user_state"]["exercise_history"]["data"]["plans"][0]["exercise_ids"]
 
-    # Profile 2: Functional movement / lower body strength deficit (e.g. slow sit-to-stand)
+    # Profile 2: Standing balance need, measured by the active assessment.
     s2 = build_user_state()
     s2["current_needs"] = {
         "available": True,
         "reason": None,
         "data": {
             "mobility_need": {"level": "LOW", "evidence": []},
-            "functional_movement_need": {"level": "HIGH", "evidence": ["Slow 5-times sit-to-stand > 16s"]},
-            "stability_need": {"level": "LOW", "evidence": []},
+            "stability_need": {"level": "HIGH", "evidence": ["One-leg hold was short"]},
+            "functional_movement_need": {"level": "NOT_ASSESSED", "evidence": []},
             "exercise_readiness": {"level": "LOW", "evidence": []},
             "safety_status": {"level": "LOW", "evidence": []},
         },
@@ -163,10 +163,11 @@ def verify_personalization():
     plan2 = r2["updated_user_state"]["exercise_history"]["data"]["plans"][0]["exercise_ids"]
 
     print(f"Profile 1 (Mobility) Plan:    {plan1}")
-    print(f"Profile 2 (Functional) Plan:  {plan2}")
+    print(f"Profile 2 (Balance) Plan:      {plan2}")
     assert plan1 != plan2, "Different need profiles must produce different tailored plans"
     assert "standing-shoulder-raise" in plan1 or "standing-overhead-reach" in plan1
-    assert "chair-sit-to-stand" in plan2 or "wall-sit" in plan2
+    assert "chair-sit-to-stand" not in plan2
+    assert all(exercise_id in list_exercise_ids() for exercise_id in plan2)
     print("[PASS] 4. Personalization verified: distinct deficits produce distinct specialist exercise sets.")
 
 
@@ -175,7 +176,7 @@ def verify_two_way_communication():
 
     # 5A. Physio Two-Way Cycle
     user_state = build_user_state()
-    feedback_physio = {"rating": "pain", "notes": "My knee hurts when I do sit-to-stand."}
+    feedback_physio = {"rating": "pain", "notes": "My knee hurts during a leg exercise."}
 
     # Step 1: Specialist requests clarification
     resp_p1 = handle_physio_feedback_clarification(feedback_physio, user_state)
@@ -228,7 +229,7 @@ def verify_plan_versioning():
         "data": {
             "schemaVersion": "1.0.0",
             "completed_at": "2026-01-01T00:00:00Z",
-            "tests": {"shoulder": {"status": "completed"}, "ftsst": {"status": "completed"}},
+            "tests": {"shoulder": {"status": "completed"}},
         },
     }
 
@@ -276,22 +277,21 @@ def verify_exercise_execution_pipeline():
     log_step("7. EXERCISE EXECUTION & DATA PIPELINE")
 
     # Synthetic end-to-end verification of exercise data flow
-    exercise_id = "chair-sit-to-stand"
+    exercise_id = "wall-sit"
     details = get_exercise_details(exercise_id)
-    assert details["name"] == "Chair Sit-to-Stand"
+    assert details["name"] == "Wall Sit"
     assert details["movenet_support"]["supported"] is True
     assert details["movenet_support"]["implemented"] is True
 
-    # Simulate structured metrics produced by client-side RepCountingEngine
+    # Simulate structured metrics produced by client-side HoldDurationEngine
     synthetic_result_payload = {
         "exerciseId": exercise_id,
         "status": "completed",
         "startedAt": "2026-09-07T10:00:00Z",
         "completedAt": "2026-09-07T10:01:30Z",
         "measurements": {
-            "repetitions": 10,
-            "durationSeconds": 45.2,
-            "completion": 1.0,
+            "durationSeconds": 18.0,
+            "completion": 0.9,
         },
         "errors": [],
     }
@@ -299,15 +299,16 @@ def verify_exercise_execution_pipeline():
     # Verify backend schema accepts this structured payload
     validated = validate_exercise_result(synthetic_result_payload)
     assert validated["exerciseId"] == exercise_id
-    assert validated["measurements"]["repetitions"] == 10
-    print("[PASS] 7. Exercise pipeline verified: Catalog -> MoveNet engine config -> structured metrics -> schema validation.")
+    assert validated["measurements"]["durationSeconds"] == 18.0
+    print("[PASS] 7. Exercise pipeline verified: active catalog -> MoveNet engine config -> structured metrics -> schema validation.")
 
 
 def verify_exercise_library_catalog():
-    log_step("8. 20-EXERCISE CATALOG & CAMERA INTEGRITY AUDIT")
+    log_step("8. 19-EXERCISE CATALOG & CAMERA INTEGRITY AUDIT")
 
     all_ids = list_exercise_ids()
-    assert len(all_ids) == 20, f"Expected exactly 20 exercises, found {len(all_ids)}"
+    assert len(all_ids) == 19, f"Expected exactly 19 exercises, found {len(all_ids)}"
+    assert "chair-sit-to-stand" not in all_ids
 
     required_fields = (
         "exercise_id", "name", "category", "target_capability",
@@ -331,8 +332,8 @@ def verify_exercise_library_catalog():
         else:
             supported_count += 1
 
-    print(f"Catalog audit: 20 total exercises ({supported_count} camera-supported, {unsupported_count} non-camera exercises).")
-    print("[PASS] 8. 20-exercise catalog audit verified; non-camera exercises honestly marked unsupported.")
+    print(f"Catalog audit: 19 total exercises ({supported_count} camera-supported, {unsupported_count} non-camera exercises).")
+    print("[PASS] 8. 19-exercise catalog audit verified; retired movements are not recommendable.")
 
 
 def verify_mcp_honesty():
@@ -351,14 +352,14 @@ def verify_mcp_honesty():
         print("FastMCP server listening on port 8001; testing real Streamable HTTP transport...")
         from physio_agent.mcp_client import McpExerciseToolClient
         client = McpExerciseToolClient(server_url="http://localhost:8001/mcp", workflow_id="wf_mcp", request_id="req_mcp")
-        res = client.get_exercise_details("chair-sit-to-stand")
+        res = client.get_exercise_details("wall-sit")
         metadata = res.get("metadata", {})
         assert metadata.get("mcp_session_id") is not None, "Real MCP client must propagate real mcp_session_id"
         print(f"[PASS] 9. Real MCP server verified with session ID: {metadata.get('mcp_session_id')}")
     else:
         print("FastMCP server daemon not running locally; verifying in-process fallback honesty...")
         client = InProcessExerciseToolClient(workflow_id="wf_fallback", request_id="req_fallback")
-        res = client.get_exercise_details("chair-sit-to-stand")
+        res = client.get_exercise_details("wall-sit")
         metadata = res.get("metadata", {})
         assert metadata.get("mcp_session_id") is None, "InProcess fallback must NOT fake an mcp_session_id"
         assert metadata.get("agent_run_id") is not None
@@ -384,6 +385,7 @@ def verify_user_state_persistence():
         "reason": None,
         "data": {
             "schemaVersion": "0.1.0",
+            # Historical plan entries remain readable even after an exercise retires.
             "plans": [{"plan_id": "p_persist_1", "plan_version": 1, "exercise_ids": ["chair-sit-to-stand"]}],
         },
     }
@@ -414,7 +416,7 @@ def verify_privacy_and_id_leakage():
         "data": {
             "schemaVersion": "1.0.0",
             "completed_at": "2026-01-01T00:00:00Z",
-            "tests": {"shoulder": {"status": "completed"}, "ftsst": {"status": "completed"}, "balance": {"status": "completed"}},
+            "tests": {"shoulder": {"status": "completed"}, "balance": {"status": "completed"}},
         },
     }
     updated, safety = build_maintenance_starter_plan(state, workflow_id="wf_leak_check", request_id="req_leak_check")

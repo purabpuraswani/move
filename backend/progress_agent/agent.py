@@ -108,6 +108,12 @@ def _recommend_adaptation(direction: str, adherence_level: str, reassessment_req
                 "reduce difficulty automatically."
             )
 
+        if adherence_level == "UNKNOWN":
+            return "REASSESS", (
+                "Performance declined, but there is not enough adherence history "
+                "to justify changing plan difficulty or volume; review the record first."
+            )
+
         return "REGRESS", (
             "Performance declined and adherence was not high — reduce "
             "difficulty/volume rather than continue the current plan."
@@ -352,6 +358,29 @@ def run_progress_agent(
         "adaptation_recommendation": recommendation,
         "reassessment": reassessment,
         "nutrition_progress": nutrition_progress,
+    }
+
+    # Preserve the real comparison values as explicit progress baselines.
+    # A missing baseline stays null and is displayed as insufficient data.
+    progress_indicators = []
+    for metric, values in comparison.items():
+        baseline_current = (values or {}).get("baseline_vs_current") or {}
+        unit = "degrees" if metric.endswith("_deg") else "seconds" if metric.endswith("_seconds") else None
+        progress_indicators.append({
+            "metric": metric,
+            "unit": unit,
+            "baseline": baseline_current.get("baseline"),
+            "current": baseline_current.get("current"),
+            "change": baseline_current.get("change"),
+            "comparison_status": baseline_current.get("direction"),
+        })
+    findings["progress_measurements"] = {
+        "indicators": progress_indicators,
+        "review_milestone": (
+            "Complete the same movement checks in a future valid session. Compare a metric only when both sessions have a recorded value; missing comparisons remain insufficient data."
+        ),
+        "decision": recommendation,
+        "decision_reason": recommendation_reason,
     }
 
     validate_progress_findings(findings)

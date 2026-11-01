@@ -27,6 +27,7 @@ from need_assessment.rules import (
     SITTING_HOURS_HIGH_THRESHOLD,
     WEEKLY_EXERCISE_MINUTES_LOW_THRESHOLD,
 )
+import re
 from orchestration.agent_result import build_agent_result
 from orchestration.ids import TraceContext, start_agent_run
 from behaviour_agent.adaptation import (
@@ -42,6 +43,7 @@ from behaviour_agent.adaptation import (
     summarise,
 )
 from behaviour_agent.barriers import behaviour_interventions, identify_barriers
+from behaviour_agent.barriers import catalog_barrier_suggestions
 from behaviour_agent.adherence import summarise_for_progress
 from behaviour_agent.input_contract import build_behaviour_agent_input
 from behaviour_agent.plan_schema import build_habit_goal_entry, build_habit_plan
@@ -121,15 +123,112 @@ def signal_value(signal: str, signals: dict):
     return (signals or {}).get(signal)
 
 
-def _rationale_for(topic: dict, signal: str, signals: dict) -> str:
+def _rationale_for(
+    topic: dict, signal: str, signals: dict, selection_reasons: list = None
+) -> str:
     value = signal_value(signal, signals)
     described = SIGNAL_WORDING.get(signal, signal.replace("_", " "))
 
-    return (
+    rationale = (
         f"You told us about {described} ({value}), which is what brought this "
         f"into your plan. '{topic['name']}' is general guidance on it -- not "
         "a judgement about your health."
     )
+    if selection_reasons:
+        rationale += " " + " ".join(selection_reasons) + "."
+    return rationale
+
+
+def _context_words(values):
+    words = set()
+    for value in values or []:
+        for word in re.findall(r"[a-z0-9]+", str(value).lower()):
+            if len(word) > 2:
+                words.add(word)
+            if word.endswith("ing") and len(word) > 5:
+                words.add(word[:-3])
+            if word.endswith("s") and len(word) > 4:
+                words.add(word[:-1])
+    return words
+
+
+_BARRIER_GOAL_CUES = {
+    "time": {"short", "minute", "lunch", "break"},
+    "busy": {"short", "minute", "lunch", "work", "day"},
+    "schedule": {"fixed", "time", "routine", "lunch", "workday"},
+    "forget": {"routine", "after", "anchor", "trigger", "reminder"},
+    "energy": {"short", "minute", "gradual", "small"},
+    "motivation": {"routine", "after", "short", "pick"},
+    "workspace": {"stand", "stretch", "desk", "call"},
+    "meeting": {"stand", "stretch", "call", "break"},
+}
+
+
+def _barrier_cue_words(barriers):
+    words = set()
+    for barrier in barriers or []:
+        reported = _context_words([barrier])
+        for key, cues in _BARRIER_GOAL_CUES.items():
+            if key in reported or (key == "forget" and "remember" in reported):
+                words.update(cues)
+        words.update(reported)
+    return words
+
+
+def _select_practical_goal(topic, user_context):
+    examples = topic.get("practical_goal_examples") or []
+    if not examples:
+        return None, []
+    preferences = user_context.get("preferred_habits") or []
+    motivation_words = _context_words([user_context.get("motivation")])
+    barriers = user_context.get("reported_barriers") or []
+    preference_words = _context_words(preferences)
+    barrier_words = _barrier_cue_words(barriers)
+    routine_words = _context_words(user_context.get("daily_routines") or [])
+    change_words = _context_words(user_context.get("preferred_habit_changes") or [])
+
+    def rank(example):
+        words = _context_words([example])
+        return (
+            len(words & preference_words),
+            len(words & motivation_words),
+            len(words & routine_words),
+            len(words & change_words),
+            len(words & barrier_words),
+        )
+
+    chosen = max(enumerate(examples), key=lambda pair: (rank(pair[1]), -pair[0]))[1]
+    reasons = []
+    if rank(chosen)[0]:
+        reasons.extend(f"Selected to reflect your stated preference: {value}" for value in preferences)
+    if rank(chosen)[1]:
+        reasons.append("Selected to reflect your stated motivation")
+    if rank(chosen)[2]:
+        reasons.append("Selected to fit a daily routine you reported")
+    if rank(chosen)[3]:
+        reasons.append("Selected to reflect a habit change you want to try")
+    if rank(chosen)[4]:
+        reasons.extend(f"Selected with your reported barrier in mind: {value}" for value in barriers)
+    return chosen, reasons
+
+
+def _behaviour_evidence(signal, signals, user_context):
+    evidence = [
+        f"Self-reported {SIGNAL_WORDING.get(signal, signal)}: {signal_value(signal, signals)}"
+    ]
+    if user_context.get("motivation"):
+        evidence.append(f"User-reported motivation: {user_context['motivation']}")
+    evidence.extend(
+        f"User-reported preferred habit: {item}"
+        for item in (user_context.get("preferred_habits") or [])
+    )
+    evidence.extend(
+        f"User-reported barrier: {item}"
+        for item in (user_context.get("reported_barriers") or [])
+    )
+    evidence.extend(f"User-reported daily routine: {item}" for item in (user_context.get("daily_routines") or []))
+    evidence.extend(f"User-stated preferred habit change: {item}" for item in (user_context.get("preferred_habit_changes") or []))
+    return evidence
 
 
 def _adaptation_rationale(topic: dict, decision: dict) -> str:
@@ -175,7 +274,7 @@ def _previous_goals(previous_plan: dict) -> list:
     ]
 
 
-def _next_practical_goal(topic: dict, current_goal):
+def _next_practical_goal(topic: dict, current_goal, user_context=None):
     """A different concrete action for the same habit, or None.
 
     Every behaviour library topic carries more than one
@@ -189,7 +288,13 @@ def _next_practical_goal(topic: dict, current_goal):
     examples = topic.get("practical_goal_examples") or []
     alternatives = [example for example in examples if example != current_goal]
 
-    return alternatives[0] if alternatives else None
+    if not alternatives:
+        return None, []
+    if user_context:
+        return _select_practical_goal(
+            {**topic, "practical_goal_examples": alternatives}, user_context
+        )
+    return alternatives[0], []
 
 
 def _mcp_session_id_of(*tool_results) -> str | None:
@@ -241,12 +346,42 @@ def run_behaviour_agent(
 
     current_needs = payload["current_needs"]
     signals = payload["relevant_behaviour_signals"]
+    user_context = payload.get("user_reported_context") or {
+        "motivation": None, "preferred_habits": None, "reported_barriers": None,
+        "daily_routines": None, "preferred_habit_changes": None,
+    }
 
     behaviour_need = (
         (current_needs or {}).get("behaviour_need") if current_needs else None
     )
 
     if behaviour_need is None or behaviour_need.get("level") not in TRIGGERING_LEVELS:
+        # A LOW behaviour finding still gets one concrete, catalog-authored
+        # routine-building activity. Catalog barriers remain suggestions, not
+        # claims about this user.
+        activity = None
+        try:
+            search = tool_client.search_behaviour_guidance(category="routine_building")
+            candidate = next((item for item in (search.get("topics") or [])
+                              if item.get("topic_id") == "anchor_activity_to_an_existing_routine"), None)
+            if candidate:
+                detail = tool_client.get_behaviour_topic_details(candidate["topic_id"])
+                topic = detail.get("topic") if isinstance(detail, dict) else None
+                if topic:
+                    examples = topic.get("practical_goal_examples") or []
+                    guidance = topic.get("guidance") or []
+                    activity = {
+                        "id": topic["topic_id"], "title": topic.get("name") or "Anchor activity to a routine",
+                        "action": examples[0] if examples else (guidance[0] if guidance else "Attach an activity you already do to an existing daily routine."),
+                        "frequency": "Not specified in the selected catalog example; no additional schedule inferred.",
+                        "why": "This is general habit-building guidance because no MEDIUM/HIGH behaviour need was established; it does not assume poor adherence or an unreported barrier.",
+                        "evidence_used": _behaviour_evidence("weekly_exercise_minutes", signals or {}, user_context),
+                        "safety_notes": topic.get("safety_notes") or [], "reference": topic.get("reference"),
+                        "activity_type": "general_maintenance_activity",
+                        "personalization_status": "GENERAL_EDUCATION_NOT_PERSONALIZED",
+                    }
+        except Exception:  # noqa: BLE001 — unavailable catalog means no invented substitute
+            activity = None
         return build_agent_result(
             agent=AGENT_ID,
             status="completed",
@@ -257,9 +392,29 @@ def run_behaviour_agent(
                 "reason": (
                     "behaviour_need is not at MEDIUM or HIGH "
                     f"(level={behaviour_need.get('level') if behaviour_need else None!r})"
-                )
+                ),
+                "mode": "general_maintenance",
+                "activities": [activity] if activity else [],
+                "behaviour_need_level": (behaviour_need or {}).get("level"),
+                "triggered_signals": [],
+                "behaviour_adherence": summarise_for_progress(behaviour_actions),
+                "completed_exercise_sessions": completed_session_count(exercise_results),
+                "behaviour_context": {
+                    "motivation": user_context.get("motivation"),
+                    "preferred_habits": user_context.get("preferred_habits"),
+                    "reported_barriers": user_context.get("reported_barriers"),
+                    "daily_routines": user_context.get("daily_routines"),
+                    "preferred_habit_changes": user_context.get("preferred_habit_changes"),
+                },
+                "activities": [activity] if activity else [],
             },
-            recommendations=[],
+            recommendations=([{
+                "id": activity["id"], "title": activity["title"],
+                "action": activity["action"], "why": activity["why"],
+                "frequency": activity["frequency"],
+                "evidence_used": activity["evidence_used"],
+                "safety_notes": activity["safety_notes"],
+            }] if activity else []),
         )
 
     triggered_signals = _triggered_signals(signals)
@@ -363,10 +518,10 @@ def run_behaviour_agent(
             practical_goal = topic["practical_goal_examples"][0]
 
             if decision["decision_type"] == DECISION_MODIFY:
-                replacement_goal = (
-                    _next_practical_goal(topic, current_goal)
+                replacement_goal, selection_reasons = (
+                    _next_practical_goal(topic, current_goal, user_context)
                     if topic["topic_id"] == topic_id
-                    else practical_goal
+                    else (practical_goal, [])
                 )
 
                 if replacement_goal is None:
@@ -382,6 +537,12 @@ def run_behaviour_agent(
                     )
                 else:
                     practical_goal = replacement_goal
+                    if selection_reasons:
+                        decision["reason"] += " " + " ".join(selection_reasons) + "."
+                        decision["evidence_used"] = list(dict.fromkeys(
+                            (decision.get("evidence_used") or [])
+                            + _behaviour_evidence(target_signal, signals, user_context)
+                        ))
 
             elif current_goal and topic["topic_id"] == topic_id:
                 # Unchanged goals keep the exact action the user already
@@ -434,19 +595,23 @@ def run_behaviour_agent(
             continue
 
         topic = topics[0]
+        practical_goal, selection_reasons = _select_practical_goal(topic, user_context)
+        if practical_goal is None:
+            continue
 
         selected_topic_records[topic["topic_id"]] = topic
         goal_entries.append(
             build_habit_goal_entry(
                 topic_id=topic["topic_id"],
-                practical_goal=topic["practical_goal_examples"][0],
-                rationale=_rationale_for(topic, signal, signals),
+                practical_goal=practical_goal,
+                rationale=_rationale_for(topic, signal, signals, selection_reasons),
                 safety_notes=list(topic["safety_notes"]),
                 target_signal=signal,
                 decision_type=DECISION_ADD,
                 # A brand new goal has no history by definition. UNKNOWN
                 # says that; it never says the user has been failing.
                 adherence_status="UNKNOWN",
+                evidence_used=_behaviour_evidence(signal, signals, user_context),
                 evidence_needed=[
                     EVIDENCE_NEEDED_SESSIONS
                     if signal in ACTIVITY_SIGNALS
@@ -459,9 +624,9 @@ def run_behaviour_agent(
             {
                 "topic_id": topic["topic_id"],
                 "decision_type": DECISION_ADD,
-                "reason": _rationale_for(topic, signal, signals),
+                "reason": _rationale_for(topic, signal, signals, selection_reasons),
                 "adherence_status": "UNKNOWN",
-                "evidence_used": [],
+                "evidence_used": _behaviour_evidence(signal, signals, user_context),
                 "evidence_needed": [],
                 "target_signal": signal,
                 "signal_value": signal_value(signal, signals),
@@ -494,7 +659,12 @@ def run_behaviour_agent(
         for entry in goal_entries
         if entry["topic_id"] in selected_topic_records
     ]
-    barriers = identify_barriers(behaviour_adherence, selected_topics)
+    barriers = identify_barriers(
+        behaviour_adherence,
+        selected_topics,
+        reported_barriers=user_context.get("reported_barriers"),
+    )
+    catalog_suggestions = catalog_barrier_suggestions(selected_topics)
 
     findings = {
         "behaviour_need_level": behaviour_need["level"],
@@ -511,6 +681,16 @@ def run_behaviour_agent(
         # Physical Activity, and repeating them here would be this agent
         # doing another agent's job.
         "barriers": barriers,
+        # These are possibilities from general library text, never claims
+        # about what this user said or experienced.
+        "catalog_barrier_suggestions": catalog_suggestions,
+        "behaviour_context": {
+            "motivation": user_context.get("motivation"),
+            "preferred_habits": user_context.get("preferred_habits"),
+            "reported_barriers": user_context.get("reported_barriers"),
+            "daily_routines": user_context.get("daily_routines"),
+            "preferred_habit_changes": user_context.get("preferred_habit_changes"),
+        },
         "behaviour_interventions": behaviour_interventions(
             behaviour_adherence, barriers, len(goal_entries)
         ),

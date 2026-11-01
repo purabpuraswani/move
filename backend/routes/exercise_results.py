@@ -12,7 +12,7 @@ improvement, or compare it to anything. That is Progress Agent work
 """
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
-from pymongo.errors import PyMongoError
+from database import StorageError
 
 from auth.deps import get_current_user
 from exercise_assessment.schema import (
@@ -88,7 +88,7 @@ def create_exercise_result(
     try:
         saved = save_exercise_result(user_id, document, plan_id=plan_id)
 
-    except PyMongoError:
+    except StorageError:
         raise _database_error() from None
 
     return {
@@ -116,7 +116,7 @@ def read_exercise_result_history(
         )
         total = count_exercise_results(user_id, plan_id=plan_id)
 
-    except PyMongoError:
+    except StorageError:
         raise _database_error() from None
 
     return {
@@ -145,7 +145,7 @@ def read_exercise_result(
             detail=str(error)
         ) from None
 
-    except PyMongoError:
+    except StorageError:
         raise _database_error() from None
 
     return {"result": serialise_exercise_result(document)}
@@ -170,7 +170,7 @@ def delete_exercise_result(
     try:
         deleted = delete_manual_exercise_result(user_id, result_id)
 
-    except PyMongoError:
+    except StorageError:
         raise _database_error() from None
 
     if not deleted:

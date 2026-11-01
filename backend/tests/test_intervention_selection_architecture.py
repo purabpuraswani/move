@@ -2,7 +2,7 @@
 
 Verifies:
 1. Baseline physical assessments remain pure measurement records and distinct from intervention exercises.
-2. The Physio Agent selects exercises outside the 3 baseline tests when appropriate, drawing from the complete 20-exercise library.
+2. The Physio Agent selects exercises outside the 2 baseline tests when appropriate, drawing from the active 19-exercise library.
 3. Non-MoveNet exercises (e.g. standing-shoulder-rolls, heel-to-toe-stand) can be selected with measurement_method == "manual_completion".
 4. Adaptation operates on intervention exercises (exercise_results), not baseline assessment records (physical_assessment).
 5. All generated exercise IDs strictly belong to the 20-exercise library (no invalid or synthetic IDs).
@@ -28,8 +28,16 @@ from workflow.response import serialise_workflow_state
 from need_assessment.assessment import run_need_assessment
 
 
-def _assessment_state(*, shoulder_elevation=110.0, ftsst_time=18.0, balance_hold=30.0):
-    state = build_user_state()
+def _state_with_health_screen():
+    return build_user_state(profile_doc={
+        "diabetes": "no", "hypertension": "no", "heart_condition": "no",
+        "previous_injury": "no", "joint_pain": "no", "back_neck_pain": "no",
+        "other_conditions": "",
+    })
+
+
+def _assessment_state(*, shoulder_elevation=110.0, balance_hold=30.0):
+    state = _state_with_health_screen()
     state["physical_assessment"] = {
         "available": True,
         "reason": None,
@@ -43,14 +51,6 @@ def _assessment_state(*, shoulder_elevation=110.0, ftsst_time=18.0, balance_hold
                         "left": {"finalElevationDeg": shoulder_elevation},
                         "right": {"finalElevationDeg": shoulder_elevation - 30.0 if shoulder_elevation < 80 else shoulder_elevation},
                         "observableDifferenceDeg": 30.0 if shoulder_elevation < 80 else 0.0,
-                    },
-                },
-                "ftsst": {
-                    "status": "completed",
-                    "measurements": {
-                        "completionTimeSeconds": ftsst_time,
-                        "repetitionsDetected": 5,
-                        "requiredRepetitions": 5,
                     },
                 },
                 "balance": {
@@ -70,15 +70,15 @@ class BaselineVsInterventionSeparationTests(unittest.TestCase):
     """Point 1: Baseline assessments remain distinct from intervention exercises."""
 
     def test_baseline_assessment_keys_are_separate_from_intervention_exercises(self):
-        baseline_test_keys = {"shoulder", "ftsst", "balance"}
+        baseline_test_keys = {"shoulder", "balance"}
         library_exercise_ids = set(list_exercise_ids())
 
-        # The 3 baseline assessment identifiers are NOT exercise IDs in the library
+        # The 2 active assessment identifiers are NOT exercise IDs in the library
         for test_key in baseline_test_keys:
             self.assertNotIn(test_key, library_exercise_ids)
 
-        # The library has exactly 20 exercises
-        self.assertEqual(len(library_exercise_ids), 20)
+        # The active library has exactly 19 exercises
+        self.assertEqual(len(library_exercise_ids), 19)
 
     def test_baseline_assessment_data_structure_never_stores_workout_prescriptions(self):
         state = _assessment_state()
@@ -111,7 +111,7 @@ class PhysioInterventionSelectionOutsideBaselineTests(unittest.TestCase):
 
     def test_high_mobility_need_selects_genuine_mobility_interventions_not_baseline_test(self):
         # Shoulder baseline test showed deficit (elevation < 60 deg -> HIGH mobility need)
-        state = build_user_state()
+        state = _state_with_health_screen()
         state["current_needs"] = {
             "available": True,
             "reason": None,
@@ -133,16 +133,17 @@ class PhysioInterventionSelectionOutsideBaselineTests(unittest.TestCase):
         plan = result["findings"]["plan"]
         exercise_ids = [e["exercise_id"] for e in plan["exercises"]]
 
-        # Exercises selected outside the baseline tests
+        # The assessed shoulder movement and retired chair test are excluded.
         self.assertNotIn("standing-shoulder-raise", exercise_ids)
         self.assertNotIn("chair-sit-to-stand", exercise_ids)
+        self.assertNotIn("chair-sit-to-stand", list_exercise_ids())
 
         # Meaningful mobility interventions selected (such as standing-overhead-reach, standing-shoulder-rolls)
         self.assertTrue(any(e in exercise_ids for e in ("standing-overhead-reach", "standing-shoulder-rolls", "standing-trunk-rotation", "standing-knee-raise")))
 
     def test_high_functional_movement_need_selects_interventions_not_baseline_test(self):
         # FTSST baseline test was slow -> HIGH functional movement need
-        state = build_user_state()
+        state = _state_with_health_screen()
         state["current_needs"] = {
             "available": True,
             "reason": None,
@@ -180,6 +181,62 @@ class PhysioInterventionSelectionOutsideBaselineTests(unittest.TestCase):
             self.assertIn(ex_id, library_ids)
             details = get_exercise_details(ex_id)
             self.assertEqual(details["difficulty"], "beginner")
+
+    def test_retired_exercise_in_a_historical_plan_is_not_recommended_again(self):
+        state = _state_with_health_screen()
+        state["current_needs"] = {
+            "available": True,
+            "reason": None,
+            "data": {
+                "assessmentVersion": "0.1.0",
+                "mobility_need": {"level": "LOW", "evidence": []},
+                "functional_movement_need": {"level": "LOW", "evidence": []},
+                "stability_need": {
+                    "level": "HIGH",
+                    "evidence": ["Shortest valid one-leg hold was 3 seconds"],
+                },
+            },
+        }
+
+        trace = start_workflow()
+        tool_client = InProcessExerciseToolClient(
+            workflow_id=trace.workflow_id, request_id=trace.request_id
+        )
+        result = run_physio_agent(
+            state,
+            tool_client,
+            parent_trace=trace,
+            previous_plan={
+                "plan_id": "historic",
+                "plan_version": 1,
+                "exercise_ids": ["chair-sit-to-stand"],
+            },
+        )
+
+        ids = [item["exercise_id"] for item in result["findings"]["plan"]["exercises"]]
+        self.assertNotIn("chair-sit-to-stand", ids)
+
+    def test_retired_historical_plan_entry_is_not_exposed_as_a_current_recommendation(self):
+        state = build_user_state()
+        state["exercise_history"] = {
+            "available": True,
+            "reason": None,
+            "data": {
+                "schemaVersion": "0.1.0",
+                "plans": [{
+                    "plan_id": "legacy-plan",
+                    "plan_version": 1,
+                    "exercise_ids": ["chair-sit-to-stand", "wall-sit"],
+                }],
+            },
+        }
+
+        response = serialise_workflow_state(state, safety_status="ALLOW")
+        active_output = str(response)
+        self.assertNotIn("chair-sit-to-stand", active_output)
+        self.assertNotIn("Chair Sit-to-Stand", active_output)
+        self.assertIn("wall-sit", active_output)
+        self.assertIn("chair-sit-to-stand", str(state["exercise_history"]))
 
 
 class NonMoveNetManualCompletionTests(unittest.TestCase):
@@ -291,16 +348,16 @@ class AdaptationOperatesOnInterventionResultsTests(unittest.TestCase):
 class ExerciseIdIntegrityTests(unittest.TestCase):
     """Point 5: No invalid or synthetic exercise IDs are generated."""
 
-    def test_all_20_exercises_have_valid_ids(self):
+    def test_all_19_exercises_have_valid_ids(self):
         all_ids = list_exercise_ids()
-        self.assertEqual(len(all_ids), 20)
+        self.assertEqual(len(all_ids), 19)
         for exercise_id in all_ids:
             details = get_exercise_details(exercise_id)
             self.assertEqual(details["exercise_id"], exercise_id)
             self.assertTrue(details["name"])
 
     def test_workflow_generated_plan_contains_only_valid_library_exercise_ids(self):
-        state = _assessment_state(shoulder_elevation=55.0, ftsst_time=19.0, balance_hold=4.0)
+        state = _assessment_state(shoulder_elevation=55.0, balance_hold=4.0)
         tool_client = InProcessExerciseToolClient(workflow_id="wf_valid", request_id="req_valid")
         result = run_workflow(state, tool_client=tool_client, workflow_id="wf_valid", request_id="req_valid")
 
@@ -308,7 +365,7 @@ class ExerciseIdIntegrityTests(unittest.TestCase):
         plans = result["updated_user_state"]["exercise_history"]["data"]["plans"]
         for plan in plans:
             for ex_id in plan["exercise_ids"]:
-                self.assertIn(ex_id, all_ids, f"Exercise ID '{ex_id}' is not in the 20-exercise library!")
+                self.assertIn(ex_id, all_ids, f"Exercise ID '{ex_id}' is not in the 19-exercise library!")
 
     def test_starter_plan_contains_only_valid_library_exercise_ids(self):
         all_ids = set(list_exercise_ids())

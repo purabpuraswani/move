@@ -11,7 +11,7 @@ from exercise_library.catalog import (
 
 class SearchExercisesTests(unittest.TestCase):
     def test_no_filters_returns_the_whole_library(self):
-        self.assertEqual(len(search_exercises()), 20)
+        self.assertEqual(len(search_exercises()), 19)
 
     def test_filtering_by_target_capability_stability(self):
         results = search_exercises(target_capability="stability")
@@ -48,7 +48,7 @@ class SearchExercisesTests(unittest.TestCase):
         self.assertNotIn("heel-to-toe-stand", ids)
         self.assertNotIn("supported-calf-raise", ids)
         self.assertNotIn("standing-hamstring-stretch", ids)
-        self.assertEqual(len(results), 12)
+        self.assertEqual(len(results), 11)
 
     def test_movenet_implemented_only_excludes_the_new_batchs_unsupported_exercises(self):
         results = search_exercises(movenet_implemented_only=True)
@@ -137,12 +137,19 @@ class GetExerciseDetailsTests(unittest.TestCase):
 
 class CheckExerciseConstraintsTests(unittest.TestCase):
     def test_a_valid_id_returns_safety_relevant_fields_only(self):
-        constraints = check_exercise_constraints("chair-sit-to-stand")
+        constraints = check_exercise_constraints("wall-sit")
         self.assertEqual(
             set(constraints),
             {"exerciseId", "difficulty", "equipmentRequired", "safetyConstraints", "commonMistakes"},
         )
-        self.assertEqual(constraints["exerciseId"], "chair-sit-to-stand")
+        self.assertEqual(constraints["exerciseId"], "wall-sit")
+
+    def test_retired_chair_sit_to_stand_cannot_be_looked_up_or_recommended(self):
+        with self.assertRaises(ExerciseNotFoundError):
+            get_exercise_details("chair-sit-to-stand")
+        with self.assertRaises(ExerciseNotFoundError):
+            check_exercise_constraints("chair-sit-to-stand")
+        self.assertNotIn("chair-sit-to-stand", list_exercise_ids())
 
     def test_an_unknown_id_raises_exercise_not_found(self):
         with self.assertRaises(ExerciseNotFoundError):

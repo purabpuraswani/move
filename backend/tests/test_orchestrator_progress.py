@@ -44,7 +44,15 @@ def _needs(mobility="LOW", stability="LOW", functional_movement="LOW", behaviour
 
 
 def _state(*, profile_doc=None, **need_kwargs):
-    state = build_user_state(profile_doc=profile_doc or {})
+    profile = dict(profile_doc or {})
+    profile.setdefault("diabetes", "no")
+    profile.setdefault("hypertension", "no")
+    profile.setdefault("heart_condition", "no")
+    profile.setdefault("previous_injury", "no")
+    profile.setdefault("joint_pain", "no")
+    profile.setdefault("back_neck_pain", "no")
+    profile.setdefault("other_conditions", "")
+    state = build_user_state(profile_doc=profile)
     state["current_needs"] = {"available": True, "reason": None, "data": _needs(**need_kwargs)}
     return state
 
@@ -89,6 +97,8 @@ class ProgressSelectionTests(unittest.TestCase):
             state,
             progress_tool_client=progress_client,
             progress_trigger={"reason": "exercise activity recorded"},
+            baseline_assessment=_balance_doc(5, "2026-09-01T00:00:00Z"),
+            current_assessment=_balance_doc(20, "2026-10-15T00:00:00Z"),
             **_clients(),
         )
         self.assertIn("progress", result["selected_agents"])
@@ -99,6 +109,8 @@ class ProgressSelectionTests(unittest.TestCase):
         result = run_workflow(
             state,
             progress_trigger={"reason": "exercise activity recorded"},
+            baseline_assessment=_balance_doc(5, "2026-09-01T00:00:00Z"),
+            current_assessment=_balance_doc(20, "2026-10-15T00:00:00Z"),
             **_clients(),
         )
         self.assertNotIn("progress", result["selected_agents"])
@@ -145,7 +157,7 @@ class DispatchAndClosedLoopTests(unittest.TestCase):
             progress_tool_client=progress_client,
             progress_trigger={"reason": "exercise activity recorded"},
             baseline_assessment=_balance_doc(40, "2026-01-01T00:00:00Z"),
-            current_assessment=_balance_doc(60, "2026-09-05T00:00:00Z"),
+            current_assessment=_balance_doc(60, "2026-10-15T00:00:00Z"),
             exercise_results=exercise_results,
             **_clients("loop"),
         )
@@ -209,7 +221,7 @@ class DispatchAndClosedLoopTests(unittest.TestCase):
             progress_tool_client=progress_client,
             progress_trigger={"reason": "exercise activity recorded"},
             baseline_assessment=_balance_doc(50, "2026-01-01T00:00:00Z"),
-            current_assessment=_balance_doc(50, "2026-09-05T00:00:00Z"),
+            current_assessment=_balance_doc(50, "2026-10-15T00:00:00Z"),
             exercise_results=exercise_results,
             **_clients("stag"),
         )
@@ -241,7 +253,7 @@ class DispatchAndClosedLoopTests(unittest.TestCase):
             progress_tool_client=progress_client,
             progress_trigger={"reason": "exercise activity recorded"},
             baseline_assessment=_balance_doc(50, "2026-01-01T00:00:00Z"),
-            current_assessment=_balance_doc(50, "2026-09-05T00:00:00Z"),
+            current_assessment=_balance_doc(50, "2026-10-15T00:00:00Z"),
             exercise_results=exercise_results,
             **_clients("mod"),
         )
@@ -272,7 +284,7 @@ class DispatchAndClosedLoopTests(unittest.TestCase):
             progress_tool_client=progress_client,
             progress_trigger={"reason": "exercise activity recorded"},
             baseline_assessment=_balance_doc(40, "2026-01-01T00:00:00Z"),
-            current_assessment=_balance_doc(60, "2026-09-05T00:00:00Z"),
+            current_assessment=_balance_doc(60, "2026-10-15T00:00:00Z"),
             exercise_results=exercise_results,
             **_clients("dup"),
         )
@@ -295,7 +307,7 @@ class DispatchAndClosedLoopTests(unittest.TestCase):
             progress_tool_client=progress_client,
             progress_trigger={"reason": "exercise activity recorded"},
             baseline_assessment=_balance_doc(40, "2026-01-01T00:00:00Z"),
-            current_assessment=_balance_doc(60, "2026-09-05T00:00:00Z"),
+            current_assessment=_balance_doc(60, "2026-10-15T00:00:00Z"),
             exercise_results=exercise_results,
             **_clients("safety"),
         )
@@ -319,7 +331,7 @@ class DispatchAndClosedLoopTests(unittest.TestCase):
                 progress_tool_client=progress_client,
                 progress_trigger={"reason": "exercise activity recorded"},
                 baseline_assessment=_balance_doc(40, "2026-01-01T00:00:00Z"),
-                current_assessment=_balance_doc(60 + cycle, "2026-09-05T00:00:00Z"),
+                current_assessment=_balance_doc(60 + cycle, "2026-10-15T00:00:00Z"),
                 exercise_results=exercise_results,
                 **_clients(f"v{cycle}"),
             )

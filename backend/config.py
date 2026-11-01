@@ -32,27 +32,11 @@ def _first_env(*names):
 # ---------------------------------------------------------------------------
 # Database
 #
-# MONGODB_URI is the only value that has to change to move between a local
-# MongoDB instance and MongoDB Atlas. MONGO_URL is the name this project used
-# previously and is still accepted so existing local .env files keep working.
+# SQLite is built into Python. SQLITE_PATH optionally points to the database
+# file; by default it is stored beside this module as movewell.sqlite3.
 # ---------------------------------------------------------------------------
 
-MONGODB_URI = _first_env("MONGODB_URI", "MONGO_URL")
-
-if not MONGODB_URI:
-    raise ConfigError(
-        "MONGODB_URI is not set.\n"
-        "\n"
-        "Create backend/.env (copy backend/.env.example) and set one of:\n"
-        "  local  ->  MONGODB_URI=mongodb://localhost:27017\n"
-        "  atlas  ->  MONGODB_URI=mongodb+srv://<user>:<password>"
-        "@<cluster>.mongodb.net/?retryWrites=true&w=majority\n"
-        "\n"
-        "Nothing else needs to change to switch between local and Atlas."
-    )
-
-
-MONGODB_DB_NAME = _first_env("MONGODB_DB_NAME", "MONGO_DB") or "movewell"
+SQLITE_PATH = _first_env("SQLITE_PATH")
 
 
 # ---------------------------------------------------------------------------

@@ -5,13 +5,14 @@ exactly. `relevant_behaviour_signals` is a narrow, already-real subset of
 the questionnaire section — exactly the fields
 need_assessment.rules.assess_behaviour_need() already reads
 (daily_sitting_hours, daily_screen_hours, exercise_days, exercise_minutes,
-work_type) — never adherence or feedback history, because this application
-tracks none yet (see behaviour_library/mcp_servers/behaviour_server.py's
-docstring on why no get_adherence/get_user_feedback tool exists).
+work_type) plus optional behaviour context. Action logs and exercise
+results are passed through their existing run arguments rather than copied
+into this minimized profile input.
 
-adherence_feedback is always None in Phase 4: no adherence-tracking or
-feedback-collection UI exists yet. Structured but empty, so a later phase
-does not need to change this contract's shape.
+user_reported_context is copied only from optional profile answers. None
+means unanswered; empty arrays are explicit answers with no entries.
+Recorded actions and exercise results remain separate evidence inputs to
+the run, scoped by the existing user-specific workflow.
 """
 
 REQUIRED_FIELDS = (
@@ -20,8 +21,8 @@ REQUIRED_FIELDS = (
     "agent_run_id",
     "current_needs",
     "relevant_behaviour_signals",
+    "user_reported_context",
     "confirmed_medical_context",
-    "adherence_feedback",
 )
 
 _BEHAVIOUR_QUESTIONNAIRE_FIELDS = (
@@ -30,6 +31,14 @@ _BEHAVIOUR_QUESTIONNAIRE_FIELDS = (
     "exercise_days",
     "exercise_minutes",
     "work_type",
+)
+
+_USER_CONTEXT_FIELDS = (
+    "behaviour_motivation",
+    "preferred_habits",
+    "reported_behaviour_barriers",
+    "daily_routines",
+    "preferred_habit_changes",
 )
 
 
@@ -72,6 +81,9 @@ def build_behaviour_agent_input(
 
         if any(value is not None for value in values.values()):
             relevant_behaviour_signals = values
+        behaviour_context = {key: data.get(key) for key in _USER_CONTEXT_FIELDS}
+    else:
+        behaviour_context = {key: None for key in _USER_CONTEXT_FIELDS}
 
     payload = {
         "workflow_id": workflow_id,
@@ -83,9 +95,14 @@ def build_behaviour_agent_input(
             else None
         ),
         "relevant_behaviour_signals": relevant_behaviour_signals,
+        "user_reported_context": {
+            "motivation": behaviour_context["behaviour_motivation"],
+            "preferred_habits": behaviour_context["preferred_habits"],
+            "reported_barriers": behaviour_context["reported_behaviour_barriers"],
+            "daily_routines": behaviour_context["daily_routines"],
+            "preferred_habit_changes": behaviour_context["preferred_habit_changes"],
+        },
         "confirmed_medical_context": confirmed_medical_context,
-        # No adherence-tracking UI exists yet. See module docstring.
-        "adherence_feedback": None,
     }
 
     validate_behaviour_agent_input(payload)
@@ -122,6 +139,22 @@ def validate_behaviour_agent_input(payload) -> None:
         payload["relevant_behaviour_signals"], dict
     ):
         _fail("relevant_behaviour_signals must be null or an object")
+
+    context = payload["user_reported_context"]
+    if context is not None:
+        if not isinstance(context, dict) or set(context) != {
+            "motivation", "preferred_habits", "reported_barriers", "daily_routines", "preferred_habit_changes"
+        }:
+            _fail("user_reported_context must be null or contain motivation, preferred_habits, and reported_barriers")
+        if context["motivation"] is not None and not isinstance(context["motivation"], str):
+            _fail("user_reported_context.motivation must be null or a string")
+        for field in ("preferred_habits", "reported_barriers", "daily_routines", "preferred_habit_changes"):
+            value = context[field]
+            if value is not None and (
+                not isinstance(value, list)
+                or any(not isinstance(item, str) or not item.strip() for item in value)
+            ):
+                _fail(f"user_reported_context.{field} must be null or a list of non-empty strings")
 
     forbidden_substrings = (
         "keypoint", "landmark", "skeleton", "rawframe", "video", "image",

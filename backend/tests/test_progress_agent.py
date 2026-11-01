@@ -159,7 +159,7 @@ class RunProgressAgentTests(unittest.TestCase):
         client, trace = _client()
         result = run_progress_agent(
             baseline_assessment=_balance_doc(40),
-            current_assessment=_balance_doc(60, completed_at="2026-09-05T00:00:00Z"),
+            current_assessment=_balance_doc(60, completed_at="2026-10-15T00:00:00Z"),
             tool_client=client,
             parent_trace=trace,
         )
@@ -204,7 +204,7 @@ class RunProgressAgentTests(unittest.TestCase):
         ]
         result = run_progress_agent(
             baseline_assessment=_balance_doc(40),
-            current_assessment=_balance_doc(60, completed_at="2026-09-05T00:00:00Z"),
+            current_assessment=_balance_doc(60, completed_at="2026-10-15T00:00:00Z"),
             current_plan=plan,
             exercise_results=exercise_results,
             tool_client=client,
@@ -237,7 +237,7 @@ class RunProgressAgentTests(unittest.TestCase):
         ]
         result = run_progress_agent(
             baseline_assessment=_balance_doc(50),
-            current_assessment=_balance_doc(50, completed_at="2026-09-05T00:00:00Z"),
+            current_assessment=_balance_doc(50, completed_at="2026-10-15T00:00:00Z"),
             current_plan=plan,
             exercise_results=exercise_results,
             tool_client=client,
@@ -256,7 +256,7 @@ class RunProgressAgentTests(unittest.TestCase):
         ]
         result = run_progress_agent(
             baseline_assessment=_balance_doc(60),
-            current_assessment=_balance_doc(45, completed_at="2026-09-05T00:00:00Z"),
+            current_assessment=_balance_doc(45, completed_at="2026-10-15T00:00:00Z"),
             current_plan=plan,
             exercise_results=exercise_results,
             tool_client=client,
@@ -269,6 +269,22 @@ class RunProgressAgentTests(unittest.TestCase):
         # silently downgraded — matches brief step 12/24 exactly.
         self.assertEqual(findings["adaptation_recommendation"], "REASSESS")
 
+    def test_decline_without_adherence_history_does_not_assume_low_adherence(self):
+        client, trace = _client()
+        result = run_progress_agent(
+            baseline_assessment=_balance_doc(60),
+            current_assessment=_balance_doc(45, completed_at="2026-10-15T00:00:00Z"),
+            current_plan=None,
+            exercise_results=[],
+            tool_client=client,
+            parent_trace=trace,
+        )
+        findings = result["findings"]
+        self.assertEqual(findings["overall_direction"], "DECLINED")
+        self.assertEqual(findings["adherence_level"], "UNKNOWN")
+        self.assertEqual(findings["adaptation_recommendation"], "REASSESS")
+        self.assertIn("not enough adherence history", result["recommendations"][0]["reason"])
+
     def test_scenario_unchanged_performance_low_adherence_recommends_modify(self):
         client, trace = _client()
         plan = {"plan_id": "p1", "exercise_ids": ["a", "b", "c", "d"]}
@@ -277,7 +293,7 @@ class RunProgressAgentTests(unittest.TestCase):
         ]
         result = run_progress_agent(
             baseline_assessment=_balance_doc(50),
-            current_assessment=_balance_doc(50, completed_at="2026-09-05T00:00:00Z"),
+            current_assessment=_balance_doc(50, completed_at="2026-10-15T00:00:00Z"),
             current_plan=plan,
             exercise_results=exercise_results,
             tool_client=client,
@@ -294,7 +310,7 @@ class RunProgressAgentTests(unittest.TestCase):
         client1, trace1 = _client()
         client2, trace2 = _client()
         baseline = _balance_doc(40)
-        current = _balance_doc(60, completed_at="2026-09-05T00:00:00Z")
+        current = _balance_doc(60, completed_at="2026-10-15T00:00:00Z")
 
         result1 = run_progress_agent(baseline_assessment=baseline, current_assessment=current, tool_client=client1, parent_trace=trace1)
         result2 = run_progress_agent(baseline_assessment=baseline, current_assessment=current, tool_client=client2, parent_trace=trace2)
@@ -307,7 +323,7 @@ class RunProgressAgentTests(unittest.TestCase):
         client, trace = _client()
         result = run_progress_agent(
             baseline_assessment=_balance_doc(40),
-            current_assessment=_balance_doc(60, completed_at="2026-09-05T00:00:00Z"),
+            current_assessment=_balance_doc(60, completed_at="2026-10-15T00:00:00Z"),
             current_plan=None,
             tool_client=client,
             parent_trace=trace,

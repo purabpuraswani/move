@@ -4,8 +4,8 @@
 
 .DESCRIPTION
     Installs frontend dependencies, creates the backend virtual environment,
-    installs backend requirements, validates configuration, tests the MongoDB
-    connection, and confirms both halves of the application start.
+    installs backend requirements, validates configuration and local SQLite
+    storage, and confirms both halves of the application start.
 
     Every step reports PASS, WARN or FAIL and the script continues where it
     safely can, so one run tells you everything that needs attention rather
@@ -250,7 +250,7 @@ if (-not (Test-Path $EnvFile)) {
     if (Test-Path $EnvExample) {
         Copy-Item $EnvExample $EnvFile
         Write-Warn 'backend\.env did not exist, so the placeholder template was copied there.'
-        Write-Note 'Open backend\.env and set MONGODB_URI and JWT_SECRET, then rerun this script.'
+        Write-Note 'Open backend\.env, replace the JWT_SECRET placeholder, then rerun this script.'
         Write-Note 'The template contains placeholders only. No real credential was written.'
         Write-Host ''
         exit 1
@@ -274,26 +274,6 @@ foreach ($line in $envLines) {
     $key = $trimmed.Substring(0, $split).Trim()
     $value = $trimmed.Substring($split + 1).Trim()
     $envMap[$key] = $value
-}
-
-$mongoUri = $envMap['MONGODB_URI']
-if (-not $mongoUri) { $mongoUri = $envMap['MONGO_URL'] }
-
-if (-not $mongoUri) {
-    Write-Fail 'MONGODB_URI is not set in backend\.env.'
-} elseif ($mongoUri -like 'mongodb+srv://*') {
-    Write-Pass 'MONGODB_URI is a MongoDB Atlas (mongodb+srv) connection string'
-
-    if ($mongoUri -like '*<*' -or $mongoUri -like '*USERNAME*' -or $mongoUri -like '*PASSWORD*') {
-        Write-Fail 'MONGODB_URI still contains placeholder text rather than real Atlas credentials.'
-    }
-} elseif ($mongoUri -like 'mongodb://localhost*' -or $mongoUri -like 'mongodb://127.0.0.1*') {
-    Write-Warn 'MONGODB_URI still points at a local MongoDB, not Atlas.'
-    Write-Note 'To use Atlas, replace the MONGODB_URI line in backend\.env with your'
-    Write-Note 'mongodb+srv://... string from Atlas > Connect > Drivers, URL-encoding'
-    Write-Note 'any special characters in the password.'
-} else {
-    Write-Pass 'MONGODB_URI is set'
 }
 
 $jwtSecret = $envMap['JWT_SECRET']
@@ -332,10 +312,10 @@ if ($envMap.ContainsKey('OPENROUTER_API_KEY') -and $envMap['OPENROUTER_API_KEY']
 
 
 # ===========================================================================
-# 6. Preflight: config import, MongoDB connection, app assembly
+# 6. Preflight: config import, SQLite storage, app assembly
 # ===========================================================================
 
-Write-Head '6. Verifying configuration, database and app assembly'
+Write-Head '6. Verifying configuration, SQLite storage and app assembly'
 
 $preflightSource = @'
 """Preflight checks run inside the backend virtual environment."""
@@ -366,81 +346,20 @@ except Exception as exc:
     sys.exit(1)
 
 print("[ OK ] config imported")
-print("       database name: %s" % config.MONGODB_DB_NAME)
-print("       connection:    %s" % redact(config.MONGODB_URI))
+print("       database:      SQLite")
 print("       token expiry:  %s minutes" % config.JWT_EXPIRES_MINUTES)
 print("       CORS origins:  %s" % ", ".join(config.CORS_ORIGINS))
 print("       AI provider:   %s" % ("available" if config.ai_provider_available() else "not configured"))
 
-# --- dnspython, required for Atlas ----------------------------------------
-
-if config.MONGODB_URI.startswith("mongodb+srv://"):
-    try:
-        import dns.resolver  # noqa: F401
-        print("[ OK ] dnspython present, required to resolve a mongodb+srv:// URI")
-    except ImportError:
-        failures.append("dnspython is missing")
-        print("[FAIL] dnspython is not installed, so an Atlas mongodb+srv:// URI cannot resolve.")
-        print("       Fix: pip install \"pymongo[srv]==4.10.1\"")
-
-# --- live database connection ---------------------------------------------
-
-# The exception classes are imported before the connection attempt, not inside
-# it. Importing them in the same try block means that if pymongo is missing the
-# except clauses reference undefined names and the real problem is buried under
-# a NameError.
-pymongo_available = True
+# --- local SQLite storage --------------------------------------------------
 
 try:
-    from pymongo import MongoClient
-    from pymongo.errors import (
-        ConfigurationError,
-        OperationFailure,
-        ServerSelectionTimeoutError,
-    )
-except ImportError as exc:
-    pymongo_available = False
-    failures.append("pymongo is not installed")
-    print("[FAIL] pymongo is not installed in this environment: %s" % exc)
-    print("       Fix: backend\\.venv\\Scripts\\python.exe -m pip install -r requirements.txt")
-
-if pymongo_available:
-    try:
-        client = MongoClient(config.MONGODB_URI, serverSelectionTimeoutMS=8000)
-        client.admin.command("ping")
-        server_info = client.server_info()
-        print("[ OK ] connected to MongoDB (server version %s)" % server_info.get("version", "unknown"))
-
-        names = client[config.MONGODB_DB_NAME].list_collection_names()
-        if names:
-            print("       existing collections: %s" % ", ".join(sorted(names)))
-        else:
-            print("       database is empty, which is expected before first use")
-
-    except ConfigurationError as exc:
-        failures.append("MongoDB configuration error")
-        print("[FAIL] MongoDB connection string was rejected: %s" % exc)
-        print("       For Atlas this usually means dnspython is missing.")
-
-    except OperationFailure as exc:
-        failures.append("MongoDB authentication failed")
-        print("[FAIL] MongoDB refused the credentials: %s" % exc)
-        print("       Check the username and password in MONGODB_URI. A password with")
-        print("       special characters must be URL-encoded, and the database user needs")
-        print("       readWrite on the target database.")
-
-    except ServerSelectionTimeoutError as exc:
-        failures.append("MongoDB unreachable")
-        print("[FAIL] Could not reach MongoDB within 8 seconds.")
-        print("       For Atlas, the usual cause is the IP access list: open Atlas >")
-        print("       Network Access and add your current IP address. Also confirm the")
-        print("       cluster is not paused.")
-        print("       Detail: %s" % str(exc).split(",")[0])
-
-    except Exception as exc:
-        failures.append("MongoDB connection failed")
-        print("[FAIL] Unexpected error connecting to MongoDB: %s: %s" % (type(exc).__name__, exc))
-        traceback.print_exc()
+    import database
+    print("[ OK ] SQLite storage opened at %s" % database.client.path)
+except Exception as exc:
+    failures.append("SQLite storage could not be opened")
+    print("[FAIL] SQLite storage could not be opened: %s: %s" % (type(exc).__name__, exc))
+    traceback.print_exc()
 
 # --- application assembly -------------------------------------------------
 
@@ -570,7 +489,7 @@ Write-Host '  To run the application, use two terminals:' -ForegroundColor Cyan
 Write-Host ''
 Write-Host '    Terminal 1 (API):        cd backend'
 Write-Host '                             .venv\Scripts\Activate.ps1'
-Write-Host '                             uvicorn main:app --reload --port 8000'
+Write-Host '                             uvicorn main:app --port 8000'
 Write-Host ''
 Write-Host '    Terminal 2 (frontend):   npm.cmd run dev'
 Write-Host ''
@@ -587,7 +506,7 @@ if ($Launch) {
     Write-Head 'Launching both servers'
 
     Start-Process -FilePath $VenvPython `
-        -ArgumentList '-m', 'uvicorn', 'main:app', '--reload', '--port', '8000' `
+        -ArgumentList '-m', 'uvicorn', 'main:app', '--port', '8000' `
         -WorkingDirectory $BackendDir
     Write-Pass 'API starting in a new window on port 8000'
 

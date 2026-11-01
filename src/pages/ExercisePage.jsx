@@ -70,7 +70,6 @@ const VIEW_GUIDANCE = {
 };
 
 const EXERCISE_OBSERVATIONS = {
-  "chair-sit-to-stand": "MoveWell observed your rising tempo, standing extension, and smooth descent back to the chair.",
   "wall-sit": "MoveWell monitored your posture stability and how steadily you held the lowered wall position.",
   "standing-knee-raise": "MoveWell monitored your hip elevation height, rhythm, and single-leg balance control throughout.",
   "wall-push-up": "MoveWell monitored your arm flexion depth, pressing tempo, and torso alignment against the wall.",

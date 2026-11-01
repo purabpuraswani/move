@@ -445,7 +445,11 @@ export class PoseEngine {
 
     // toFrame(null, ...) yields an empty keypoint map, which the test logic
     // treats as pose loss. An undetected person must never look like a still one.
-    const frame = toFrame(poses && poses.length ? poses[0] : null, timestamp);
+    const frame = {
+      ...toFrame(poses && poses.length ? poses[0] : null, timestamp),
+      width: video.videoWidth,
+      height: video.videoHeight,
+    };
 
     if (this.onFrame) {
       try {

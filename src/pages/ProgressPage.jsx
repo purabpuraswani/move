@@ -26,6 +26,7 @@ import { fetchProgressSeries } from "../services/progress";
 import { toArray } from "../services/specialistData.js";
 import ProgressLineChart from "../progress/ProgressLineChart.jsx";
 import { fetchFoodLog } from "../services/foodLog";
+import { fetchDailyCheckins } from "../services/dailyCheckins.js";
 import { fetchLatestWorkflow, hasAnyPlan, runWorkflow } from "../services/workflow";
 import AppNavigation from "../components/AppNavigation.jsx";
 
@@ -43,6 +44,12 @@ function formatDate(value) {
     day: "numeric",
     year: "numeric",
   });
+}
+
+function displayExerciseName(value) {
+  return String(value || "Exercise")
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
 /**
@@ -82,6 +89,7 @@ function ProgressPage() {
   const [workflow, setWorkflow] = useState(null);
   const [foodEntries, setFoodEntries] = useState([]);
   const [exerciseResults, setExerciseResults] = useState([]);
+  const [dailyCheckins, setDailyCheckins] = useState([]);
   const [series, setSeries] = useState(null);
   const [state, setState] = useState("loading");
   const [error, setError] = useState(null);
@@ -107,13 +115,15 @@ function ProgressPage() {
       // The charts are a bonus on top of the counts: if this one call
       // fails the page still renders what it already had.
       fetchProgressSeries().catch(() => null),
+      fetchDailyCheckins().catch(() => ({ checkins: [] })),
     ])
-      .then(([latest, foodPage, exercisePage, progressSeries]) => {
+      .then(([latest, foodPage, exercisePage, progressSeries, checkinPage]) => {
         if (!ignore) {
           setWorkflow(latest);
           setFoodEntries(foodPage.entries || []);
           setExerciseResults(exercisePage.results || exercisePage.exercise_results || []);
           setSeries(progressSeries);
+          setDailyCheckins(checkinPage.checkins || []);
           setState("ready");
         }
       })
@@ -173,6 +183,9 @@ function ProgressPage() {
   }, [measuredExerciseCount, loggedCount]);
 
   const planExists = hasAnyPlan(workflow);
+  const currentMovement = series?.latestAssessment;
+  const movementMetricList = toArray(series?.movementMetrics);
+  const hasComparableMovementHistory = movementMetricList.some((metric) => metric.point_count >= 2);
 
   return (
     <div className="progress-page">
@@ -227,6 +240,15 @@ function ProgressPage() {
               )}
             </section>
 
+            <section className="progress-card">
+              <h2 className="progress-card-title">Daily activity, nutrition & recovery records</h2>
+              {dailyCheckins.length ? (
+                <ul className="progress-counts">{dailyCheckins.slice(0, 7).map(day => <li key={day.date}>
+                  {day.date}: {[day.steps != null && `${day.steps} steps`, day.sitting_minutes != null && `${day.sitting_minutes} sitting min`, day.walking_minutes != null && `${day.walking_minutes} walking min`, day.movement_breaks != null && `${day.movement_breaks} movement breaks`, day.sleep_hours != null && `${day.sleep_hours} sleep hours`, day.sleep_quality != null && `sleep quality ${day.sleep_quality}/5`, day.stress_level != null && `reported stress ${day.stress_level}/5`, day.recovery_difficulty != null && `recovery difficulty ${day.recovery_difficulty ? "yes" : "no"}`, day.fruit_vegetable_servings != null && `${day.fruit_vegetable_servings} fruit/veg servings`, day.water_intake_ml != null && `${day.water_intake_ml} ml water`].filter(Boolean).join(" · ")}
+                </li>)}</ul>
+              ) : <p className="progress-empty">No daily check-ins recorded. Missing entries are left unknown.</p>}
+            </section>
+
             {/* ─────────── RECORDED PROGRESS, FROM STORED DATA ───────────
                 Every figure below comes from backend/routes/progress.py,
                 which reads stored exercise results, stored assessments
@@ -274,6 +296,35 @@ function ProgressPage() {
                       />
                     ))}
                   </div>
+                  <div className="progress-assessment-status" aria-live="polite">
+                    {!currentMovement ? (
+                      <p>No valid movement measurements are recorded.</p>
+                    ) : (
+                      <>
+                        <p>
+                          Latest saved session: {currentMovement.completedAt ? formatDate(currentMovement.completedAt) : "date unavailable"}.
+                          {hasComparableMovementHistory ? " Comparable history is available for at least one measure." : " This is one recorded session; a change over time cannot be determined yet."}
+                        </p>
+                        <ul>
+                          {(["left", "right"]).map((side) => {
+                            const value = currentMovement.shoulder?.measurements?.[side]?.finalElevationDeg;
+                            return value == null ? null : <li key={`shoulder-${side}`}>Shoulder raise, {side}: {value}°</li>;
+                          })}
+                          {(["left", "right"]).map((side) => {
+                            const value = currentMovement.balance?.measurements?.[side]?.holdDurationSeconds;
+                            return value == null ? null : <li key={`balance-${side}`}>One-leg stand, {side}: {value} seconds</li>;
+                          })}
+                        </ul>
+                      </>
+                    )}
+                    <p>
+                      {currentMovement
+                        ? hasComparableMovementHistory
+                          ? "Earlier comparable measurements are available for at least one check. Trends appear above where enough records exist."
+                          : "No historical comparison is available yet. These measurements are saved as your baseline; no change decision has been made."
+                        : "A progress comparison is unavailable until a valid movement measurement is saved."}
+                    </p>
+                  </div>
                 </section>
 
                 {toArray(series.recentCompletions).length ? (
@@ -283,7 +334,7 @@ function ProgressPage() {
                     <ul className="progress-recent-list">
                       {toArray(series.recentCompletions).map((entry, index) => (
                         <li key={index} className="progress-recent-row">
-                          <span className="progress-recent-name">{entry.exerciseId}</span>
+                          <span className="progress-recent-name">{displayExerciseName(entry.exerciseId)}</span>
                           <span className="progress-recent-meta">
                             {(entry.completedAt || "").slice(0, 10)}
                             {" · "}

@@ -48,6 +48,9 @@ ACTIVE_PROFILE = {
     "sleep_hours": 8,
     "sleep_quality": "good",
     "work_type": "active",
+    "diabetes": "no", "hypertension": "no", "heart_condition": "no",
+    "previous_injury": "no", "joint_pain": "no", "back_neck_pain": "no",
+    "other_conditions": "",
 }
 
 SEDENTARY_PROFILE = {
@@ -61,10 +64,13 @@ SEDENTARY_PROFILE = {
     "sleep_hours": 7,
     "sleep_quality": "good",
     "work_type": "desk",
+    "diabetes": "no", "hypertension": "no", "heart_condition": "no",
+    "previous_injury": "no", "joint_pain": "no", "back_neck_pain": "no",
+    "other_conditions": "",
 }
 
 
-def _assessment(*, shoulder=None, ftsst=None, balance=None, skipped=()):
+def _assessment(*, shoulder=None, balance=None, skipped=()):
     """One stored assessment session. A test named in `skipped` is stored
     as skipped with null measurements -- the state a user's own choice
     produces -- and never as a zero."""
@@ -90,16 +96,6 @@ def _assessment(*, shoulder=None, ftsst=None, balance=None, skipped=()):
                     "left": {"finalElevationDeg": shoulder[0]},
                     "right": {"finalElevationDeg": shoulder[1]},
                     "observableDifferenceDeg": abs(shoulder[0] - shoulder[1]),
-                },
-            ),
-            "ftsst": block(
-                "ftsst",
-                None
-                if ftsst is None
-                else {
-                    "completionTimeSeconds": ftsst,
-                    "repetitionsDetected": 5,
-                    "requiredRepetitions": 5,
                 },
             ),
             "balance": block(
@@ -163,7 +159,7 @@ class LowActivityShapingTests(unittest.TestCase):
     def setUp(self):
         self.result = _run(
             SEDENTARY_PROFILE,
-            _assessment(shoulder=(150, 146), ftsst=13.0, balance=(28, 26)),
+            _assessment(shoulder=(150, 146), balance=(9.0, 10.0)),
             "low_activity",
             exercise_results=[],
         )
@@ -187,7 +183,7 @@ class LowActivityShapingTests(unittest.TestCase):
     def test_the_same_findings_produce_a_smaller_plan_for_a_sedentary_user(self):
         # Held against the constants: identical measured evidence, only
         # the activity answers differ, and the plan is strictly shorter.
-        assessment = _assessment(shoulder=(110, 100), ftsst=16.5, balance=(4.2, 6.0))
+        assessment = _assessment(shoulder=(55, 58), balance=(4.2, 6.0))
 
         sedentary = _physio(_run(SEDENTARY_PROFILE, assessment, "size_sed", exercise_results=[]))
         active = _physio(_run(ACTIVE_PROFILE, assessment, "size_act", exercise_results=[]))
@@ -241,8 +237,8 @@ class SeverityChangesTheShapeTests(unittest.TestCase):
         self.assertEqual(shape["ordered_capabilities"][0], "stability")
 
     def test_the_same_levels_through_the_real_pipeline_differ_in_plan(self):
-        high = _run(ACTIVE_PROFILE, _assessment(shoulder=(150, 148), ftsst=8.0, balance=(3.0, 3.5)), "sev_high")
-        medium = _run(ACTIVE_PROFILE, _assessment(shoulder=(150, 148), ftsst=8.0, balance=(9.0, 9.5)), "sev_med")
+        high = _run(ACTIVE_PROFILE, _assessment(shoulder=(150, 148), balance=(3.0, 3.5)), "sev_high")
+        medium = _run(ACTIVE_PROFILE, _assessment(shoulder=(150, 148), balance=(9.0, 9.5)), "sev_med")
 
         self.assertEqual(_physio(high)["need_levels"]["stability_need"], "HIGH")
         self.assertEqual(_physio(medium)["need_levels"]["stability_need"], "MEDIUM")
@@ -261,7 +257,7 @@ class HighStabilityAndFunctionalTests(unittest.TestCase):
     def setUp(self):
         self.result = _run(
             ACTIVE_PROFILE,
-            _assessment(shoulder=(150, 148), ftsst=16.5, balance=(4.2, 6.0)),
+            _assessment(shoulder=(55, 58), balance=(4.2, 6.0)),
             "high_two",
             exercise_results=[],
         )
@@ -269,8 +265,9 @@ class HighStabilityAndFunctionalTests(unittest.TestCase):
 
     def test_both_needs_are_high_and_both_are_targeted(self):
         self.assertEqual(self.findings["need_levels"]["stability_need"], "HIGH")
-        self.assertEqual(self.findings["need_levels"]["functional_movement_need"], "HIGH")
+        self.assertEqual(self.findings["need_levels"]["mobility_need"], "HIGH")
         self.assertIn("stability", self.findings["capabilities_targeted"])
+        self.assertIn("mobility", self.findings["capabilities_targeted"])
 
     def test_the_plan_fits_the_full_size_for_an_active_user(self):
         shaping = self.findings["plan_shaping"]
@@ -294,7 +291,7 @@ class ShoulderOnlyTests(unittest.TestCase):
         self.findings = _physio(
             _run(
                 ACTIVE_PROFILE,
-                _assessment(shoulder=(55, 58), ftsst=8.0, balance=(25, 27)),
+                _assessment(shoulder=(55, 58), balance=(25, 27)),
                 "shoulder_only",
                 exercise_results=[],
             )
@@ -304,7 +301,7 @@ class ShoulderOnlyTests(unittest.TestCase):
         self.assertEqual(self.findings["capabilities_targeted"], ["mobility"])
         self.assertEqual(self.findings["need_levels"]["mobility_need"], "HIGH")
         self.assertEqual(self.findings["need_levels"]["stability_need"], "LOW")
-        self.assertEqual(self.findings["need_levels"]["functional_movement_need"], "LOW")
+        self.assertEqual(self.findings["need_levels"]["functional_movement_need"], "NOT_ASSESSED")
 
     def test_every_selected_exercise_claims_the_mobility_capability(self):
         from exercise_library.catalog import get_exercise_details
@@ -329,7 +326,7 @@ class BalanceSelectionTests(unittest.TestCase):
         findings = _physio(
             _run(
                 ACTIVE_PROFILE,
-                _assessment(shoulder=(150, 148), ftsst=8.0, balance=(3.5, 4.0)),
+                _assessment(shoulder=(150, 148), balance=(3.5, 4.0)),
                 "balance_specific",
                 exercise_results=[],
             )
@@ -354,7 +351,7 @@ class NormalAssessmentTests(unittest.TestCase):
     def setUp(self):
         self.result = _run(
             ACTIVE_PROFILE,
-            _assessment(shoulder=(150, 148), ftsst=8.0, balance=(25, 27)),
+            _assessment(shoulder=(150, 148), balance=(25, 27)),
             "normal",
             exercise_results=[],
         )
@@ -380,7 +377,6 @@ class RawAssessmentEvidenceReachesPhysioTests(unittest.TestCase):
     def test_agent_findings_retain_the_exact_domain_parameters(self):
         assessment = _assessment(
             shoulder=(55, 58),
-            ftsst=13.84,
             balance=(5.97, 3.5),
         )
         findings = _physio(_run(ACTIVE_PROFILE, assessment, "raw_trace", exercise_results=[]))
@@ -389,7 +385,7 @@ class RawAssessmentEvidenceReachesPhysioTests(unittest.TestCase):
         self.assertEqual(movement["shoulder"]["left_elevation_deg"], 55)
         self.assertEqual(movement["shoulder"]["right_elevation_deg"], 58)
         self.assertEqual(movement["shoulder"]["side_difference_deg"], 3)
-        self.assertEqual(movement["sit_to_stand"]["time_seconds"], 13.84)
+        self.assertNotIn("sit_to_stand", movement)
         self.assertEqual(movement["balance"]["left_hold_seconds"], 5.97)
         self.assertEqual(movement["balance"]["right_hold_seconds"], 3.5)
 
@@ -405,13 +401,13 @@ class NotAssessedIsNotAnImpairmentTests(unittest.TestCase):
         # Two checks skipped by the user; the arm check completed well.
         self.result = _run(
             SEDENTARY_PROFILE,
-            _assessment(shoulder=(130, 126), skipped=("ftsst", "balance")),
+            _assessment(shoulder=(130, 126), skipped=("balance",)),
             "skipped_two",
             exercise_results=[],
         )
         self.findings = _physio(self.result)
         self.needs = _state(
-            SEDENTARY_PROFILE, _assessment(shoulder=(130, 126), skipped=("ftsst", "balance"))
+            SEDENTARY_PROFILE, _assessment(shoulder=(130, 126), skipped=("balance",))
         )["current_needs"]["data"]
 
     def test_a_skipped_check_never_becomes_a_medium_or_high_need(self):
@@ -424,7 +420,12 @@ class NotAssessedIsNotAnImpairmentTests(unittest.TestCase):
         for dimension in ("stability_need", "functional_movement_need"):
             evidence = " ".join(self.needs[dimension]["evidence"]).lower()
 
-            self.assertIn("has not produced a usable result", evidence)
+            expected = (
+                "not measured by the current assessment protocol"
+                if dimension == "functional_movement_need"
+                else "has not produced a usable result"
+            )
+            self.assertIn(expected, evidence)
             for word in ("poor", "impair", "deficit", "reduced"):
                 self.assertNotIn(word, evidence)
 
@@ -442,12 +443,12 @@ class NotAssessedIsNotAnImpairmentTests(unittest.TestCase):
 
 
 class SafetyGateRemainsAuthoritativeTests(unittest.TestCase):
-    """TEST 8 -- physio cannot put a blocked exercise in front of a user."""
+    """Per-exercise review and the cross-agent Safety Gate remain distinct."""
 
     def _state_with_report(self):
         state = build_user_state(
             profile_doc=ACTIVE_PROFILE,
-            assessment_doc=_assessment(shoulder=(150, 148), ftsst=16.5, balance=(4.2, 6.0)),
+            assessment_doc=_assessment(shoulder=(150, 148), balance=(4.2, 6.0)),
             confirmed_reports_doc={"reports": [{"report_id": "r1", "values": []}]},
         )
 
@@ -458,32 +459,27 @@ class SafetyGateRemainsAuthoritativeTests(unittest.TestCase):
             self._state_with_report(), exercise_results=[], **_clients("safety")
         )
 
-    def test_the_gate_paused_the_exercise_above_the_reduced_ceiling(self):
+    def test_confirmed_medical_context_defers_physio_candidates_before_the_global_gate(self):
         safety = self.result["safety_result"]
+        physio = _physio(self.result)
+        self.assertEqual(safety["status"], "NOT_ASSESSED")
+        self.assertEqual(physio["plan"]["exercises"], [])
+        self.assertTrue(physio["exercise_safety_evaluations"])
+        self.assertTrue(all(
+            evaluation["status"] == "DEFERRED_HEALTHCARE_REVIEW"
+            for evaluation in physio["exercise_safety_evaluations"]
+        ))
 
-        self.assertEqual(safety["status"], "PAUSE")
-        self.assertTrue(safety["blocked_recommendation_ids"])
-
-    def test_a_blocked_exercise_never_reaches_the_final_recommendations(self):
-        blocked = set(self.result["safety_result"]["blocked_recommendation_ids"])
+    def test_deferred_exercises_never_reach_final_recommendations(self):
         final = {entry["id"] for entry in self.result["final_recommendations"]}
+        self.assertFalse(final)
 
-        self.assertTrue(blocked)
-        self.assertFalse(blocked & final)
+    def test_deferred_review_is_persisted_without_a_plan(self):
+        history = self.result["updated_user_state"]["exercise_history"]["data"]
+        self.assertEqual(history["plans"], [])
+        self.assertTrue(history["safety_reviews"][-1]["evaluations"])
 
-    def test_the_rest_of_the_plan_survives(self):
-        physio_final = [
-            entry for entry in self.result["final_recommendations"] if entry["agent"] == "physio"
-        ]
-
-        self.assertTrue(physio_final, "a pause on one exercise must not empty the plan")
-
-    def test_the_agent_still_proposed_it_so_the_audit_trail_is_intact(self):
-        blocked = set(self.result["safety_result"]["blocked_recommendation_ids"])
-
-        self.assertTrue(blocked & set(_plan_ids(_physio(self.result))))
-
-    def test_the_gate_is_not_reimplemented_inside_the_agent(self):
+    def test_the_global_gate_remains_a_separate_conservative_check(self):
         decision = evaluate_safety(
             candidate_recommendations=[
                 {"id": "wall-sit", "agent": "physio", "type": "exercise", "difficulty": "intermediate"}
@@ -499,7 +495,7 @@ class DeterminismTests(unittest.TestCase):
     """TEST 9 -- the same evidence always produces the same plan."""
 
     def test_two_identical_runs_produce_an_identical_plan(self):
-        assessment = _assessment(shoulder=(150, 148), ftsst=16.5, balance=(4.2, 6.0))
+        assessment = _assessment(shoulder=(150, 148), balance=(4.2, 6.0))
 
         first = _physio(_run(ACTIVE_PROFILE, assessment, "det_a", exercise_results=[]))
         second = _physio(_run(ACTIVE_PROFILE, assessment, "det_b", exercise_results=[]))
@@ -522,11 +518,11 @@ class DifferentEvidenceDifferentPlanTests(unittest.TestCase):
     """TEST 10 -- two users, two different plans, each explainable."""
 
     def setUp(self):
-        # A: sedentary, slow sit-to-stand (functional movement).
+        # A: sedentary with a medium one-leg balance measurement.
         self.a = _physio(
             _run(
                 SEDENTARY_PROFILE,
-                _assessment(shoulder=(150, 148), ftsst=13.0, balance=(25, 27)),
+                _assessment(shoulder=(150, 148), balance=(9.0, 10.0)),
                 "diff_a",
                 exercise_results=[],
             )
@@ -535,7 +531,7 @@ class DifferentEvidenceDifferentPlanTests(unittest.TestCase):
         self.b = _physio(
             _run(
                 ACTIVE_PROFILE,
-                _assessment(shoulder=(150, 148), ftsst=8.0, balance=(3.5, 4.0)),
+                _assessment(shoulder=(150, 148), balance=(3.5, 4.0)),
                 "diff_b",
                 exercise_results=[],
             )
@@ -545,7 +541,7 @@ class DifferentEvidenceDifferentPlanTests(unittest.TestCase):
         self.assertNotEqual(_plan_ids(self.a), _plan_ids(self.b))
 
     def test_each_plan_follows_its_own_evidence(self):
-        self.assertEqual(self.a["capabilities_targeted"], ["functional_movement", "strength"])
+        self.assertEqual(self.a["capabilities_targeted"], ["stability"])
         self.assertEqual(self.b["capabilities_targeted"], ["stability"])
 
     def test_the_sedentary_user_gets_the_smaller_plan(self):
@@ -560,10 +556,10 @@ class EveryRecommendationIsRealTests(unittest.TestCase):
 
     def test_no_scenario_produces_an_unknown_exercise_id(self):
         scenarios = [
-            (SEDENTARY_PROFILE, _assessment(shoulder=(150, 146), ftsst=13.0, balance=(28, 26))),
-            (ACTIVE_PROFILE, _assessment(shoulder=(110, 100), ftsst=16.5, balance=(4.2, 6.0))),
-            (ACTIVE_PROFILE, _assessment(shoulder=(55, 58), ftsst=8.0, balance=(25, 27))),
-            (SEDENTARY_PROFILE, _assessment(shoulder=(130, 126), skipped=("ftsst", "balance"))),
+            (SEDENTARY_PROFILE, _assessment(shoulder=(150, 146), balance=(9.0, 10.0))),
+            (ACTIVE_PROFILE, _assessment(shoulder=(110, 100), balance=(4.2, 6.0))),
+            (ACTIVE_PROFILE, _assessment(shoulder=(55, 58), balance=(25, 27))),
+            (SEDENTARY_PROFILE, _assessment(shoulder=(130, 126), skipped=("balance",))),
         ]
 
         for index, (profile, assessment) in enumerate(scenarios):

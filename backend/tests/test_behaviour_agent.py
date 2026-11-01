@@ -3,6 +3,7 @@ import unittest
 from orchestration.agent_result import validate_agent_result
 from orchestration.ids import start_workflow
 from behaviour_agent.agent import AGENT_ID, run_behaviour_agent
+from behaviour_agent.input_contract import build_behaviour_agent_input
 from behaviour_agent.tool_client import BehaviourToolClient, InProcessBehaviourToolClient
 from user_state.schema import build_user_state
 
@@ -61,6 +62,19 @@ class SittingBehaviourTests(unittest.TestCase):
         self.assertIn("take_regular_movement_breaks", topic_ids)
 
 
+class GeneralMaintenanceActivityTests(unittest.TestCase):
+    def test_low_need_returns_catalog_routine_without_claiming_barriers(self):
+        result, _ = _run(_state("LOW"))
+        self.assertEqual(result["findings"]["mode"], "general_maintenance")
+        activity = result["findings"]["activities"][0]
+        self.assertEqual(activity["id"], "anchor_activity_to_an_existing_routine")
+        self.assertIn("GENERAL_EDUCATION", activity["personalization_status"])
+        self.assertTrue(activity["action"])
+        self.assertEqual(result["findings"]["behaviour_adherence"]["status"], "NOT_LOGGED")
+        self.assertEqual(result["findings"]["behaviour_context"]["reported_barriers"], None)
+        self.assertEqual(result["recommendations"][0]["id"], activity["id"])
+
+
 class MovementBreakNeedTests(unittest.TestCase):
     def test_movement_break_goal_has_a_practical_example(self):
         state = _state("HIGH", profile_doc={"daily_sitting_hours": 12})
@@ -77,6 +91,168 @@ class BarrierAwareTests(unittest.TestCase):
         from behaviour_library.catalog import get_behaviour_topic_details
         topic = get_behaviour_topic_details("take_regular_movement_breaks")
         self.assertTrue(topic["common_barriers"])
+
+
+class ContextEvidenceTests(unittest.TestCase):
+    def test_inferred_barriers_name_the_recorded_action_evidence(self):
+        from behaviour_agent.barriers import identify_barriers
+        from behaviour_agent.adherence import NOT_ADHERED
+
+        barriers = identify_barriers({
+            "status": NOT_ADHERED,
+            "summary": "You recorded 1 of 4 actions as completed.",
+        })
+        self.assertEqual(len(barriers), 1)
+        self.assertEqual(barriers[0]["barrier_type"], "inferred_from_recorded_behaviour")
+        self.assertEqual(barriers[0]["source"], "recorded_actions")
+        self.assertIn("1 of 4", barriers[0]["evidence"])
+
+    def test_reported_barriers_are_distinguished_from_library_suggestions(self):
+        state = _state("HIGH", {
+            "daily_sitting_hours": 12,
+            "reported_behaviour_barriers": ["back-to-back meetings"],
+        })
+        result, _ = _run(state)
+        findings = result["findings"]
+        reported = findings["barriers"][0]
+        suggestions = findings["catalog_barrier_suggestions"]
+        self.assertEqual(reported["barrier_type"], "user_reported")
+        self.assertEqual(reported["source"], "user_reported_profile")
+        self.assertTrue(reported["confirmed_by_user"])
+        self.assertIn("back-to-back meetings", reported["evidence"])
+        self.assertTrue(suggestions)
+        self.assertTrue(all(not entry["confirmed_by_user"] for entry in suggestions))
+        self.assertTrue(all(entry["source"].startswith("behaviour_library:") for entry in suggestions))
+
+    def test_no_reported_barriers_does_not_promote_catalog_text_to_fact(self):
+        result, _ = _run(_state("HIGH", {"daily_sitting_hours": 12, "reported_behaviour_barriers": []}))
+        self.assertEqual(result["findings"]["barriers"], [])
+        self.assertTrue(result["findings"]["catalog_barrier_suggestions"])
+
+    def test_unknown_motivation_and_preferences_remain_unknown(self):
+        state = _state("HIGH", {"daily_sitting_hours": 12})
+        payload = build_behaviour_agent_input(
+            state, workflow_id="wf", request_id="req", agent_run_id="run"
+        )
+        self.assertIsNone(payload["user_reported_context"]["motivation"])
+        self.assertIsNone(payload["user_reported_context"]["preferred_habits"])
+        self.assertIsNone(payload["user_reported_context"]["reported_barriers"])
+        self.assertIsNone(payload["user_reported_context"]["daily_routines"])
+        self.assertIsNone(payload["user_reported_context"]["preferred_habit_changes"])
+        result, _ = _run(state)
+        goal = result["findings"]["plan"]["habit_goals"][0]
+        self.assertNotIn("reported motivation", str(goal).lower())
+
+    def test_routines_and_preferred_changes_are_passed_as_user_context(self):
+        payload = build_behaviour_agent_input(
+            _state("HIGH", {
+                "daily_sitting_hours": 12,
+                "daily_routines": ["after lunch walk"],
+                "preferred_habit_changes": ["short movement breaks"],
+            }), workflow_id="wf", request_id="req", agent_run_id="run",
+        )
+        self.assertEqual(payload["user_reported_context"]["daily_routines"], ["after lunch walk"])
+        self.assertEqual(payload["user_reported_context"]["preferred_habit_changes"], ["short movement breaks"])
+
+    def test_stated_preference_personalizes_the_catalog_goal(self):
+        result, _ = _run(_state("HIGH", {
+            "daily_sitting_hours": 12,
+            "preferred_habits": ["walking"],
+            "reported_behaviour_barriers": [],
+        }))
+        goal = result["findings"]["plan"]["habit_goals"][0]
+        self.assertIn("walk", goal["practical_goal"].lower())
+        self.assertTrue(any("preferred habit" in item.lower() for item in goal["evidence_used"]))
+        self.assertIn("preference", goal["rationale"].lower())
+
+    def test_stated_motivation_is_passed_and_used_when_it_matches_a_goal(self):
+        result, _ = _run(_state("HIGH", {
+            "daily_sitting_hours": 12,
+            "behaviour_motivation": "I enjoy walking at lunch",
+            "preferred_habits": [],
+            "reported_behaviour_barriers": [],
+        }))
+        goal = result["findings"]["plan"]["habit_goals"][0]
+        self.assertIn("walk", goal["practical_goal"].lower())
+        self.assertIn("motivation", goal["rationale"].lower())
+
+    def test_reported_time_barrier_informs_goal_selection_and_rationale(self):
+        result, _ = _run(_state("HIGH", {
+            "daily_sitting_hours": 12,
+            "reported_behaviour_barriers": ["not enough time"],
+        }))
+        goal = result["findings"]["plan"]["habit_goals"][0]
+        self.assertIn("short walk", goal["practical_goal"].lower())
+        self.assertIn("reported barrier", goal["rationale"].lower())
+
+    def test_recorded_skips_choose_an_alternative_matching_stated_preference(self):
+        from datetime import datetime, timedelta, timezone
+
+        topic_id = "take_regular_movement_breaks"
+        original = "Stand up and move for one to two minutes once each hour during the work day."
+        state = _state("HIGH", {
+            "daily_sitting_hours": 12,
+            "preferred_habits": ["walking"],
+            "reported_behaviour_barriers": [],
+        })
+        trace = start_workflow()
+        client = InProcessBehaviourToolClient(
+            workflow_id=trace.workflow_id, request_id=trace.request_id
+        )
+        result = run_behaviour_agent(
+            state,
+            client,
+            parent_trace=trace,
+            previous_plan={
+                "plan_id": "habit_plan_prior",
+                "topic_ids": [topic_id],
+                "goals": [{"topic_id": topic_id, "practical_goal": original}],
+                "decisions": [{
+                    "topic_id": topic_id,
+                    "target_signal": "daily_sitting_hours",
+                    "signal_value": 12,
+                    "decision_type": "ADD",
+                }],
+            },
+            behaviour_actions=[
+                {"topic_id": topic_id, "status": "skipped", "difficulty": None,
+                 "recorded_at": datetime.now(timezone.utc) - timedelta(days=offset)}
+                for offset in range(4)
+            ],
+        )
+        goal = next(
+            item for item in result["findings"]["plan"]["habit_goals"]
+            if item["topic_id"] == topic_id
+        )
+        self.assertEqual(goal["decision_type"], "MODIFY")
+        self.assertIn("walk", goal["practical_goal"].lower())
+        self.assertTrue(any("recorded" in item.lower() for item in goal["evidence_used"]))
+
+    def test_response_preserves_recommendation_and_barrier_sources(self):
+        from orchestrator.state_update import apply_behaviour_plan
+        from workflow.response import serialise_workflow_state
+
+        state = _state("HIGH", {
+            "daily_sitting_hours": 12,
+            "reported_behaviour_barriers": ["back-to-back meetings"],
+        })
+        result, _ = _run(state)
+        updated = apply_behaviour_plan(state, result)
+        response = serialise_workflow_state(updated)
+        displayed = response["behaviour_plan"]["recommendations"][0]
+        stored = result["findings"]["plan"]["habit_goals"][0]
+        self.assertEqual(displayed["action"], stored["practical_goal"])
+        self.assertEqual(displayed["why"], stored["rationale"])
+        specialist = next(item for item in response["specialists"] if item["title"] == "Daily habits")
+        self.assertTrue(specialist["barriers"][0]["confirmed_by_user"])
+        self.assertTrue(specialist["catalog_barrier_suggestions"])
+        team_card = next(item for item in response["specialists_team"] if item["id"] == "behaviour")
+        self.assertEqual(team_card["recommendations"][0]["action"], stored["practical_goal"])
+        self.assertEqual(team_card["recommendations"][0]["why"], stored["rationale"])
+        self.assertTrue(all(
+            not item["confirmed_by_user"]
+            for item in team_card["catalog_barrier_suggestions"]
+        ))
 
 
 class RoutineTests(unittest.TestCase):
@@ -141,7 +317,10 @@ class AdherenceTests(unittest.TestCase):
 
         for decision in findings["decisions"]:
             self.assertIn(decision["adherence_status"], ("UNKNOWN", "NOT_LOGGED"))
-            self.assertEqual(decision["evidence_used"], [])
+            self.assertFalse(
+                any("recorded" in item.lower() for item in decision["evidence_used"]),
+                decision["evidence_used"],
+            )
 
 
 class StructuredAgentResultTests(unittest.TestCase):
@@ -173,12 +352,13 @@ class InvalidInputTests(unittest.TestCase):
         state = _state("NOT_ASSESSED")
         result, _ = _run(state)
         validate_agent_result(result)
-        self.assertEqual(result["recommendations"], [])
+        self.assertEqual(result["recommendations"][0]["id"], "anchor_activity_to_an_existing_routine")
+        self.assertIn("GENERAL_EDUCATION", result["findings"]["activities"][0]["personalization_status"])
 
     def test_low_need_never_produces_a_plan(self):
         state = _state("LOW", profile_doc={"daily_sitting_hours": 4})
         result, _ = _run(state)
-        self.assertEqual(result["recommendations"], [])
+        self.assertEqual(result["recommendations"][0]["id"], "anchor_activity_to_an_existing_routine")
 
     def test_no_diagnostic_or_psychological_claims(self):
         state = _state("HIGH", profile_doc={"daily_sitting_hours": 12, "daily_screen_hours": 10})

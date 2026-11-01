@@ -130,7 +130,7 @@ class CompletionsByDayTests(unittest.TestCase):
 
 
 class MovementMetricSeriesTests(unittest.TestCase):
-    def test_each_metric_gets_its_own_series_in_date_order(self):
+    def test_historical_ftsst_records_do_not_create_active_progress_series(self):
         series = {
             entry["metric"]: entry
             for entry in movement_metric_series(
@@ -141,10 +141,11 @@ class MovementMetricSeriesTests(unittest.TestCase):
             )
         }
 
-        points = series["functional_movement_ftsst_seconds"]["points"]
-
-        self.assertEqual([point["value"] for point in points], [17.0, 14.0])
-        self.assertEqual([point["date"] for point in points], ["2026-08-01", "2026-09-10"])
+        self.assertEqual(set(series), {
+            "mobility_shoulder_elevation_deg",
+            "stability_balance_hold_seconds",
+        })
+        self.assertTrue(all(not entry["points"] for entry in series.values()))
 
     def test_a_skipped_check_contributes_no_point_rather_than_a_zero(self):
         series = {
@@ -172,8 +173,7 @@ class MovementMetricSeriesTests(unittest.TestCase):
     def test_the_direction_of_improvement_is_carried_not_assumed(self):
         series = {entry["metric"]: entry for entry in movement_metric_series([])}
 
-        # Lower is better for sit-to-stand time; higher for the other two.
-        self.assertFalse(series["functional_movement_ftsst_seconds"]["higherIsBetter"])
+        # Only the two active measurements are presented.
         self.assertTrue(series["stability_balance_hold_seconds"]["higherIsBetter"])
         self.assertTrue(series["mobility_shoulder_elevation_deg"]["higherIsBetter"])
 
@@ -278,7 +278,7 @@ class BuildProgressSeriesTests(unittest.TestCase):
 
         self.assertTrue(series["hasAnyTrend"])
 
-    def test_two_assessments_are_a_trend_even_with_no_exercise_results(self):
+    def test_historical_ftsst_only_assessments_do_not_create_a_current_trend(self):
         series = build_progress_series(
             assessment_documents=[
                 _assessment_doc("2026-08-01T09:00:00Z", ftsst=17.0),
@@ -286,7 +286,7 @@ class BuildProgressSeriesTests(unittest.TestCase):
             ]
         )
 
-        self.assertTrue(series["hasAnyTrend"])
+        self.assertFalse(series["hasAnyTrend"])
 
     def test_the_threshold_is_published_so_the_interface_cannot_invent_its_own(self):
         self.assertEqual(build_progress_series()["minPointsForTrend"], MIN_POINTS_FOR_TREND)

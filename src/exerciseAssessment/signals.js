@@ -91,10 +91,8 @@ function sideJoint(frame, side, name) {
 /**
  * Interior knee angle: ~180 with the leg straight, ~90 sitting.
  *
- * Serves both `kneeExtensionAngleDeg` (sit-to-stand, watching it rise past
- * the enter threshold) and `kneeFlexionAngleDeg` (wall sit, watching it stay
- * inside a band). They are the same observable quantity read two ways, so
- * they share one extractor rather than two that could drift apart.
+ * Serves `kneeFlexionAngleDeg` (wall sit, watching the angle stay inside a
+ * band). The same extractor can support additional configured movements.
  */
 function kneeAngle(frame) {
   const side = bestSide(frame, ["hip", "knee", "ankle"]);

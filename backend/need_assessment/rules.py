@@ -204,80 +204,19 @@ def assess_stability_need(user_state: dict) -> dict:
     )
 
 
-# ---------------------------------------------------------------------------
-# functional_movement_need — from the chair sit-to-stand x5 baseline test.
-# ---------------------------------------------------------------------------
-
-FTSST_HIGH_NEED_ABOVE_SECONDS = 15
-FTSST_MEDIUM_NEED_ABOVE_SECONDS = 10
-
-# Scaling reference only, matching FTSST.maxTestDurationMs in protocol.js
-# (the point at which the protocol itself abandons the attempt).
-FTSST_SCALE_CEILING_SECONDS = 60
-
-
 def assess_functional_movement_need(user_state: dict) -> dict:
-    section = user_state.get("physical_assessment") or {}
-    test = ((section.get("data") or {}).get("tests") or {}).get("ftsst") or {}
+    """Keep the legacy Need Profile dimension without reading retired FTSST data.
 
-    if not section.get("available") or test.get("status") != "completed":
-        return build_need_entry(
-            level="NOT_ASSESSED",
-            confidence="NONE",
-            evidence=[
-                "The chair sit-to-stand x5 baseline test has not produced a "
-                "usable result for this user."
-            ],
-        )
-
-    measurements = test.get("measurements") or {}
-    seconds = measurements.get("completionTimeSeconds")
-
-    if not isinstance(seconds, (int, float)):
-        return build_need_entry(
-            level="NOT_ASSESSED",
-            confidence="NONE",
-            evidence=[
-                "The sit-to-stand test completed but produced no usable "
-                "completion time."
-            ],
-        )
-
-    evidence = [
-        f"Five sit-to-stand repetitions took {seconds:g} seconds "
-        "(software-timed from camera-observed knee angle, not a clinician-"
-        "timed test)."
-    ]
-
-    detected = measurements.get("repetitionsDetected")
-    required = measurements.get("requiredRepetitions")
-
-    if isinstance(detected, int) and isinstance(required, int) and detected < required:
-        evidence.append(
-            f"Only {detected} of {required} repetitions were recognised by "
-            "the software."
-        )
-
-    if seconds > FTSST_HIGH_NEED_ABOVE_SECONDS:
-        level = "HIGH"
-        score = min(
-            1.0,
-            0.5
-            + (seconds - FTSST_HIGH_NEED_ABOVE_SECONDS) / FTSST_SCALE_CEILING_SECONDS,
-        )
-    elif seconds > FTSST_MEDIUM_NEED_ABOVE_SECONDS:
-        level = "MEDIUM"
-        score = 0.25 + (
-            (seconds - FTSST_MEDIUM_NEED_ABOVE_SECONDS)
-            / (FTSST_HIGH_NEED_ABOVE_SECONDS - FTSST_MEDIUM_NEED_ABOVE_SECONDS)
-            * 0.25
-        )
-    else:
-        level = "LOW"
-        score = max(0.0, 0.25 - (FTSST_MEDIUM_NEED_ABOVE_SECONDS - seconds) / 40)
-
+    The dimension remains in the schema for stored-profile compatibility, but
+    chair sit-to-stand is not part of the active two-check assessment. In
+    particular, an old FTSST result must not select Physio in a current run.
+    """
     return build_need_entry(
-        level=level, score=score, evidence=evidence, confidence="HIGH"
+        level="NOT_ASSESSED",
+        confidence="NONE",
+        evidence=[
+            "Functional movement is not measured by the current assessment protocol."
+        ],
     )
 
 
@@ -292,7 +231,10 @@ def assess_functional_movement_need(user_state: dict) -> dict:
 # actually is.
 # ---------------------------------------------------------------------------
 
-SITTING_HOURS_HIGH_THRESHOLD = 8
+# Project marker for prolonged daily sitting. This is an activity-planning
+# threshold, not a clinical limit; it is shared by need selection and the
+# Activity Agent so a measured opportunity is not hidden by exercise volume.
+SITTING_HOURS_HIGH_THRESHOLD = 7
 SCREEN_HOURS_HIGH_THRESHOLD = 8
 EXERCISE_DAYS_LOW_THRESHOLD = 2  # fewer than this many days/week counts
 WEEKLY_EXERCISE_MINUTES_LOW_THRESHOLD = 90  # exercise_days * exercise_minutes

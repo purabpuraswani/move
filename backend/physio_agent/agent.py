@@ -50,6 +50,7 @@ from physio_agent.adaptation import (
 )
 from physio_agent.plan_schema import build_exercise_plan, build_exercise_plan_entry
 from physio_agent.shaping import activity_context, measured_evidence, plan_shape
+from physio_agent.suitability import evaluate_exercise_suitability
 from physio_agent.tool_client import ExerciseToolClient
 
 AGENT_ID = "physio"
@@ -66,11 +67,9 @@ DEFAULT_MAX_DIFFICULTY = "intermediate"
 _DIFFICULTY_ORDER = {"beginner": 0, "intermediate": 1, "advanced": 2}
 
 # One physical need dimension -> one exercise_library target_capability.
-# functional_movement_need maps to two capabilities because
-# exercise_library/schema.py's TARGET_CAPABILITIES splits "functional
-# movement" exercises across both "functional_movement" and "strength"
-# (see backend/exercise_library/data.py — e.g. chair-sit-to-stand is
-# tagged with both). Mapping to only one would silently under-search.
+# functional_movement_need maps to two capabilities because the library
+# splits functional movement exercises across "functional_movement" and
+# "strength". Mapping to only one would silently under-search.
 NEED_DIMENSION_TO_CAPABILITIES = {
     "mobility_need": ("mobility",),
     "stability_need": ("stability",),
@@ -91,12 +90,8 @@ MAX_EXERCISES_PER_PLAN = 6
 # "personalised programme" ends up being one body area repeated.
 MAX_EXERCISES_PER_CAPABILITY = 3
 
-# The library entries that ARE one of the three baseline assessment
-# movements. These measure the user; they are not the intervention. Chair
-# Sit-to-Stand is the FTSST test and Standing Shoulder Raise is the
-# hand/shoulder raise test, so prescribing them back is "we measured your
-# sit-to-stand, here is sit-to-stand" — the assessment masquerading as a
-# programme.
+# Standing Shoulder Raise is also the shoulder assessment movement, so it
+# is de-prioritised as an intervention.
 #
 # supported-single-leg-stand is deliberately NOT here: the balance TEST is
 # an unsupported one-leg stand, and the supported version is a genuinely
@@ -106,7 +101,6 @@ MAX_EXERCISES_PER_CAPABILITY = 3
 # candidate the user is better served by a suitable exercise they have
 # already done once than by an empty section (see _rank_candidates).
 BASELINE_ASSESSMENT_MOVEMENTS = (
-    "chair-sit-to-stand",
     "standing-shoulder-raise",
 )
 
@@ -125,13 +119,12 @@ class PhysioAgentError(Exception):
     valid, structured outcome — see run_physio_agent())."""
 
 
-# The three baseline checks, by the name a user would recognise. Used to
+# The active baseline checks, by the name a user would recognise. Used to
 # report, in the agent's own findings, which movements were actually
 # measured and which were not -- so "we could not read your balance
 # check" can never be read downstream as "your balance is poor".
 MOVEMENT_LABELS = {
     "shoulder": "Hand / shoulder raise",
-    "ftsst": "Chair sit-to-stand x5",
     "balance": "One-leg stand",
 }
 
@@ -168,7 +161,7 @@ def _movement_evidence(physical_assessment) -> tuple:
     return assessed, not_assessed
 
 
-def _required_capabilities(current_needs: dict) -> dict:
+def _required_capabilities(current_needs: dict, *, levels=None) -> dict:
     """Map each triggering physical need dimension to the capabilities to
     search for, and the evidence for why. Returns
     {capability: [{"dimension": ..., "level": ..., "evidence": [...]}]}.
@@ -179,7 +172,7 @@ def _required_capabilities(current_needs: dict) -> dict:
     for dimension in PHYSIO_RELEVANT_NEED_DIMENSIONS:
         entry = current_needs.get(dimension) if current_needs else None
 
-        if not entry or entry.get("level") not in TRIGGERING_LEVELS:
+        if not entry or entry.get("level") not in (levels or TRIGGERING_LEVELS):
             continue
 
         for capability in NEED_DIMENSION_TO_CAPABILITIES[dimension]:
@@ -268,7 +261,7 @@ def _rationale_for(
     dimension_labels = {
         "mobility_need": "upper-body mobility",
         "stability_need": "standing balance",
-        "functional_movement_need": "sit-to-stand strength",
+        "functional_movement_need": "lower-body functional strength",
     }
 
     reasons = "; ".join(
@@ -284,7 +277,7 @@ def _rationale_for(
         dimension = trigger.get("dimension")
         domain = {
             "mobility_need": "shoulder",
-            "functional_movement_need": "sit_to_stand",
+            "functional_movement_need": None,
             "stability_need": "balance",
         }.get(dimension)
         values = (movement_evidence or {}).get(domain) or {}
@@ -306,36 +299,43 @@ def _rationale_for(
 
 
 def _apply_safety_gate(
-    exercise: dict, tool_client: ExerciseToolClient
+    exercise: dict,
+    tool_client: ExerciseToolClient,
+    *,
+    safety_context: dict,
+    target_need: str,
+    movement_evidence: dict,
 ) -> tuple:
-    """The Phase 3 safety gate. Returns (allowed: bool, safety_notes: list,
-    rejection_reason: str|None).
-
-    Deliberately limited to what is actually knowable here: the exercise's
-    own declared difficulty (checked against DEFAULT_MAX_DIFFICULTY) and
-    its own declared safety_constraints/common_mistakes, surfaced verbatim
-    via the real check_exercise_constraints MCP capability — never a
-    personalised medical judgment this system has no evidence to make. If
-    a genuinely comprehensive safety system existed, it would sit exactly
-    here; documented in docs/architecture.md as a known limitation, not
-    silently assumed to be more than it is.
-    """
-
+    """Return allow/notes/reason plus an auditable non-clinical evaluation."""
     if not _within_difficulty_ceiling(exercise):
-        return False, [], (
+        reason = (
             f"{exercise['name']} is difficulty '{exercise['difficulty']}', "
             f"above this system's default ceiling of '{DEFAULT_MAX_DIFFICULTY}' "
             "(no fitness-history or clearance data exists to justify recommending it)"
         )
+        return False, [], reason, None
 
-    constraints = tool_client.check_exercise_constraints(exercise["exercise_id"])
+    try:
+        constraints = tool_client.check_exercise_constraints(exercise["exercise_id"])
+    except Exception as error:  # noqa: BLE001
+        constraints = {"error": str(error)}
 
-    if "error" in constraints:
-        return False, [], f"could not verify safety constraints: {constraints['error']}"
-
-    safety_notes = list(constraints.get("safetyConstraints", []))
-
-    return True, safety_notes, None
+    evaluation = evaluate_exercise_suitability(
+        exercise,
+        constraints,
+        reported_health_context=safety_context["reported_health_context"],
+        confirmed_medical_context=safety_context["confirmed_medical_context"],
+        confirmed_medical_context_status=safety_context["confirmed_medical_context_status"],
+        target_need=target_need,
+        movement_evidence=movement_evidence,
+    )
+    safety_notes = list(evaluation["metadata_constraints"])
+    return (
+        evaluation["decision"] == "INCLUDE",
+        safety_notes,
+        evaluation["exclusion_reason"],
+        evaluation,
+    )
 
 
 def _mcp_session_id_of(tool_result) -> str:
@@ -397,8 +397,8 @@ def _library_record(exercise_id, candidates_by_capability, tool_client):
     """The library record for one exercise: from what this run already
     searched where possible, otherwise by a real tool call.
 
-    An exercise that is in the plan but no longer in the library returns
-    None, and the caller keeps it rather than silently dropping it.
+    An exercise that is in a historical plan but no longer in the library
+    returns None. It is retained in history but excluded from a new plan.
     """
 
     for exercises in candidates_by_capability.values():
@@ -426,11 +426,13 @@ def _adapt_existing_plan(
     candidates_by_capability,
     tool_client,
     max_exercises,
+    safety_context,
+    movement_evidence,
     progress_recommendation=None,
 ):
     """Decide what happens to each exercise the user already has.
 
-    Returns `(plan_entries, decisions, taken_per_capability, chosen_ids)`.
+    Returns `(plan_entries, decisions, taken_per_capability, chosen_ids, safety_evaluations)`.
     `decisions` includes REMOVEs, which by definition have no plan entry —
     the plan says what to do now, the decision list says what was decided,
     and the two are not the same thing.
@@ -442,6 +444,7 @@ def _adapt_existing_plan(
     decisions = []
     taken_per_capability = {}
     chosen_ids = set()
+    safety_evaluations = []
 
     for exercise_id, target_need in _previous_decisions(previous_plan):
         exercise = _library_record(
@@ -491,16 +494,23 @@ def _adapt_existing_plan(
                 decision["replaced_by"] = replacement["exercise_id"]
                 exercise = replacement
 
-        allowed, safety_notes, rejection_reason = _apply_safety_gate(
-            exercise, tool_client
+        allowed, safety_notes, rejection_reason, safety_evaluation = _apply_safety_gate(
+            exercise,
+            tool_client,
+            safety_context=safety_context,
+            target_need=target_need,
+            movement_evidence=movement_evidence,
         )
+        if safety_evaluation is not None:
+            safety_evaluations.append(safety_evaluation)
+            decision["safety_evaluation"] = safety_evaluation
 
         if not allowed:
             # A safety rejection overrides every other decision, and is
             # recorded as the removal it actually is.
             decision["decision_type"] = DECISION_REMOVE
             decision["reason"] = (
-                "This has been taken out of your programme for safety: "
+                "This has been deferred after the per-exercise safety review: "
                 f"{rejection_reason}"
             )
             continue
@@ -522,6 +532,13 @@ def _adapt_existing_plan(
                 target_need=target_need or None,
                 decision_type=decision["decision_type"],
                 measurement_method=_measurement_method(exercise),
+                safety_evaluation=safety_evaluation,
+                instructions=list(exercise.get("instructions") or []),
+                equipment=list(exercise.get("equipment") or []),
+                common_mistakes=list(exercise.get("common_mistakes") or []),
+                reference=exercise.get("reference"),
+                demonstration_id=exercise.get("demonstration_id"),
+                name=exercise.get("name"),
             )
         )
 
@@ -532,7 +549,7 @@ def _adapt_existing_plan(
                 taken_per_capability.get(capability, 0) + 1
             )
 
-    return plan_entries, decisions, taken_per_capability, chosen_ids
+    return plan_entries, decisions, taken_per_capability, chosen_ids, safety_evaluations
 
 
 def _pick_replacement(capability, candidates_by_capability, chosen_ids, replaced_id):
@@ -624,6 +641,11 @@ def run_physio_agent(
         request_id=trace.request_id,
         agent_run_id=trace.agent_run_id,
     )
+    safety_context = {
+        "reported_health_context": payload["reported_health_context"],
+        "confirmed_medical_context": payload["confirmed_medical_context"],
+        "confirmed_medical_context_status": payload["confirmed_medical_context_status"],
+    }
 
     current_needs = payload["current_needs"]
 
@@ -666,17 +688,69 @@ def run_physio_agent(
         }
 
     if not triggers_by_capability:
-        # Reachable in a direct unit test of the agent; the Orchestrator's
-        # own selection rule (backend/orchestrator/decision.py) is what
-        # normally prevents this agent from running at all in this case.
+        # LOW means a measured finding without a deficit, not a reason to
+        # skip Physio's review. Inspect real beginner library candidates
+        # and run the existing per-exercise suitability checks, but do not
+        # create an exercise prescription from a low finding.
+        low_capabilities = _required_capabilities(current_needs, levels=("LOW",))
+        reviewed = []
+        evaluations = []
+        mcp_session_id = None
+        for capability, needs in low_capabilities.items():
+            try:
+                search_result = tool_client.search_exercises(target_capability=capability)
+            except Exception as error:  # noqa: BLE001
+                return build_agent_result(
+                    agent=AGENT_ID, status="failed", workflow_id=trace.workflow_id,
+                    request_id=trace.request_id, agent_run_id=trace.agent_run_id,
+                    findings={"reason": f"Exercise catalog review failed: {error}"},
+                    safety_flags=["mcp_unavailable_or_tool_error"], requires_reassessment=False,
+                )
+            mcp_session_id = mcp_session_id or _mcp_session_id_of(search_result)
+            if "error" in search_result:
+                return build_agent_result(
+                    agent=AGENT_ID, status="failed", workflow_id=trace.workflow_id,
+                    request_id=trace.request_id, agent_run_id=trace.agent_run_id,
+                    findings={"reason": f"Exercise catalog review failed: {search_result['error']}"},
+                    safety_flags=["mcp_unavailable_or_tool_error"], requires_reassessment=False,
+                    mcp_session_id=mcp_session_id,
+                )
+            for exercise in _rank_candidates(search_result.get("exercises") or [])[:2]:
+                target_need = needs[0]["dimension"]
+                _, _, _, evaluation = _apply_safety_gate(
+                    exercise, tool_client, safety_context=safety_context,
+                    target_need=target_need, movement_evidence=payload.get("movement_evidence"),
+                )
+                if evaluation is not None:
+                    evaluations.append(evaluation)
+                reviewed.append({
+                    "exercise_id": exercise["exercise_id"],
+                    "name": exercise.get("name"),
+                    "target_need": target_need,
+                    "difficulty": exercise.get("difficulty"),
+                    "suitability_evaluation": evaluation,
+                    "recommendation_status": "NOT_RECOMMENDED_BY_LOW_FINDING",
+                })
         return build_agent_result(
             agent=AGENT_ID,
             status="completed",
             workflow_id=trace.workflow_id,
             request_id=trace.request_id,
             agent_run_id=trace.agent_run_id,
-            findings={"reason": "no physical need dimension is at MEDIUM or HIGH"},
+            findings={
+                "reason": "Movement needs were measured LOW; catalog candidates were reviewed for reference, without treating LOW as a deficit or prescribing exercises.",
+                "need_levels": {
+                    dimension: (current_needs.get(dimension) or {}).get("level")
+                    for dimension in PHYSIO_RELEVANT_NEED_DIMENSIONS
+                },
+                "catalog_candidates_reviewed": reviewed,
+                "exercise_safety_evaluations": evaluations,
+                "reported_health_context_status": payload["reported_health_context"]["status"],
+                "confirmed_medical_context_status": payload["confirmed_medical_context_status"],
+            },
             recommendations=[],
+            requires_reassessment=False,
+            mcp_session_id=mcp_session_id,
         )
 
     candidates_by_capability = {}
@@ -728,6 +802,7 @@ def run_physio_agent(
     # deterministic safety gate, and nothing is added twice.
     # ------------------------------------------------------------------
     rejected = []
+    safety_evaluations = []
     adaptation_decisions = []
     taken_per_capability = {}
 
@@ -739,6 +814,7 @@ def run_physio_agent(
             adaptation_decisions,
             taken_per_capability,
             chosen_ids,
+            safety_evaluations,
         ) = _adapt_existing_plan(
             previous_plan=previous_plan,
             exercise_results=exercise_results,
@@ -746,6 +822,8 @@ def run_physio_agent(
             candidates_by_capability=candidates_by_capability,
             tool_client=tool_client,
             max_exercises=max_exercises,
+            safety_context=safety_context,
+            movement_evidence=payload.get("movement_evidence"),
             progress_recommendation=progress_recommendation,
         )
 
@@ -792,13 +870,24 @@ def run_physio_agent(
                 # it is not reported as one.
                 continue
 
-            allowed, safety_notes, rejection_reason = _apply_safety_gate(
-                exercise, tool_client
+            allowed, safety_notes, rejection_reason, safety_evaluation = _apply_safety_gate(
+                exercise,
+                tool_client,
+                safety_context=safety_context,
+                target_need=target_dimension,
+                movement_evidence=payload.get("movement_evidence"),
             )
+            if safety_evaluation is not None:
+                safety_evaluations.append(safety_evaluation)
 
             if not allowed:
                 rejected.append(
-                    {"exercise_id": exercise["exercise_id"], "reason": rejection_reason}
+                    {
+                        "exercise_id": exercise["exercise_id"],
+                        "target_need": target_dimension,
+                        "reason": rejection_reason,
+                        "safety_evaluation": safety_evaluation,
+                    }
                 )
                 continue
 
@@ -826,6 +915,13 @@ def run_physio_agent(
                     # would be claiming a comparison that never happened.
                     decision_type="ADD",
                     measurement_method=_measurement_method(exercise),
+                    safety_evaluation=safety_evaluation,
+                    instructions=list(exercise.get("instructions") or []),
+                    equipment=list(exercise.get("equipment") or []),
+                    common_mistakes=list(exercise.get("common_mistakes") or []),
+                    reference=exercise.get("reference"),
+                    demonstration_id=exercise.get("demonstration_id"),
+                    name=exercise.get("name"),
                 )
             )
 
@@ -846,6 +942,7 @@ def run_physio_agent(
                         ),
                         "evidence": {"results_recorded": 0},
                         "target_need": target_dimension,
+                        "safety_evaluation": safety_evaluation,
                     }
                 )
 
@@ -929,6 +1026,7 @@ def run_physio_agent(
                 "reason": entry["rationale"],
                 "evidence": {"results_recorded": 0},
                 "target_need": entry.get("target_need"),
+                "safety_evaluation": entry.get("safety_evaluation"),
             }
             for entry in plan_entries
         ],
@@ -940,6 +1038,9 @@ def run_physio_agent(
         ),
         "plan": plan,
         "rejected_candidates": rejected,
+        "exercise_safety_evaluations": safety_evaluations,
+        "reported_health_context_status": payload["reported_health_context"]["status"],
+        "confirmed_medical_context_status": payload["confirmed_medical_context_status"],
     }
 
     safety_flags = ["no_suitable_exercise_found"] if not plan_entries and rejected else []

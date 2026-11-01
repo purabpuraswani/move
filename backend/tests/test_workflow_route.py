@@ -7,13 +7,15 @@ all, and exercised here for real, never skipped) and logic that talks to
 MongoDB (user_state/store.py, routes/workflow.py), which is guarded with
 this project's established pymongo/bson self-skip pattern (see
 tests/test_report_pipeline_integration.py, tests/test_food_log_store.py)
-since pymongo/bson are not installed in this development sandbox (no PyPI
+since SQLite storage replaces pymongo/bson in this project
 network access here — the same already-documented constraint as the `mcp`
 package).
 """
 
 import importlib.util
 import unittest
+from datetime import datetime, timezone
+from unittest.mock import patch
 
 from exercise_library.catalog import list_exercise_ids
 from nutrition_library.catalog import list_topic_ids as list_nutrition_topic_ids
@@ -25,6 +27,8 @@ from workflow.response import (
     safety_status_message,
     serialise_workflow_state,
 )
+from routes.workflow import _latest_execution_response
+from routes import workflow as workflow_route
 
 FORBIDDEN_KEYS = {
     "workflow_id",
@@ -52,6 +56,22 @@ def _scan_for_forbidden_keys(value, found=None):
             _scan_for_forbidden_keys(item, found)
 
     return found
+
+
+class WorkflowNutritionInputTests(unittest.TestCase):
+    def test_latest_saved_food_logs_are_loaded_even_without_an_existing_plan(self):
+        meal = {"meal": "breakfast", "food_name": "idli", "quantity": "2", "notes": "", "recorded_at": "2026-11-01T08:00:00Z"}
+        with (
+            patch.object(workflow_route, "latest_valid_assessment", return_value=None),
+            patch.object(workflow_route, "baseline_assessment", return_value=None),
+            patch.object(workflow_route, "previous_assessment", return_value=None),
+            patch.object(workflow_route, "list_exercise_results", return_value=[]),
+            patch.object(workflow_route, "list_food_log_entries", return_value=[meal]) as list_logs,
+        ):
+            inputs = workflow_route._progress_inputs({}, "user-1")
+        self.assertEqual(inputs["nutrition_food_log_entries"], [meal])
+        self.assertIsNone(inputs["nutrition_food_log_current_period"])
+        list_logs.assert_called_once_with("user-1", limit=100)
 
 
 # ---------------------------------------------------------------------------
@@ -241,6 +261,148 @@ def _state_with_plans(*, exercise_ids, nutrition_topic_ids, behaviour_topic_ids)
 
 
 class SerialiseWorkflowStateTests(unittest.TestCase):
+    def test_legacy_execution_snapshot_is_rebuilt_from_saved_results_without_rerunning(self):
+        explanations = {
+            agent_id: {
+                "agent_identifier": agent_id,
+                "selection_status": "SELECTED" if agent_id == "physio" else "NOT SELECTED",
+                "reason_for_selection": "Saved selection reason.",
+                "evidence_used": ["Saved evidence."],
+                "missing_required_information": [],
+                "context_readiness": "READY" if agent_id == "physio" else "NOT_APPLICABLE",
+                "execution_eligibility": agent_id == "physio",
+            }
+            for agent_id in ("physio", "nutrition", "behaviour", "recovery", "exercise_activity", "progress")
+        }
+        user_state = {
+            "generatedAt": "2026-11-01T00:00:00+00:00",
+            "physical_assessment": {"available": True, "data": {
+                "session_id": "session-1",
+                "tests": {
+                    "shoulder": {"status": "completed", "measurements": {"left": {"finalElevationDeg": 150}, "right": {"finalElevationDeg": 148}}},
+                    "balance": {"status": "completed", "measurements": {"left": {"attempted": True, "valid": True, "holdDurationSeconds": 20}, "right": {"attempted": True, "valid": True, "holdDurationSeconds": 19}}},
+                },
+            }},
+            "current_needs": {"available": True, "data": {
+                "mobility_need": {"level": "LOW", "evidence": []},
+                "stability_need": {"level": "LOW", "evidence": []},
+                "functional_movement_need": {"level": "NOT_ASSESSED", "evidence": ["Not in active protocol"]},
+                "nutrition_need": {"level": "NOT_ASSESSED", "evidence": ["Optional questions missing"]},
+                "behaviour_need": {"level": "NOT_ASSESSED", "evidence": []},
+            }},
+        }
+        execution = {
+            "created_at": datetime(2026, 11, 1, 8, 30, tzinfo=timezone.utc),
+            "response": {"plan_state": {"missing": [
+                {"capability": "Functional movement"}, {"capability": "Eating patterns"}
+            ]}},
+            "agent_executions": {"physio": {
+                "agent": "physio", "status": "completed",
+                "findings": {"rejected_candidates": [{
+                    "exercise_id": "wall-supported-balance",
+                    "safety_evaluation": {
+                        "status": "DEFERRED_CONTEXT_REQUIRED",
+                        "additional_information_required": ["Clarify reported injury history"],
+                    },
+                }]},
+                "recommendations": [],
+            }},
+            "errors": [],
+        }
+
+        response = _latest_execution_response(
+            user_state,
+            execution,
+            selection_explanations=explanations,
+            last_safety_result={"status": "NOT_ASSESSED", "blocked_recommendation_ids": []},
+        )
+
+        journey = {item["id"]: item for item in response["agent_journey"]}
+        self.assertTrue(response["available"])
+        self.assertEqual(response["workflow_created_at"], "2026-11-01T08:30:00+00:00")
+        self.assertEqual(len(journey), 6)
+        self.assertEqual(journey["physio"]["status"], "COMPLETED")
+        self.assertEqual(len(journey["physio"]["findings"]["rejected_candidates"]), 1)
+        self.assertEqual(journey["physio"]["reason"], "Saved selection reason.")
+        self.assertEqual(journey["physio"]["missing_information"], ["Clarify reported injury history"])
+        self.assertEqual(response["plan_state"]["missing"], [])
+        self.assertEqual(response["workflow_outcome"]["status"], "MORE_INFORMATION_REQUIRED")
+
+    def test_agent_journey_uses_actual_execution_and_gate_approved_recommendations(self):
+        explanations = {
+            "exercise_activity": {
+                "selection_status": "SELECTED",
+                "reason_for_selection": "Recorded sedentary behaviour.",
+                "evidence_used": ["Sitting time was reported."],
+                "missing_required_information": [],
+                "context_readiness": "READY",
+                "execution_eligibility": True,
+            },
+            "physio": {
+                "selection_status": "NOT SELECTED",
+                "reason_for_selection": "No movement limitation was found.",
+                "evidence_used": [],
+                "missing_required_information": [],
+                "context_readiness": "NOT_APPLICABLE",
+                "execution_eligibility": False,
+            },
+        }
+        executions = {
+            "exercise_activity": {
+                "agent": "exercise_activity",
+                "status": "completed",
+                "findings": {"activity_findings": [{"finding": "Sitting time reported."}]},
+                "recommendations": [{"id": "approved", "title": "Approved option"}],
+            }
+        }
+        response = serialise_workflow_state(
+            {"generatedAt": "2026-01-01T00:00:00+00:00"},
+            agent_executions=executions,
+            selection_explanations=explanations,
+            approved_recommendations=[{"id": "approved", "agent": "exercise_activity", "title": "Approved option"}],
+        )
+        journey = {item["id"]: item for item in response["agent_journey"]}
+
+        self.assertEqual(len(journey), 6)
+        self.assertEqual(journey["exercise_activity"]["status"], "COMPLETED")
+        self.assertEqual(journey["exercise_activity"]["findings"], executions["exercise_activity"]["findings"])
+        self.assertEqual(journey["exercise_activity"]["recommendations"][0]["id"], "approved")
+        self.assertEqual(journey["physio"]["status"], "NOT_SELECTED")
+        self.assertEqual(response["workflow_outcome"]["status"], "PARTIAL_PLAN_READY")
+
+    def test_assessment_summary_counts_only_the_two_active_checks(self):
+        state = {
+            "generatedAt": "2026-01-01T00:00:00+00:00",
+            "physical_assessment": {
+                "available": True,
+                "data": {
+                    "session_id": "latest-session-1",
+                    "tests": {
+                        "shoulder": {"status": "completed", "measurements": {
+                            "left": {"finalElevationDeg": 166.2},
+                            "right": {"finalElevationDeg": 154.9},
+                        }},
+                        "ftsst": {"status": "completed"},
+                        "balance": {"status": "skipped"},
+                    }
+                },
+            },
+        }
+
+        summary = serialise_workflow_state(state)["assessment_summary"]
+
+        self.assertEqual(summary["tests_completed"], 1)
+        self.assertEqual(summary["tests_total"], 2)
+        self.assertEqual(summary["session_key"], "latest-session-1")
+        self.assertEqual(summary["status"], "PARTIAL")
+        self.assertEqual(set(summary["tests"]), {"shoulder", "balance"})
+        self.assertEqual(summary["measured_results"]["shoulder"]["unit"], "degrees")
+        self.assertEqual(
+            summary["measured_results"]["shoulder"]["measurements"]["left"]["finalElevationDeg"],
+            166.2,
+        )
+        self.assertNotIn("balance", summary["measured_results"])
+
     def test_no_plans_yet_is_represented_honestly(self):
         response = serialise_workflow_state(
             {"generatedAt": "2026-01-01T00:00:00+00:00"}, safety_status=None
@@ -289,7 +451,7 @@ class SerialiseWorkflowStateTests(unittest.TestCase):
             "Some recommendations need review before you follow them.",
         )
 
-    def test_an_unknown_exercise_id_falls_back_to_the_id_itself(self):
+    def test_an_unknown_exercise_id_is_not_exposed_as_an_active_recommendation(self):
         state = _state_with_plans(
             exercise_ids=["not_a_real_exercise_id"],
             nutrition_topic_ids=[],
@@ -298,9 +460,8 @@ class SerialiseWorkflowStateTests(unittest.TestCase):
 
         response = serialise_workflow_state(state)
 
-        self.assertEqual(
-            response["exercise_plan"]["exercises"], ["not_a_real_exercise_id"]
-        )
+        self.assertFalse(response["exercise_plan"]["available"])
+        self.assertNotIn("not_a_real_exercise_id", str(response))
 
     def test_response_never_carries_a_forbidden_internal_orchestration_key(self):
         exercise_id = list_exercise_ids()[0]
@@ -363,8 +524,7 @@ class SerialiseWorkflowStateTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 PYMONGO_AVAILABLE = (
-    importlib.util.find_spec("pymongo") is not None
-    and importlib.util.find_spec("bson") is not None
+    importlib.util.find_spec("database") is not None
 )
 
 PYMONGO_SKIP_REASON = (
@@ -435,14 +595,23 @@ if PYMONGO_AVAILABLE:
         def test_save_then_get_round_trips_the_state_and_safety_result(self):
             state = {"generatedAt": "2026-01-01T00:00:00+00:00"}
             safety_result = {"status": "ALLOW"}
+            selection_explanations = {
+                "physio": {
+                    "agent_identifier": "physio",
+                    "selection_status": "NOT SELECTED",
+                    "execution_eligibility": False,
+                }
+            }
 
             user_state_store.save_user_state(
-                "user_1", state, safety_result=safety_result
+                "user_1", state, safety_result=safety_result,
+                selection_explanations=selection_explanations,
             )
             saved = user_state_store.get_user_state("user_1")
 
             self.assertEqual(saved["state"], state)
             self.assertEqual(saved["last_safety_result"], safety_result)
+            self.assertEqual(saved["last_selection_explanations"], selection_explanations)
 
         def test_saving_twice_for_the_same_user_replaces_not_duplicates(self):
             user_state_store.save_user_state("user_1", {"v": 1})
@@ -452,14 +621,28 @@ if PYMONGO_AVAILABLE:
             self.assertEqual(saved["state"], {"v": 2})
 
         def test_users_are_isolated_from_each_other(self):
-            user_state_store.save_user_state("user_1", {"v": "one"})
-            user_state_store.save_user_state("user_2", {"v": "two"})
+            user_state_store.save_user_state(
+                "user_1", {"v": "one"},
+                selection_explanations={"agent": {"selection_status": "SELECTED"}},
+            )
+            user_state_store.save_user_state(
+                "user_2", {"v": "two"},
+                selection_explanations={"agent": {"selection_status": "NOT SELECTED"}},
+            )
 
             self.assertEqual(
                 user_state_store.get_user_state("user_1")["state"], {"v": "one"}
             )
             self.assertEqual(
                 user_state_store.get_user_state("user_2")["state"], {"v": "two"}
+            )
+            self.assertEqual(
+                user_state_store.get_user_state("user_1")["last_selection_explanations"]["agent"]["selection_status"],
+                "SELECTED",
+            )
+            self.assertEqual(
+                user_state_store.get_user_state("user_2")["last_selection_explanations"]["agent"]["selection_status"],
+                "NOT SELECTED",
             )
 
 

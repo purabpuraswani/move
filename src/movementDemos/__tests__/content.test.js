@@ -1,6 +1,6 @@
 /**
  * Movement Demonstration content: the three baseline assessment
- * demonstrations plus the twenty Exercise Library demonstrations (ten from
+ * demonstrations plus the nineteen Exercise Library demonstrations (ten from
  * Phase 2, ten added later alongside the second batch of library entries).
  *
  * Importing "../content.js" triggers registration (App.jsx does the same,
@@ -17,12 +17,10 @@ import { validateMovementDemo } from "../schema.js";
 
 const ASSESSMENT_IDS = [
   "assessment-shoulder-raise",
-  "assessment-chair-sit-to-stand",
   "assessment-one-leg-stand",
 ];
 
 const EXERCISE_IDS = [
-  "exercise-chair-sit-to-stand",
   "exercise-wall-sit",
   "exercise-standing-knee-raise",
   "exercise-supported-calf-raise",
@@ -44,12 +42,12 @@ const EXERCISE_IDS = [
   "exercise-single-leg-reach-balance",
 ];
 
-test("exactly three baseline assessment demonstrations are registered", () => {
+test("exactly two baseline assessment demonstrations are registered", () => {
   const registered = listMovementDemos("assessment").map((d) => d.movementId).sort();
   assert.deepEqual(registered, [...ASSESSMENT_IDS].sort());
 });
 
-test("exactly twenty exercise demonstrations are registered", () => {
+test("exactly nineteen exercise demonstrations are registered", () => {
   const registered = listMovementDemos("exercise").map((d) => d.movementId).sort();
   assert.deepEqual(registered, [...EXERCISE_IDS].sort());
 });
@@ -74,6 +72,6 @@ test("an unregistered id returns null, not a crash", () => {
   assert.equal(getMovementDemo("not-a-real-demo"), null);
 });
 
-test("listMovementDemos with no category returns all twenty-three", () => {
-  assert.equal(listMovementDemos().length, 23);
+test("listMovementDemos with no category returns all twenty-one", () => {
+  assert.equal(listMovementDemos().length, 21);
 });

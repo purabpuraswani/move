@@ -78,6 +78,8 @@ function OnboardingPage() {
 
     sleep_hours: "",
     sleep_quality: "",
+    stress_level: "",
+    recovery_difficulties: "",
 
     daily_steps: "",
 
@@ -94,7 +96,20 @@ function OnboardingPage() {
     joint_pain: "",
     back_neck_pain: "",
 
-    other_conditions: ""
+    other_conditions: "",
+    meal_pattern: "",
+    fruit_vegetable_servings: "",
+    water_glasses_per_day: "",
+    processed_food_frequency: "",
+    food_preferences: "",
+    dietary_restrictions: "",
+    food_allergies: "",
+    nutrition_goals: "",
+    behaviour_motivation: "",
+    preferred_habits: "",
+    reported_behaviour_barriers: "",
+    daily_routines: "",
+    preferred_habit_changes: ""
   });
 
 
@@ -419,6 +434,42 @@ function OnboardingPage() {
         Object.entries(form).forEach(
           ([key, value]) => {
 
+            const nutritionListFields = [
+              "food_preferences",
+              "dietary_restrictions",
+              "food_allergies",
+              "nutrition_goals",
+              "preferred_habits",
+              "reported_behaviour_barriers",
+              "daily_routines",
+              "preferred_habit_changes",
+              "recovery_difficulties"
+            ];
+            if (nutritionListFields.includes(key)) {
+              const entries = String(value ?? "")
+                .split(",")
+                .map((item) => item.trim())
+                .filter(Boolean);
+              // Empty means unanswered. Typing "none" records an explicit
+              // empty list for allergy/restriction questions.
+              if (String(value ?? "").trim()) {
+                formData.append(
+                  key,
+                  JSON.stringify(entries.length === 1 && entries[0].toLowerCase() === "none" ? [] : entries)
+                );
+              }
+              return;
+            }
+
+            if ([
+              "meal_pattern",
+              "fruit_vegetable_servings",
+              "water_glasses_per_day",
+              "processed_food_frequency"
+            ].includes(key) && !String(value ?? "").trim()) {
+              return;
+            }
+
             formData.append(
               key,
               value
@@ -449,7 +500,7 @@ function OnboardingPage() {
       }
 
 
-      navigate("/dashboard");
+      navigate("/assessment");
 
     } catch (err) {
 
@@ -779,6 +830,22 @@ function OnboardingPage() {
 
 
                 <div className="input-group">
+                  <label>Current stress (optional)</label>
+                  <select name="stress_level" value={form.stress_level} onChange={handleChange}>
+                    <option value="">Prefer not to answer</option>
+                    <option value="low">Low</option>
+                    <option value="moderate">Moderate</option>
+                    <option value="high">High</option>
+                  </select>
+                </div>
+
+                <div className="input-group">
+                  <label>Recovery difficulties (optional)</label>
+                  <input name="recovery_difficulties" value={form.recovery_difficulties} onChange={handleChange} placeholder="Separate answers with commas; enter none if none" />
+                  <small>Leave blank if unknown.</small>
+                </div>
+
+                <div className="input-group">
 
                   <label>
                     Daily steps
@@ -996,6 +1063,101 @@ function OnboardingPage() {
                   rows="4"
                 />
 
+              </div>
+
+              <h3>Nutrition details (optional)</h3>
+              <p className="step-description">
+                Share what you know about your usual eating and drinking habits. Leave any answer blank if you are unsure.
+              </p>
+              <div className="form-grid">
+                <div className="input-group">
+                  <label htmlFor="meal_pattern">Usual meal pattern</label>
+                  <select id="meal_pattern" name="meal_pattern" value={form.meal_pattern} onChange={handleChange}>
+                    <option value="">Prefer not to answer</option>
+                    <option value="regular">Usually regular</option>
+                    <option value="irregular">Often irregular</option>
+                    <option value="skips_meals">I often skip meals</option>
+                  </select>
+                </div>
+                <div className="input-group">
+                  <label htmlFor="fruit_vegetable_servings">Fruit and vegetable servings per day (estimate)</label>
+                  <input id="fruit_vegetable_servings" type="number" min="0" step="1" name="fruit_vegetable_servings" value={form.fruit_vegetable_servings} onChange={handleChange} />
+                </div>
+                <div className="input-group">
+                  <label htmlFor="water_glasses_per_day">Glasses of water per day (estimate)</label>
+                  <input id="water_glasses_per_day" type="number" min="0" step="1" name="water_glasses_per_day" value={form.water_glasses_per_day} onChange={handleChange} />
+                </div>
+                <div className="input-group">
+                  <label htmlFor="processed_food_frequency">How often packaged/processed foods make up a meal</label>
+                  <select id="processed_food_frequency" name="processed_food_frequency" value={form.processed_food_frequency} onChange={handleChange}>
+                    <option value="">Prefer not to answer</option>
+                    <option value="rarely">Rarely</option>
+                    <option value="sometimes">Sometimes</option>
+                    <option value="often">Often</option>
+                    <option value="daily">Daily</option>
+                  </select>
+                </div>
+              </div>
+
+              <h3>Food preferences and restrictions (optional)</h3>
+              <p className="step-description">
+                List items separated by commas. Leave preferences or goals blank if you have not decided. For allergies and dietary restrictions, enter “none” when you have none; leaving them blank keeps them unknown.
+              </p>
+              <div className="form-grid">
+                {[
+                  ["food_preferences", "Foods you prefer"],
+                  ["dietary_restrictions", "Dietary restrictions (enter none if none)"],
+                  ["food_allergies", "Food allergies (enter none if none)"],
+                  ["nutrition_goals", "Your nutrition goals"]
+                ].map(([name, label]) => (
+                  <div className="input-group" key={name}>
+                    <label htmlFor={name}>{label}</label>
+                    <input
+                      id={name}
+                      type="text"
+                      name={name}
+                      value={form[name]}
+                      onChange={handleChange}
+                      placeholder="Separate multiple answers with commas"
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <h3>Behaviour and activity preferences (optional)</h3>
+              <p className="step-description">
+                Tell us what matters to you and what tends to get in the way. Leave answers blank if you are unsure; enter “none” to explicitly report no barriers.
+              </p>
+              <div className="form-grid">
+                <div className="input-group">
+                  <label htmlFor="behaviour_motivation">What would motivate you to build a movement habit?</label>
+                  <input
+                    id="behaviour_motivation"
+                    type="text"
+                    name="behaviour_motivation"
+                    value={form.behaviour_motivation}
+                    onChange={handleChange}
+                    placeholder="Your own words"
+                  />
+                </div>
+                {[
+                  ["preferred_habits", "Movement habits you prefer"],
+                  ["reported_behaviour_barriers", "Personal barriers (enter none if none)"],
+                  ["daily_routines", "Daily routines that could anchor a habit"],
+                  ["preferred_habit_changes", "Habit changes you would like to try"]
+                ].map(([name, label]) => (
+                  <div className="input-group" key={name}>
+                    <label htmlFor={name}>{label}</label>
+                    <input
+                      id={name}
+                      type="text"
+                      name={name}
+                      value={form[name]}
+                      onChange={handleChange}
+                      placeholder="Separate multiple answers with commas"
+                    />
+                  </div>
+                ))}
               </div>
 
             </div>

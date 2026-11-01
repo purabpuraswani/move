@@ -37,7 +37,7 @@ WORKLOAD_EXERCISE_COUNT = 4
 RECOVERY_SUPPORTIVE = "SUPPORTIVE"
 RECOVERY_CONSTRAINED = "CONSTRAINED"
 
-CORE_SIGNALS = ("sleep_hours", "sleep_quality")
+CORE_SIGNALS = ("sleep_hours", "sleep_quality", "stress_level", "recovery_difficulties")
 
 
 def _finding(name, text, *, value=None):
@@ -69,6 +69,8 @@ def assess_recovery(view: dict) -> dict:
 
     sleep_hours = present.get("sleep_hours", {}).get("value")
     quality = present.get("sleep_quality", {}).get("value")
+    stress = present.get("stress_level", {}).get("value")
+    difficulties = present.get("recovery_difficulties", {}).get("value")
     planned = present.get("planned_exercises", {}).get("value")
     completed = present.get("completed_sessions", {}).get("value")
 
@@ -134,6 +136,29 @@ def assess_recovery(view: dict) -> dict:
         findings.append(
             _finding("sleep_quality", f"Self-reported sleep quality is '{quality}'.", value=quality)
         )
+
+    if stress in ("moderate", "high"):
+        findings.append(_finding("stress_level", f"Self-reported stress level is '{stress}'.", value=stress))
+        recommendations.append({
+            "id": "stress_recovery_check_in",
+            "title": "Choose a recovery routine that already works for you",
+            "action": "Choose one brief routine you already find helpful during stressful periods and note whether it feels useful.",
+            "why": f"You reported '{stress}' stress. This suggestion uses your report and does not assume a cause or prescribe treatment.",
+        })
+    elif stress == "low":
+        findings.append(_finding("stress_level", "Self-reported stress level is 'low'.", value=stress))
+
+    if difficulties is not None:
+        if difficulties == "none":
+            findings.append(_finding("recovery_difficulties", "No recovery difficulties were reported.", value=[]))
+        else:
+            findings.append(_finding("recovery_difficulties", f"Reported recovery difficulties: {difficulties}.", value=difficulties.split(", ")))
+            recommendations.append({
+                "id": "recovery_difficulty_check_in",
+                "title": "Track the recovery difficulty you noticed",
+                "action": "Note when the reported difficulty occurs and whether it changes across days or after activity.",
+                "why": f"You reported: {difficulties}. Tracking the pattern can clarify what support you may want.",
+            })
 
     workload_heavy = planned is not None and planned >= WORKLOAD_EXERCISE_COUNT
 

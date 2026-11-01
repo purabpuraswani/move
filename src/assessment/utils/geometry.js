@@ -46,7 +46,7 @@ export function angleBetween(v1, v2) {
 
 /**
  * Interior angle at `vertex` formed by the segments to `a` and `b`.
- * Used for the knee angle in the sit-to-stand test (hip-knee-ankle).
+ * Used for joint angles when a movement needs an interior angle.
  */
 export function jointAngle(a, vertex, b) {
   return angleBetween(vector(vertex, a), vector(vertex, b));

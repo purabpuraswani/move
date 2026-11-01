@@ -12,7 +12,6 @@ from exercise_library.schema import (
 )
 
 EXPECTED_EXERCISE_IDS = [
-    "chair-sit-to-stand",
     "wall-sit",
     "standing-knee-raise",
     "supported-calf-raise",
@@ -38,7 +37,7 @@ EXPECTED_EXERCISE_IDS = [
 # whether MoveNet's 2D keypoints can actually measure their key movement
 # quality — see data.py's module docstring and each entry's movenet_support
 # notes for why.
-NEW_BATCH_EXERCISE_IDS = EXPECTED_EXERCISE_IDS[10:]
+NEW_BATCH_EXERCISE_IDS = EXPECTED_EXERCISE_IDS[9:]
 
 NEW_BATCH_MOVENET_UNSUPPORTED_IDS = {
     "standing-trunk-rotation",
@@ -60,8 +59,12 @@ NEW_BATCH_MOVENET_SUPPORTED_IDS = (
 
 
 class ExerciseLibraryContentTests(unittest.TestCase):
-    def test_there_are_exactly_twenty_exercises_in_the_required_order(self):
+    def test_there_are_nineteen_exercises_in_the_required_order(self):
         self.assertEqual(list_exercise_ids(), EXPECTED_EXERCISE_IDS)
+
+    def test_chair_sit_to_stand_is_not_an_active_exercise(self):
+        self.assertNotIn("chair-sit-to-stand", list_exercise_ids())
+        self.assertNotIn("Chair Sit-to-Stand", [item["name"] for item in EXERCISES])
 
     def test_every_exercise_id_is_unique(self):
         ids = [exercise["exercise_id"] for exercise in EXERCISES]
@@ -117,7 +120,7 @@ class ExerciseLibraryContentTests(unittest.TestCase):
         self.assertEqual(exercise["measurable_metrics"], [])
         self.assertIsNotNone(exercise["movenet_support"]["notes"])
 
-    def test_twelve_of_twenty_exercises_have_an_implemented_movenet_assessment(self):
+    def test_eleven_of_nineteen_exercises_have_an_implemented_movenet_assessment(self):
         """Was fourteen. Two entries claimed an assessment the application
         cannot actually perform and were corrected rather than propped up
         with a proxy measurement:
@@ -133,7 +136,7 @@ class ExerciseLibraryContentTests(unittest.TestCase):
         in src/exerciseAssessment/signals.js."""
 
         implemented = [e for e in EXERCISES if e["movenet_support"]["implemented"]]
-        self.assertEqual(len(implemented), 12)
+        self.assertEqual(len(implemented), 11)
 
     def test_the_calf_raise_is_honestly_marked_as_not_measurable(self):
         """The same shape as the heel-to-toe-stand test above, for the same
@@ -181,11 +184,11 @@ class ExerciseLibraryContentTests(unittest.TestCase):
 class NewExerciseBatchTests(unittest.TestCase):
     """The ten exercises added to bring the library from ten to twenty."""
 
-    def test_the_new_batch_is_exactly_ten_ids_not_overlapping_the_first_ten(self):
+    def test_the_new_batch_ids_are_not_overlapping_the_original_batch(self):
         self.assertEqual(len(NEW_BATCH_EXERCISE_IDS), 10)
-        self.assertEqual(len(EXPECTED_EXERCISE_IDS), 20)
+        self.assertEqual(len(EXPECTED_EXERCISE_IDS), 19)
         self.assertEqual(
-            set(NEW_BATCH_EXERCISE_IDS) & set(EXPECTED_EXERCISE_IDS[:10]), set()
+            set(NEW_BATCH_EXERCISE_IDS) & set(EXPECTED_EXERCISE_IDS[:9]), set()
         )
 
     def test_every_new_exercise_id_resolves_to_a_full_document(self):

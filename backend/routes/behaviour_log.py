@@ -19,7 +19,7 @@ from records.
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
-from pymongo.errors import PyMongoError
+from database import StorageError
 
 from auth.deps import get_current_user
 from behaviour_log.schema import (
@@ -126,7 +126,7 @@ def create_behaviour_action(
     try:
         saved = save_behaviour_action(user_id, document, plan_id=plan_id)
 
-    except PyMongoError:
+    except StorageError:
         raise _database_error() from None
 
     return {
@@ -166,7 +166,7 @@ def read_behaviour_action_history(
         )
         total = count_behaviour_actions(user_id)
 
-    except PyMongoError:
+    except StorageError:
         raise _database_error() from None
 
     return {

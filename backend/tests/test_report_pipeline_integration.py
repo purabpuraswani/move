@@ -55,8 +55,7 @@ from user_state.schema import build_user_state
 # (tests/test_physio_agent_mcp_integration.py, tests/test_progress_mcp_integration.py):
 # skip honestly, never silently, and never by faking a passing result.
 REPORT_STORE_AVAILABLE = (
-    importlib.util.find_spec("pymongo") is not None
-    and importlib.util.find_spec("bson") is not None
+    importlib.util.find_spec("database") is not None
 )
 
 REPORT_STORE_SKIP_REASON = (

@@ -23,6 +23,8 @@ takes a NutritionToolClient as a required argument specifically so it can
 never quietly bypass MCP.
 """
 
+import re
+
 from need_assessment.rules import (
     FRUIT_VEGETABLE_SERVINGS_LOW_THRESHOLD,
     MEAL_PATTERN_TRIGGER_VALUES,
@@ -50,6 +52,88 @@ AGENT_ID = "nutrition"
 TRIGGERING_LEVELS = ("MEDIUM", "HIGH")
 
 MAX_GOALS_PER_PLAN = 4
+
+
+def _normal_words(value):
+    return {
+        part
+        for part in re.findall(r"[a-z0-9]+", str(value or "").lower())
+        if len(part) > 2
+    }
+
+
+def _select_goal_example(topic, payload):
+    """Choose a catalog-authored goal compatible with explicit user context.
+
+    We only screen literal terms in the catalog text; this is not a clinical
+    ingredient/contraindication engine. Missing allergy/restriction answers
+    are handled before catalog selection.
+    """
+    signals = payload.get("relevant_nutrition_signals") or {}
+    context = [
+        payload.get("food_preferences") or [],
+        payload.get("nutrition_goals") or [],
+    ]
+    explicit_words = {
+        word
+        for group in context
+        for item in group
+        for word in _normal_words(item)
+    }
+    excluded_words = {
+        word
+        for group in (
+            payload.get("dietary_restrictions") or [],
+            payload.get("food_allergies") or [],
+        )
+        for item in group
+        for word in _normal_words(item)
+    }
+    examples = [
+        example for example in topic.get("practical_goal_examples", [])
+        if not (_normal_words(example) & excluded_words)
+    ]
+    if not examples:
+        return None
+
+    # The goal categories are implicit in the existing catalog signals.
+    # Prefer an example that reflects the user's stated preference/goal;
+    # otherwise use available work/meal context to choose between authored
+    # alternatives, retaining catalog order only as the final tie-break.
+    lifestyle = payload.get("relevant_lifestyle_constraints") or {}
+    work_type = _normal_words(lifestyle.get("work_type"))
+    meal_pattern = _normal_words(signals.get("meal_pattern"))
+
+    def rank(example):
+        words = _normal_words(example)
+        return (
+            len(words & explicit_words),
+            len(words & work_type),
+            len(words & meal_pattern),
+        )
+    return max(
+        enumerate(examples), key=lambda pair: (rank(pair[1]), -pair[0])
+    )[1]
+
+
+def _prioritize_signals(signals, goals):
+    """Order triggered topics by the user's explicitly stated goal language."""
+    keywords = {
+        "meal_pattern": {"meal", "meals", "breakfast", "regular", "routine"},
+        "fruit_vegetable_servings": {"fruit", "vegetable", "vegetables", "produce"},
+        "water_glasses_per_day": {"water", "hydration", "drink"},
+        "processed_food_frequency": {"processed", "snack", "cooking", "cook"},
+    }
+    words = {
+        word for goal in (goals or []) for word in _normal_words(goal)
+    }
+    return sorted(
+        enumerate(signals),
+        key=lambda pair: (
+            -len(words & keywords.get(pair[1], set())),
+            pair[0],
+        ),
+    )
 
 
 class NutritionAgentError(Exception):
@@ -99,15 +183,40 @@ SIGNAL_WORDING = {
 }
 
 
-def _rationale_for(topic: dict, signal: str, nutrition_signals: dict) -> str:
+def _rationale_for(
+    topic: dict, signal: str, nutrition_signals: dict, payload: dict = None
+) -> str:
     value = nutrition_signals.get(signal)
     described = SIGNAL_WORDING.get(signal, signal.replace("_", " "))
 
-    return (
+    rationale = (
         f"You told us about {described} ({value}), which is what brought this "
         f"into your plan. '{topic['name']}' is general guidance on it -- not "
         "a judgement about your health."
     )
+    payload = payload or {}
+    stated_goals = payload.get("nutrition_goals") or []
+    if stated_goals:
+        rationale += f" You also said your nutrition goal is {', '.join(stated_goals)}."
+    preferences = payload.get("food_preferences") or []
+    if preferences:
+        rationale += (
+            f" Your stated food preferences ({', '.join(preferences)}) were "
+            "considered when choosing the goal example."
+        )
+    return rationale
+
+
+def _selection_evidence(signal, nutrition_signals, payload):
+    evidence = [f"Self-reported {SIGNAL_WORDING.get(signal, signal)}: {nutrition_signals.get(signal)}"]
+    for field, label in (
+        ("nutrition_goals", "Stated nutrition goal"),
+        ("food_preferences", "Stated food preference"),
+        ("dietary_restrictions", "Reported dietary restriction"),
+        ("food_allergies", "Reported food allergy"),
+    ):
+        evidence.extend(f"{label}: {value}" for value in (payload.get(field) or []))
+    return evidence
 
 
 def _adaptation_rationale(topic: dict, decision: dict) -> str:
@@ -160,6 +269,7 @@ def run_nutrition_agent(
     parent_trace: TraceContext,
     previous_plan: dict = None,
     food_log_entries: list = None,
+    adherence_food_log_entries: list = None,
     period_start=None,
     period_end=None,
 ) -> dict:
@@ -186,6 +296,7 @@ def run_nutrition_agent(
         workflow_id=trace.workflow_id,
         request_id=trace.request_id,
         agent_run_id=trace.agent_run_id,
+        meal_log_entries=food_log_entries,
     )
 
     current_needs = payload["current_needs"]
@@ -228,7 +339,8 @@ def run_nutrition_agent(
                 "report_evidence": report_context["evidence"],
                 "missing_information": [
                     "Meal pattern, fruit/vegetable servings, water intake and "
-                    "processed-food frequency have not been answered."
+                    "processed-food frequency have not been answered.",
+                    "Food allergies and dietary restrictions have not been answered.",
                 ],
             },
             recommendations=[
@@ -252,9 +364,11 @@ def run_nutrition_agent(
                     "id": "complete_nutrition_questions",
                     "title": "Answer the nutrition questions",
                     "action": (
-                        "Complete the four dietary questions in your profile: "
+                        "Complete the nutrition questions in your profile: "
                         "meal pattern, fruit and vegetable servings, water "
-                        "intake, and how often you eat processed food."
+                        "intake, processed-food frequency, food allergies and "
+                        "dietary restrictions. Enter an empty list when you "
+                        "have none."
                     ),
                     "why": (
                         "Without them there is no evidence of what your diet "
@@ -270,6 +384,36 @@ def run_nutrition_agent(
         # Reachable in a direct unit test of the agent; the Orchestrator's
         # own selection rule normally prevents this agent from running at
         # all in this case.
+        # LOW / not-assessed is not a reason to invent a personal diet goal.
+        # Offer one catalog-authored general meal-planning activity instead;
+        # the explicit mode keeps it distinct from a personalized nutrition plan.
+        maintenance_topic = None
+        maintenance_error = None
+        try:
+            search = tool_client.search_nutrition_guidance(category="meal_regularity")
+            candidate = next((item for item in (search.get("topics") or [])
+                              if item.get("topic_id") == "build_a_regular_meal_pattern"), None)
+            if candidate:
+                details = tool_client.get_nutrition_topic_details(candidate["topic_id"])
+                maintenance_topic = details.get("topic") if isinstance(details, dict) else None
+        except Exception as error:  # noqa: BLE001
+            maintenance_error = str(error)
+        activity = None
+        if maintenance_topic:
+            examples = maintenance_topic.get("practical_goal_examples") or []
+            guidance = maintenance_topic.get("guidance") or []
+            activity = {
+                "id": maintenance_topic["topic_id"],
+                "title": maintenance_topic.get("name") or "Meal-planning activity",
+                "action": examples[0] if examples else (guidance[0] if guidance else "Review the catalog guidance and choose a meal-planning step that fits your routine."),
+                "frequency": "As stated in the catalog example (most days this week)." if examples else "Not specified in the catalog.",
+                "why": "This is general catalog education because the available profile does not establish a specific nutrition need; it is not a personalized diet prescription.",
+                "evidence_used": ["nutrition need is not MEDIUM/HIGH", f"{len(food_log_entries or [])} meal log record(s) available"],
+                "safety_notes": maintenance_topic.get("safety_notes") or [],
+                "reference": maintenance_topic.get("reference"),
+                "activity_type": "general_maintenance_activity",
+                "personalization_status": "GENERAL_EDUCATION_NOT_PERSONALIZED",
+            }
         return build_agent_result(
             agent=AGENT_ID,
             status="completed",
@@ -280,9 +424,27 @@ def run_nutrition_agent(
                 "reason": (
                     "nutrition_need is not at MEDIUM or HIGH "
                     f"(level={nutrition_need.get('level') if nutrition_need else None!r})"
-                )
+                ),
+                "mode": "maintenance_review",
+                "activities": [activity] if activity else [],
+                "catalog_activity_unavailable_reason": maintenance_error if not activity else None,
+                "nutrition_need_level": (nutrition_need or {}).get("level"),
+                "relevant_nutrition_signals": nutrition_signals or {},
+                "food_log_entries_observed": len(food_log_entries or []),
+                "confirmed_report_evidence": report_context.get("evidence", []),
+                "missing_information": (
+                    ["Food preferences, allergies, and restrictions are not fully known."]
+                    if payload.get("food_allergies") is None or payload.get("dietary_restrictions") is None
+                    else []
+                ),
             },
-            recommendations=[],
+            recommendations=([{
+                "id": activity["id"], "title": activity["title"],
+                "action": activity["action"], "why": activity["why"],
+                "frequency": activity["frequency"],
+                "evidence_used": activity["evidence_used"],
+                "safety_notes": activity["safety_notes"],
+            }] if activity else []),
         )
 
     triggered_signals = _triggered_signals(nutrition_signals)
@@ -304,8 +466,42 @@ def run_nutrition_agent(
             recommendations=[],
         )
 
+    missing_safety_context = [
+        label for field, label in (
+            ("food_allergies", "food allergies"),
+            ("dietary_restrictions", "dietary restrictions"),
+        ) if payload.get(field) is None
+    ]
+    if missing_safety_context:
+        return build_agent_result(
+            agent=AGENT_ID,
+            status="completed",
+            workflow_id=trace.workflow_id,
+            request_id=trace.request_id,
+            agent_run_id=trace.agent_run_id,
+            priority="medium",
+            findings={
+                "mode": "context_required",
+                "reason": "Nutrition goals are deferred until possible food safety constraints are clarified.",
+                "missing_information": missing_safety_context,
+                "triggered_signals": triggered_signals,
+            },
+            recommendations=[{
+                "id": "clarify_nutrition_safety_context",
+                "title": "Complete your food safety details",
+                "action": "Tell us any food allergies and dietary restrictions. If you have none, explicitly answer none for each.",
+                "why": "Those answers are unknown, so food-based goals cannot yet be checked against your needs.",
+            }],
+            requires_reassessment=False,
+        )
+
+    triggered_signals = [signal for _, signal in _prioritize_signals(
+        triggered_signals, payload.get("nutrition_goals")
+    )]
+
     goal_entries = []
     decisions = []
+    excluded_topics = []
     tool_call_failed = None
     mcp_session_id = None
     adherence = None
@@ -317,7 +513,7 @@ def run_nutrition_agent(
         try:
             adherence_result = tool_client.calculate_food_adherence(
                 previous_plan,
-                food_log_entries or [],
+                adherence_food_log_entries if adherence_food_log_entries is not None else (food_log_entries or []),
                 period_start=period_start,
                 period_end=period_end,
             )
@@ -402,6 +598,16 @@ def run_nutrition_agent(
 
                 topic = details["topic"]
 
+            practical_goal = _select_goal_example(topic, payload)
+            if practical_goal is None:
+                decisions.append({
+                    **decision,
+                    "decision_type": DECISION_REMOVE,
+                    "reason": "The stored goal does not have a catalog example that can be checked against the reported restriction or allergy.",
+                    "evidence_used": _selection_evidence(target_signal, nutrition_signals, payload),
+                })
+                continue
+
             decisions.append(decision)
 
             if target_signal:
@@ -410,12 +616,15 @@ def run_nutrition_agent(
             goal_entries.append(
                 build_nutrition_goal_entry(
                     topic_id=topic["topic_id"],
-                    practical_goal=topic["practical_goal_examples"][0],
+                    practical_goal=practical_goal,
                     rationale=_adaptation_rationale(topic, decision),
                     safety_notes=list(topic["safety_notes"]),
                     target_signal=target_signal,
                     decision_type=decision["decision_type"],
-                    evidence_used=decision["evidence_used"] or None,
+                    evidence_used=list(dict.fromkeys(
+                        (decision["evidence_used"] or [])
+                        + _selection_evidence(target_signal, nutrition_signals, payload)
+                    )),
                     evidence_needed=decision["evidence_needed"] or None,
                     adherence_status=decision["adherence_status"],
                 )
@@ -447,12 +656,22 @@ def run_nutrition_agent(
             continue
 
         topic = topics[0]
+        practical_goal = _select_goal_example(topic, payload)
+        if practical_goal is None:
+            excluded_topics.append({
+                "topic_id": topic["topic_id"],
+                "target_signal": signal,
+                "reason": "All catalog goal examples contain a term matching a reported allergy or restriction; this topic is deferred.",
+                "evidence_used": _selection_evidence(signal, nutrition_signals, payload),
+                "additional_information_required": "A catalog goal that can be checked against the reported restriction or allergy.",
+            })
+            continue
 
         goal_entries.append(
             build_nutrition_goal_entry(
                 topic_id=topic["topic_id"],
-                practical_goal=topic["practical_goal_examples"][0],
-                rationale=_rationale_for(topic, signal, nutrition_signals),
+                practical_goal=practical_goal,
+                rationale=_rationale_for(topic, signal, nutrition_signals, payload),
                 safety_notes=list(topic["safety_notes"]),
                 target_signal=signal,
                 decision_type=DECISION_ADD,
@@ -460,6 +679,7 @@ def run_nutrition_agent(
                 # UNKNOWN says that; it does not say the user has been
                 # failing to log.
                 adherence_status="UNKNOWN",
+                evidence_used=_selection_evidence(signal, nutrition_signals, payload),
                 evidence_needed=[
                     "Log what you eat so this can be reviewed against what "
                     "you are actually doing."
@@ -471,9 +691,9 @@ def run_nutrition_agent(
             {
                 "topic_id": topic["topic_id"],
                 "decision_type": DECISION_ADD,
-                "reason": _rationale_for(topic, signal, nutrition_signals),
+                "reason": _rationale_for(topic, signal, nutrition_signals, payload),
                 "adherence_status": "UNKNOWN",
-                "evidence_used": [],
+                "evidence_used": _selection_evidence(signal, nutrition_signals, payload),
                 "evidence_needed": [],
                 "target_signal": signal,
             }
@@ -490,6 +710,30 @@ def run_nutrition_agent(
             findings={"reason": f"Nutrition MCP search failed: {tool_call_failed}"},
             safety_flags=["mcp_unavailable_or_tool_error"],
             requires_reassessment=True,
+        )
+
+    if not goal_entries and excluded_topics:
+        return build_agent_result(
+            agent=AGENT_ID,
+            status="completed",
+            workflow_id=trace.workflow_id,
+            request_id=trace.request_id,
+            agent_run_id=trace.agent_run_id,
+            priority="medium",
+            findings={
+                "mode": "context_required",
+                "reason": "The available catalog examples could not be checked against the reported restriction or allergy.",
+                "triggered_signals": triggered_signals,
+                "excluded_topics": excluded_topics,
+                "missing_information": ["Clarification or a suitable catalog option for the reported restriction or allergy."],
+            },
+            recommendations=[{
+                "id": "clarify_nutrition_restriction",
+                "title": "Review this nutrition goal",
+                "action": "Please clarify the reported restriction or allergy before using a food-based recommendation.",
+                "why": excluded_topics[0]["reason"],
+            }],
+            requires_reassessment=False,
         )
 
     plan = build_nutrition_plan(
@@ -520,6 +764,7 @@ def run_nutrition_agent(
         # Every decision this cycle, including the REMOVEs that by
         # definition have no goal entry, and what each one was decided from.
         "decisions": decisions,
+        "excluded_topics": excluded_topics,
         "adherence": adherence,
         "adaptation_summary": (
             summarise(decisions) if previous_plan is not None else None

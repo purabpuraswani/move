@@ -17,7 +17,7 @@ second thing to get wrong.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pymongo.errors import PyMongoError
+from database import StorageError
 
 from agents.guardrails import DISCLAIMER, SAFETY_NOTE
 from agents.llm import AgentFailed, AgentUnavailable
@@ -73,7 +73,7 @@ def read_status(current_user: dict = Depends(get_current_user)):
     try:
         context = load_context(user_id)
 
-    except PyMongoError:
+    except StorageError:
         raise _database_error() from None
 
     return guidance_status(context)
@@ -96,7 +96,7 @@ def read_latest(current_user: dict = Depends(get_current_user)):
         # reads — and the alternative is presenting old guidance as current.
         context = load_context(user_id)
 
-    except PyMongoError:
+    except StorageError:
         raise _database_error() from None
 
     return {
@@ -124,7 +124,7 @@ def create_run(current_user: dict = Depends(get_current_user)):
     try:
         context = load_context(user_id)
 
-    except PyMongoError:
+    except StorageError:
         raise _database_error() from None
 
     try:
@@ -147,7 +147,7 @@ def create_run(current_user: dict = Depends(get_current_user)):
     try:
         document = save_run(user_id, result)
 
-    except PyMongoError:
+    except StorageError:
         # The guidance exists and the user asked for it, so it is returned even
         # though it could not be kept. Losing it to protect a write would be the
         # wrong way round.

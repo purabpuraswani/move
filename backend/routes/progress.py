@@ -13,9 +13,9 @@ session; doing it here keeps it to one.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pymongo.errors import PyMongoError
+from database import StorageError
 
-from assessments.store import list_assessments
+from assessments.store import list_assessments_with_measurements
 from auth.deps import get_current_user
 from exercise_assessment.store import list_exercise_results, serialise_exercise_result
 from progress_agent.series import build_progress_series
@@ -57,10 +57,12 @@ def read_progress_series(
             serialise_exercise_result(document)
             for document in list_exercise_results(user_id, limit=limit)
         ]
-        assessment_documents = list_assessments(user_id, limit=DEFAULT_ASSESSMENT_LIMIT)
+        assessment_documents = list_assessments_with_measurements(
+            user_id, limit=DEFAULT_ASSESSMENT_LIMIT
+        )
         user_state = build_user_state_for_user(user_id)
 
-    except PyMongoError:
+    except StorageError:
         raise _database_error() from None
 
     series = build_progress_series(

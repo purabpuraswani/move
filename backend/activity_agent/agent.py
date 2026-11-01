@@ -37,6 +37,7 @@ def run_activity_agent(
     *,
     parent_trace: TraceContext,
     exercise_results: list = None,
+    daily_checkins: list = None,
     recovery_constraint: dict = None,
 ) -> dict:
     """Run one Exercise & Physical Activity execution.
@@ -58,6 +59,7 @@ def run_activity_agent(
     view = build_activity_view(
         user_state,
         exercise_results=exercise_results,
+        daily_checkins=daily_checkins,
         recovery_constraint=recovery_constraint,
     )
 

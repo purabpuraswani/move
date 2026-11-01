@@ -37,7 +37,10 @@ def ensure_indexes():
     )
 
 
-def save_user_state(user_id: str, state: dict, *, safety_result: dict = None) -> dict:
+def save_user_state(
+    user_id: str, state: dict, *, safety_result: dict = None,
+    selection_explanations: dict = None,
+) -> dict:
     """Persist the given User State (and the Safety Result that produced
     it, if any) as this user's current state. Upserts in place — a second
     call for the same user replaces the previous document, it never
@@ -52,6 +55,8 @@ def save_user_state(user_id: str, state: dict, *, safety_result: dict = None) ->
     }
     if safety_result is not None:
         set_fields["last_safety_result"] = safety_result
+    if selection_explanations is not None:
+        set_fields["last_selection_explanations"] = selection_explanations
 
     result = user_state_collection.update_one(
         {"user_id": user_id},

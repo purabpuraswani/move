@@ -15,9 +15,9 @@ built the moment it was actually needed rather than earlier "for later".
 
 from datetime import datetime, timezone
 
-from bson import ObjectId
-from bson.errors import InvalidId
-from pymongo import ASCENDING, DESCENDING
+from database import ObjectId
+from database import InvalidId
+from database import ASCENDING, DESCENDING
 
 from database import exercise_results_collection
 

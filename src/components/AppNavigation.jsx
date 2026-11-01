@@ -6,6 +6,8 @@ const NAV_ITEMS = [
   { label: "Dashboard", to: "/dashboard", match: (p) => p === "/dashboard" },
   { label: "Assessment", to: "/assessment", match: (p) => p === "/assessment" || p === "/assess" },
   { label: "My plan", to: "/plan", match: (p) => p === "/plan" },
+  { label: "Daily check-in", to: "/daily-tracking", match: (p) => p === "/daily-tracking" },
+  { label: "Exercise library", to: "/exercise-library", match: (p) => p === "/exercise-library" },
   { label: "My progress", to: "/progress", match: (p) => p === "/progress" },
   { label: "Past sessions", to: "/history", match: (p) => p === "/history" },
   { label: "Reports", to: "/reports", match: (p) => p.startsWith("/reports") },

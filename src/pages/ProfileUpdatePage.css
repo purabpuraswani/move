@@ -1,0 +1,91 @@
+.profile-edit-page {
+  width: min(960px, calc(100% - 32px));
+  margin: 36px auto 80px;
+  color: #e8f4ee;
+}
+
+.profile-edit-page > a {
+  color: #72dfb0;
+  text-decoration: none;
+}
+
+.profile-edit-page > a:hover { color: #a8f3cf; }
+
+.profile-edit-page h1 {
+  margin: 18px 0 8px;
+  font-size: clamp(2rem, 4vw, 3rem);
+  color: #f3fff8;
+}
+
+.profile-edit-page > p {
+  max-width: 760px;
+  color: #b8d0c5;
+  line-height: 1.6;
+}
+
+.profile-edit-page form section {
+  margin: 28px 0;
+  padding: 24px;
+  border: 1px solid #244b3c;
+  border-radius: 18px;
+  background: #0d2921;
+}
+
+.profile-edit-page h2 { margin: 0 0 18px; color: #effff8; }
+.profile-edit-page section > p { margin: -8px 0 18px; color: #b8d0c5; line-height: 1.55; }
+
+.profile-edit-page .form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr));
+  gap: 18px;
+}
+
+.profile-edit-page .input-group {
+  display: grid;
+  gap: 8px;
+  color: #d4e8df;
+  font-weight: 600;
+}
+
+.profile-edit-page input,
+.profile-edit-page select {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #477261;
+  border-radius: 9px;
+  background: #071c17;
+  color: #f3fff8;
+  font: inherit;
+}
+
+.profile-edit-page input::placeholder { color: #a9c2b8; opacity: 1; }
+.profile-edit-page input:focus-visible,
+.profile-edit-page select:focus-visible,
+.profile-edit-page button:focus-visible,
+.profile-edit-page a:focus-visible {
+  outline: 3px solid #a8f3cf;
+  outline-offset: 3px;
+}
+
+.profile-edit-page button {
+  min-height: 44px;
+  border: 0;
+  border-radius: 10px;
+  padding: 13px 24px;
+  color: #062017;
+  background: #52d49d;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.profile-edit-page button:hover:not(:disabled) { background: #80e6ba; }
+.profile-edit-page button:disabled { opacity: .7; cursor: wait; }
+.profile-edit-page [role="alert"] { color: #ffaaa0; margin: 12px 0; }
+.profile-edit-page [role="status"] { color: #a8f3cf; margin: 12px 0; }
+
+@media (max-width: 560px) {
+  .profile-edit-page form section { padding: 16px; }
+  .profile-edit-page { width: min(100% - 24px, 960px); margin-top: 24px; }
+}

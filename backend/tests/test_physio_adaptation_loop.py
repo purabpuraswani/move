@@ -27,9 +27,8 @@ from progress_agent.tool_client import InProcessProgressToolClient
 from workflow.assembly import assemble_user_state_from_documents
 from workflow.response import serialise_workflow_state
 
-# A session with a genuine, measured need: five sit-to-stands in 18 seconds
-# is above this project's HIGH threshold, so Physio is selected on evidence
-# rather than through the conservative starter pathway.
+# A session with a genuine, measured need: a short one-leg hold selects
+# Physio on active assessment evidence rather than the starter pathway.
 SESSION = {
     "protocol_version": "1.0.0",
     "completed_at": "2026-09-06T10:00:00+00:00",
@@ -42,22 +41,14 @@ SESSION = {
                 "observableDifferenceDeg": 3.0,
             },
         },
-        "ftsst": {
-            "status": "completed",
-            "measurements": {
-                "completionTimeSeconds": 18.0,
-                "repetitionsDetected": 5,
-                "requiredRepetitions": 5,
-            },
-        },
         "balance": {
             "status": "completed",
             "measurements": {
-                "left": {"attempted": True, "valid": True, "holdDurationSeconds": 30.0},
+                "left": {"attempted": True, "valid": True, "holdDurationSeconds": 4.0},
                 "right": {
                     "attempted": True,
                     "valid": True,
-                    "holdDurationSeconds": 30.0,
+                    "holdDurationSeconds": 4.0,
                 },
                 "observableDifferenceMs": 0,
             },
@@ -68,7 +59,11 @@ SESSION = {
 
 def state_for(persisted=None):
     return assemble_user_state_from_documents(
-        profile_doc=None,
+        profile_doc={
+            "diabetes": "no", "hypertension": "no", "heart_condition": "no",
+            "previous_injury": "no", "joint_pain": "no", "back_neck_pain": "no",
+            "other_conditions": "",
+        },
         assessment_doc=SESSION,
         confirmed_reports_doc=None,
         persisted_state=persisted,

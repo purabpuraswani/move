@@ -9,10 +9,9 @@
  * E. Laptop webcam margins / distance warnings trigger actionable feedback.
  * F. Balance test ignores pre-test wobble because countdown separates positioning from measurement.
  * G. Shoulder test requires arms visible.
- * H. Sit-to-stand requires side profile with hips/knees/feet visible.
+ * H. One-Leg Stand requires both sides of the lower body to be visible.
  * I. Valid completed assessment scores correctly.
  * J. Low quality / poor visibility remains NOT_ASSESSED (no fake scores or lowered standards).
- * K. Rep counting cannot increase during TEMPORARY_LOSS or RECOVERING.
  */
 
 import test from "node:test";
@@ -31,11 +30,9 @@ import { POSE, REASON, TEST_STATUS } from "../config/protocol.js";
 import { isUsableResult } from "../utils/results.js";
 import { getActionableSuggestion } from "../utils/labels.js";
 import { ShoulderAbductionTest } from "../tests/shoulder/shoulderLogic.js";
-import { FiveTimesSitToStandTest } from "../tests/ftsst/ftsstLogic.js";
 import { SingleLegStanceTest } from "../tests/balance/balanceLogic.js";
 import {
   frontFacingBase,
-  sideFacingBase,
   makeFrame,
   DEFAULT_FRAME_MS,
 } from "../fixtures/syntheticPoses.js";
@@ -65,8 +62,8 @@ function normalizedFrontFrame(overrides = {}) {
   };
 }
 
-// Helper for normalized side frame (FTSST)
-function normalizedSideFrame(overrides = {}) {
+// A partially occluded lower body must not pass the One-Leg Stand checklist.
+function obscuredLowerBodyFrame(overrides = {}) {
   return {
     timestamp: overrides.timestamp ?? 0,
     keypoints: {
@@ -136,7 +133,6 @@ test("Point A: intermittent frame loss below threshold does not fail quality tra
   assert.deepEqual(tracker.blockingReasons(), []);
   assert.equal(tracker.getTrackingState(), TRACKING_STATE.TRACKING);
 });
-
 // ---------------------------------------------------------------------------
 // POINT B: Recovery state machine transitions
 // ---------------------------------------------------------------------------
@@ -260,7 +256,7 @@ test("Point E: laptop webcam clipping and distance triggers human-friendly guida
       right_hip: { x: 0.62, y: 0.75, score: 0.95 },
     },
   });
-  const closeEval = evaluatePositioning(tooClose, "ftsst");
+  const closeEval = evaluatePositioning(tooClose, "balance");
   assert.match(closeEval.guidance, /farther from the camera/i);
 
   // 4. Too far from camera (torsoSpan < 0.12)
@@ -272,8 +268,45 @@ test("Point E: laptop webcam clipping and distance triggers human-friendly guida
       right_hip: { x: 0.52, y: 0.52, score: 0.95 },
     },
   });
-  const farEval = evaluatePositioning(tooFar, "ftsst");
+  const farEval = evaluatePositioning(tooFar, "balance");
   assert.match(farEval.guidance, /closer/i);
+});
+
+test("MoveNet pixel coordinates are normalized using the camera frame dimensions", () => {
+  const normalized = normalizedFrontFrame();
+  const pixelFrame = {
+    ...normalized,
+    width: 1280,
+    height: 720,
+    keypoints: Object.fromEntries(Object.entries(normalized.keypoints).map(([name, point]) => [
+      name,
+      { ...point, x: point.x * 1280, y: point.y * 720 },
+    ])),
+  };
+  const result = evaluatePositioning(pixelFrame, "balance");
+  assert.equal(result.checklist.hips, true);
+  assert.equal(result.checklist.knees, true);
+  assert.equal(result.checklist.feet, true);
+  assert.match(result.guidance, /hold still/i);
+});
+
+test("One-Leg Stand requires both ankles, knees, and hips at the recording threshold", () => {
+  const frame = normalizedFrontFrame({
+    keypoints: {
+      right_ankle: { x: 0.54, y: 0.9, score: POSE.minRequiredKeypointScore - 0.01 },
+    },
+  });
+  const result = evaluatePositioning(frame, "balance");
+  assert.equal(result.checklist.feet, false);
+  assert.equal(result.ready, false);
+  assert.match(result.guidance, /feet/i);
+});
+
+test("brief positioning landmark drops preserve preflight progress, sustained loss resets it", () => {
+  const empty = { timestamp: 0, keypoints: {} };
+  assert.equal(evaluatePositioning(empty, "balance", { stableCount: 9, droppedFrames: 0 }).stableFrames, 9);
+  assert.equal(evaluatePositioning(empty, "balance", { stableCount: 9, droppedFrames: 2 }).stableFrames, 9);
+  assert.equal(evaluatePositioning(empty, "balance", { stableCount: 9, droppedFrames: 3 }).stableFrames, 0);
 });
 
 // ---------------------------------------------------------------------------
@@ -301,6 +334,22 @@ test("Point F: balance test setup wobble does not corrupt hold duration", () => 
   assert.equal(balanceTest.durationMs, null);
 });
 
+test("a brief landmark dropout during One-Leg Stand stabilisation preserves calibration", () => {
+  const testRun = new SingleLegStanceTest({ supportSide: "right" });
+  const lifted = frontFacingBase();
+  lifted.left_ankle.y = 560;
+  for (let i = 0; i < 5; i += 1) testRun.push(makeFrame(i * 100, lifted));
+  assert.equal(testRun.phase, "stabilising");
+  const calibrationStart = testRun.validPositionSince;
+
+  testRun.push(makeFrame(500, lifted, { missing: ["left_hip"] }));
+  testRun.push(makeFrame(600, lifted));
+
+  assert.equal(testRun.phase, "stabilising");
+  assert.equal(testRun.validPositionSince, calibrationStart);
+  assert.equal(testRun.startTimestamp, null);
+});
+
 // ---------------------------------------------------------------------------
 // POINT G: Shoulder test requires arms visible
 // ---------------------------------------------------------------------------
@@ -323,25 +372,16 @@ test("Point G: shoulder test checklist requires visible arms and gives specific 
 });
 
 // ---------------------------------------------------------------------------
-// POINT H: Sit-to-stand requires side profile with hips/knees/feet
+// POINT H: One-Leg Stand requires a full frontal view
 // ---------------------------------------------------------------------------
-test("Point H: sit-to-stand requires side view and advises sideways chair orientation", () => {
-  // User is facing camera front-on rather than sideways
-  const frontFrameOn = normalizedFrontFrame();
-  const evalResult = evaluatePositioning(frontFrameOn, "ftsst");
-
-  assert.equal(evalResult.ready, false);
-  assert.match(evalResult.guidance, /turn slightly sideways/i);
-  assert.match(evalResult.actionableTip, /chair sideways/i);
-
-  // Side view with chair correctly positioned sideways
-  const sideFrameOn = normalizedSideFrame();
-  const sideEval = evaluatePositioning(sideFrameOn, "ftsst");
-  assert.equal(sideEval.checklist.hips, true);
-  assert.equal(sideEval.checklist.knees, true);
-  assert.equal(sideEval.checklist.feet, true);
-  // Guidance is now holding or ready, not asking to turn
-  assert.notEqual(sideEval.guidance, "Turn slightly sideways.");
+test("Point H: One-Leg Stand keeps repositioning until both sides of the lower body are visible", () => {
+  const obscured = obscuredLowerBodyFrame();
+  const evaluation = evaluatePositioning(obscured, "balance");
+  assert.equal(evaluation.checklist.hips, false);
+  assert.equal(evaluation.checklist.knees, false);
+  assert.equal(evaluation.checklist.feet, false);
+  assert.equal(evaluation.ready, false);
+  assert.match(evaluation.guidance, /feet/i);
 });
 
 // ---------------------------------------------------------------------------
@@ -403,31 +443,3 @@ test("Point J: low quality or poor visibility does NOT fabricate healthy scores"
   assert.equal(result.measurements.right.finalElevationDeg, null);
 });
 
-// ---------------------------------------------------------------------------
-// POINT K: Rep counting does NOT increment during TEMPORARY_LOSS or RECOVERING
-// ---------------------------------------------------------------------------
-test("Point K: repetitions cannot be counted during tracking loss or recovery", () => {
-  const ftsst = new FiveTimesSitToStandTest({ chairSeatHeightCm: 45 });
-
-  // 10 side selection frames
-  for (let i = 0; i < 10; i++) {
-    ftsst.push(makeFrame(i * DEFAULT_FRAME_MS, sideFacingBase({ kneeAngleDeg: 80 })));
-  }
-
-  // 5 seated confirm frames
-  for (let i = 10; i < 16; i++) {
-    ftsst.push(makeFrame(i * DEFAULT_FRAME_MS, sideFacingBase({ kneeAngleDeg: 80 })));
-  }
-
-  const countBeforeLoss = ftsst.standTimestamps.length;
-
-  // Feed 10 unusable frames (e.g. person walks away or camera is occluded)
-  for (let i = 16; i < 26; i++) {
-    ftsst.push(makeFrame(i * DEFAULT_FRAME_MS, sideFacingBase({ kneeAngleDeg: 170 }), {
-      score: 0.1, // unusable
-    }));
-  }
-
-  // Rep count did NOT increase during unusable frames despite the angle in the synthetic pose
-  assert.equal(ftsst.standTimestamps.length, countBeforeLoss);
-});

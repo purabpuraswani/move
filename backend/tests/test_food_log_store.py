@@ -21,8 +21,7 @@ from unittest import mock
 from food_log.schema import build_food_log_entry
 
 FOOD_LOG_STORE_AVAILABLE = (
-    importlib.util.find_spec("pymongo") is not None
-    and importlib.util.find_spec("bson") is not None
+    importlib.util.find_spec("database") is not None
 )
 
 FOOD_LOG_STORE_SKIP_REASON = (

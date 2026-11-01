@@ -2,6 +2,10 @@ import unittest
 
 from orchestrator.orchestrator import run_workflow
 from physio_agent.tool_client import ExerciseToolClient, InProcessExerciseToolClient
+from behaviour_agent.tool_client import InProcessBehaviourToolClient
+from nutrition_agent.tool_client import InProcessNutritionToolClient
+from progress_agent.tool_client import InProcessProgressToolClient
+from workflow.response import serialise_workflow_state
 from user_state.schema import build_user_state
 
 
@@ -38,6 +42,21 @@ def _needs(mobility, stability, functional_movement, exercise="HIGH"):
 
 def _state_with_needs(mobility, stability, functional_movement):
     state = build_user_state()
+    state["medical_context"] = {
+        "available": True,
+        "reason": None,
+        "data": {
+            "self_reported": {
+                "source": "self_reported_onboarding",
+                "values": {
+                    "diabetes": "no", "hypertension": "no", "heart_condition": "no",
+                    "previous_injury": "no", "joint_pain": "no", "back_neck_pain": "no",
+                    "other_conditions": "",
+                },
+            },
+            "confirmed_reports": {"source": "user_confirmed_medical_report", "reports": []},
+        },
+    }
     state["current_needs"] = {
         "available": True, "reason": None,
         "data": _needs(mobility, stability, functional_movement),
@@ -79,6 +98,12 @@ class PositiveEndToEndTests(unittest.TestCase):
         self.assertEqual(physio_result["agent"], "physio")
         self.assertEqual(physio_result["status"], "completed")
         self.assertTrue(physio_result["findings"]["plan"]["exercises"])
+        for exercise in physio_result["findings"]["plan"]["exercises"]:
+            self.assertTrue(exercise["instructions"])
+            self.assertIn("sets", exercise)
+            self.assertIn("equipment", exercise)
+            self.assertIn("safety_notes", exercise)
+            self.assertTrue(exercise.get("demonstration_id"))
 
         self.assertGreater(client.search_calls, 0)
 
@@ -112,6 +137,49 @@ class NegativeEndToEndTests(unittest.TestCase):
         self.assertEqual(result["agent_results"], [])
         self.assertEqual(result["state_updates"], [])
         self.assertEqual(client.search_calls, 0)
+
+    def test_full_review_executes_all_six_and_builds_low_need_tracking_outputs(self):
+        state = _state_with_needs("LOW", "LOW", "LOW")
+        kwargs = {"workflow_id": "wf_all", "request_id": "req_all"}
+        result = run_workflow(
+            state,
+            tool_client=InProcessExerciseToolClient(**kwargs),
+            behaviour_tool_client=InProcessBehaviourToolClient(**kwargs),
+            nutrition_tool_client=InProcessNutritionToolClient(**kwargs),
+            progress_tool_client=InProcessProgressToolClient(**kwargs),
+            execute_all_agents=True,
+            **kwargs,
+        )
+        expected = {"physio", "nutrition", "behaviour", "recovery", "exercise_activity", "progress"}
+        self.assertEqual(set(result["selected_agents"]), expected)
+        results = {item["agent"]: item for item in result["agent_results"]}
+        self.assertEqual(set(results), expected)
+        self.assertTrue(results["physio"]["findings"]["catalog_candidates_reviewed"])
+        self.assertTrue(results["physio"]["findings"]["exercise_safety_evaluations"])
+        self.assertEqual(results["physio"]["findings"]["plan"]["exercises"] if "plan" in results["physio"]["findings"] else [], [])
+        for agent_id, agent_result in results.items():
+            self.assertEqual(agent_result["status"], "completed", agent_id)
+            self.assertTrue(agent_result["findings"].get("tracking_activities"), agent_id)
+            self.assertTrue(agent_result["findings"].get("next_action"), agent_id)
+        self.assertTrue(results["nutrition"]["findings"]["activities"])
+        self.assertTrue(results["behaviour"]["findings"]["activities"])
+        response = serialise_workflow_state(
+            result["updated_user_state"],
+            safety_status=(result["safety_result"] or {}).get("status"),
+            safety_result=result["safety_result"],
+            agent_executions=results,
+            selection_explanations=result["orchestrator_decision"]["selection_explanations"],
+            approved_recommendations=result["final_recommendations"],
+        )
+        self.assertEqual(response["plan_state"]["state"], "PLAN_AVAILABLE")
+        self.assertEqual(
+            {item["agent"] for item in response["unified_plan"]["specialist_contributions"]},
+            expected,
+        )
+        self.assertEqual(response["unified_plan"]["completion_state"]["recorded_complete_count"], 0)
+        self.assertTrue(response["unified_plan"]["activities"])
+        self.assertTrue(response["unified_plan"]["tracking_tasks"])
+        self.assertTrue(all(item["type"] != "tracking_task" for item in response["unified_plan"]["activities"]))
 
     def test_not_required_is_distinguishable_from_required_but_failed(self):
         not_required = run_workflow(_state_with_needs("LOW", "LOW", "LOW"))
@@ -178,7 +246,7 @@ class SafetyAndInvalidInputTests(unittest.TestCase):
         self.assertEqual(result["agent_results"][0]["findings"]["plan"]["exercises"], [])
         self.assertEqual(result["state_updates"], [])
 
-    def test_unconfirmed_medical_context_never_reaches_the_physio_input(self):
+    def test_self_reported_health_reaches_physio_and_is_not_treated_as_confirmed(self):
         state = _state_with_needs("HIGH", "LOW", "LOW")
         state["medical_context"] = {
             "available": True, "reason": None,
@@ -190,16 +258,15 @@ class SafetyAndInvalidInputTests(unittest.TestCase):
         client = InProcessExerciseToolClient(workflow_id="wf_med", request_id="req_med")
         result = run_workflow(state, tool_client=client)
 
-        # The Physio Agent's OWN reasoning/output must never have seen or
-        # echoed self-reported (unconfirmed) medical context — checked
-        # against its Agent Result specifically, not the pass-through full
-        # User State the Orchestrator also returns (which legitimately
-        # keeps self_reported for other, non-Physio purposes; Phase 0's
-        # User State was never scoped to exclude it entirely).
         physio_result = result["agent_results"][0]
-        serialised_agent_output = str(physio_result).lower()
-        self.assertNotIn("self_reported", serialised_agent_output)
-        self.assertNotIn("diabetes", serialised_agent_output)
+        findings = physio_result["findings"]
+        self.assertEqual(findings["reported_health_context_status"], "INCOMPLETE")
+        self.assertEqual(findings["confirmed_medical_context_status"], "NONE_CONFIRMED")
+        self.assertTrue(findings["exercise_safety_evaluations"])
+        self.assertTrue(all(
+            entry["status"] == "DEFERRED_CONTEXT_REQUIRED"
+            for entry in findings["exercise_safety_evaluations"]
+        ))
 
 
 if __name__ == "__main__":

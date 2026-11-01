@@ -84,6 +84,9 @@ def apply_physio_plan(
         # written in the UI rather than read from the agent.
         "exercises": [dict(entry) for entry in plan["exercises"]],
         "decisions": [dict(entry) for entry in (findings.get("decisions") or [])],
+        "exercise_safety_evaluations": [
+            dict(item) for item in (findings.get("exercise_safety_evaluations") or [])
+        ],
         "selection_mode": findings.get("selection_mode"),
         "need_levels": dict(findings.get("need_levels") or {}),
         "capabilities_targeted": list(findings.get("capabilities_targeted") or []),
@@ -111,6 +114,52 @@ def apply_physio_plan(
 
     validate_user_state(updated)
 
+    return updated
+
+
+def apply_physio_safety_review(user_state: dict, physio_agent_result: dict) -> dict:
+    """Persist safety evaluations even when every candidate was deferred.
+
+    Reviews are kept beside, but separate from, append-only exercise plans;
+    an empty/deferred review never masquerades as a usable exercise plan.
+    """
+    findings = (physio_agent_result or {}).get("findings") or {}
+    evaluations = findings.get("exercise_safety_evaluations") or []
+    if not evaluations:
+        return user_state
+
+    section = user_state.get("exercise_history") or {}
+    data = section.get("data") or {}
+    reviews = list(data.get("safety_reviews") or [])
+    reviews.append({
+        "agent_run_id": (physio_agent_result.get("metadata") or {}).get("agent_run_id"),
+        "plan_id": (
+            findings.get("adapted_from_plan_id")
+            if findings.get("adapted_from_plan_id") and not findings.get("adaptation_summary")
+            else (findings.get("plan") or {}).get("plan_id")
+        ),
+        "recorded_at": _now_iso(),
+        "reported_health_context_status": findings.get("reported_health_context_status", "UNKNOWN"),
+        "confirmed_medical_context_status": findings.get("confirmed_medical_context_status", "UNKNOWN"),
+        "movement_evidence": findings.get("movement_evidence"),
+        "included_exercise_ids": [
+            item.get("exercise_id") for item in evaluations
+            if item.get("decision") == "INCLUDE"
+        ],
+        "evaluations": [dict(item) for item in evaluations],
+    })
+    updated = dict(user_state)
+    updated["exercise_history"] = {
+        "available": True,
+        "reason": None,
+        "data": {
+            **data,
+            "schemaVersion": data.get("schemaVersion", EXERCISE_HISTORY_SCHEMA_VERSION),
+            "plans": list(data.get("plans") or []),
+            "safety_reviews": reviews,
+        },
+    }
+    validate_user_state(updated)
     return updated
 
 
@@ -245,6 +294,13 @@ def apply_behaviour_plan(
         "goals": [dict(entry) for entry in plan["habit_goals"]],
         "decisions": [dict(entry) for entry in (findings.get("decisions") or [])],
         "triggered_signals": list(findings.get("triggered_signals") or []),
+        "barriers": [dict(entry) for entry in (findings.get("barriers") or [])],
+        "catalog_barrier_suggestions": [
+            dict(entry) for entry in (findings.get("catalog_barrier_suggestions") or [])
+        ],
+        "behaviour_interventions": [
+            dict(entry) for entry in (findings.get("behaviour_interventions") or [])
+        ],
         "adapted_from_plan_id": findings.get("adapted_from_plan_id"),
         "source": "behaviour_agent",
         "agent_run_id": behaviour_agent_result["metadata"]["agent_run_id"],

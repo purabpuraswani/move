@@ -7,16 +7,11 @@ sections, named after the sections the target architecture describes:
     medical_context, nutrition, behaviour, exercise_history,
     nutrition_plan, adherence, progress, safety, current_needs
 
-Four of these are populated from data the application already collects
-(basic_profile, questionnaire, physical_assessment, medical_context). The
-remaining eight (lifestyle as a *derived* profile, nutrition, behaviour,
-exercise_history, adherence, progress, safety, current_needs) have no source
-yet — nothing in the current application asks about nutrition or tracks
-adherence — so build_user_state() always includes them, always marks them
-unavailable, and says why. A later phase adds the collector or the
-computation and nothing here needs to change shape to receive it: each
-section already has the "available / reason / data" envelope that
-population will fill in.
+The profile-backed sections (basic_profile, questionnaire,
+physical_assessment, medical_context) are assembled from stored user data.
+Generated plans and derived sections remain unavailable until the relevant
+workflow has produced them. Every section uses the same
+"available / reason / data" envelope.
 
 No section is ever invented. A missing input becomes an unavailable section,
 never a guessed or defaulted one. This mirrors the rule already in
@@ -72,13 +67,13 @@ NOT_YET_COLLECTED = {
         "processed_food_frequency) added in Phase 4 for the Nutrition Agent."
     ),
     "behaviour": (
-        "No behavioural/adherence tracking exists yet beyond the questionnaire's "
-        "one-time exercise-days/exercise-minutes answers. Planned for the "
-        "Behaviour/Habit Agent phase."
+        "No Behaviour Agent plan has been created yet. User-reported behaviour "
+        "context is in 'questionnaire'; action history is stored separately "
+        "in the behaviour log."
     ),
     "exercise_history": (
         "No exercise library or exercise-performance logging exists yet. The "
-        "three baseline assessment tests are recorded separately, in "
+        "the baseline assessment tests are recorded separately, in "
         "'physical_assessment'. Planned for the exercise-library phase."
     ),
     "nutrition_plan": (
@@ -156,10 +151,17 @@ _QUESTIONNAIRE_FIELDS = (
     "daily_screen_hours",
     "sleep_hours",
     "sleep_quality",
+    "stress_level",
+    "recovery_difficulties",
     "daily_steps",
     "exercise_days",
     "exercise_minutes",
     "work_type",
+    "behaviour_motivation",
+    "preferred_habits",
+    "reported_behaviour_barriers",
+    "daily_routines",
+    "preferred_habit_changes",
 )
 
 
@@ -170,6 +172,16 @@ def _build_questionnaire(profile_doc) -> dict:
         )
 
     data = {key: profile_doc.get(key) for key in _QUESTIONNAIRE_FIELDS}
+
+    for field in ("preferred_habits", "reported_behaviour_barriers", "recovery_difficulties", "daily_routines", "preferred_habit_changes"):
+        value = data[field]
+        if value is not None and (
+            not isinstance(value, list)
+            or any(not isinstance(item, str) or not item.strip() for item in value)
+        ):
+            raise UserStateValidationError(
+                f"questionnaire.{field} must be null or a list of non-empty strings"
+            )
 
     if all(value is None for value in data.values()):
         return _empty_section(
@@ -189,7 +201,10 @@ def _build_questionnaire(profile_doc) -> dict:
 # it, is a job for that agent's own context-building step, same as today.
 # ---------------------------------------------------------------------------
 
-_ASSESSMENT_TEST_IDS = ("shoulder", "ftsst", "balance")
+# Only these checks belong to the active assessment protocol. Older stored
+# sessions may still contain an FTSST entry; it is intentionally ignored by
+# the current user-state snapshot.
+_ASSESSMENT_TEST_IDS = ("shoulder", "balance")
 
 
 def extract_assessment_tests(assessment_doc) -> dict:
@@ -236,6 +251,7 @@ def _build_physical_assessment(assessment_doc) -> dict:
     ]
 
     data = {
+        "session_id": assessment_doc.get("session_id"),
         "protocol_version": assessment_doc.get("protocol_version"),
         "completed_at": assessment_doc.get("completed_at"),
         # Carried through for Phase 1 (Need Assessment): a consumer
@@ -331,14 +347,11 @@ def _build_medical_context(profile_doc, confirmed_reports_doc) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# nutrition — self-reported, optional questions added in Phase 4 for the
-# Nutrition Agent (backend/nutrition_agent/). Deliberately the raw
-# self-reported answers, same discipline as `questionnaire`: no
-# interpretation happens here, that is need_assessment/rules.py's
-# assess_nutrition_need() job. Genuinely optional — a profile document
-# from before Phase 4, or one from the still-unchanged onboarding UI,
-# simply has none of these fields, and this section reports NOT_YET_COLLECTED's
-# reason for "nutrition", not an error.
+# nutrition — raw self-reported answers for the Nutrition Agent. No
+# interpretation happens here; need_assessment/rules.py handles assessment.
+# Optional fields preserve compatibility with profiles written before their
+# collection was added. None means unanswered; an empty list means an
+# explicit no-preference/no-restriction/no-allergy answer.
 # ---------------------------------------------------------------------------
 
 _NUTRITION_FIELDS = (
@@ -346,6 +359,12 @@ _NUTRITION_FIELDS = (
     "fruit_vegetable_servings",
     "water_glasses_per_day",
     "processed_food_frequency",
+    # Optional nutrition context: None means unanswered; [] means the user
+    # explicitly reported no items in that category.
+    "food_preferences",
+    "dietary_restrictions",
+    "food_allergies",
+    "nutrition_goals",
 )
 
 
@@ -357,6 +376,14 @@ def _build_nutrition(profile_doc) -> dict:
 
     if all(value is None for value in data.values()):
         return _empty_section(NOT_YET_COLLECTED["nutrition"])
+
+    for field in ("food_preferences", "dietary_restrictions", "food_allergies", "nutrition_goals"):
+        value = data[field]
+        if value is not None and (
+            not isinstance(value, list)
+            or any(not isinstance(item, str) or not item.strip() for item in value)
+        ):
+            raise UserStateValidationError(f"nutrition.{field} must be null or a list of non-empty strings")
 
     return {"available": True, "reason": None, "data": data}
 

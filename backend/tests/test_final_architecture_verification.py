@@ -27,6 +27,14 @@ from user_state.schema import build_user_state, validate_user_state
 from workflow.response import serialise_workflow_state
 
 
+def _health_screen_clear():
+    return {
+        "diabetes": "no", "hypertension": "no", "heart_condition": "no",
+        "previous_injury": "no", "joint_pain": "no", "back_neck_pain": "no",
+        "other_conditions": "",
+    }
+
+
 class PersonalizedPlanAndNeedPriorityTests(unittest.TestCase):
     """Point 1: Personalized Starter Plan vs Specialist Need Prioritization."""
 
@@ -61,7 +69,7 @@ class PersonalizedPlanAndNeedPriorityTests(unittest.TestCase):
     def test_B_user_with_meaningful_movement_needs_receives_physio_driven_exercises(self):
         """B: Users with meaningful movement needs receive appropriate Physio-driven exercises,
         not the generic maintenance starter plan."""
-        state = build_user_state()
+        state = build_user_state(profile_doc=_health_screen_clear())
         # High mobility need with specific shoulder deficit
         state["current_needs"] = {
             "available": True,
@@ -106,12 +114,12 @@ class PersonalizedPlanAndNeedPriorityTests(unittest.TestCase):
             need_profile={"safety_status": {"level": "HIGH", "evidence": ["Acute red flag detected"]}},
             confirmed_medical_context=None,
             candidate_recommendations=[
-                {"id": "chair-sit-to-stand", "agent": "physio", "type": "exercise", "difficulty": "beginner"}
+                {"id": "wall-sit", "agent": "physio", "type": "exercise", "difficulty": "beginner"}
             ],
         )
         self.assertEqual(safety_high_result["status"], "REFER")
         self.assertTrue(safety_high_result["requires_referral"])
-        self.assertIn("chair-sit-to-stand", safety_high_result["blocked_recommendation_ids"])
+        self.assertIn("wall-sit", safety_high_result["blocked_recommendation_ids"])
 
         # Starter plan respects the REFER status and refuses to prescribe unsafe exercises
         state = build_user_state()
@@ -160,12 +168,17 @@ class McpTransportAndFallbackHonestyTests(unittest.TestCase):
     def test_inprocess_fallback_honestly_reports_none_mcp_session(self):
         """InProcess tool client must not claim an MCP session ID when running in fallback mode."""
         client = InProcessExerciseToolClient(workflow_id="wf_inproc", request_id="req_inproc")
-        res = client.get_exercise_details("chair-sit-to-stand")
+        res = client.get_exercise_details("wall-sit")
 
         metadata = res.get("metadata", {})
         self.assertIsNone(metadata.get("mcp_session_id"))
         self.assertIsNotNone(metadata.get("agent_run_id"))
         self.assertEqual(metadata.get("workflow_id"), "wf_inproc")
+
+    def test_removed_chair_sit_to_stand_cannot_be_loaded_from_the_exercise_catalog(self):
+        client = InProcessExerciseToolClient(workflow_id="wf_removed", request_id="req_removed")
+        result = client.get_exercise_details("chair-sit-to-stand")
+        self.assertIn("error", result)
 
 
 class TwoWaySpecialistCommunicationTests(unittest.TestCase):
@@ -227,7 +240,7 @@ class MultiAgentCollaborationAndOnePlanTests(unittest.TestCase):
     """Point 4 & 5: Multi-agent aggregation into ONE coherent plan and ONE Safety Gate."""
 
     def test_all_three_specialists_aggregate_into_one_coherent_plan(self):
-        state = build_user_state()
+        state = build_user_state(profile_doc=_health_screen_clear())
         state["current_needs"] = {
             "available": True,
             "reason": None,

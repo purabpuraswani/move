@@ -13,7 +13,7 @@ record of what the user said they ate, nothing more.
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
-from pymongo.errors import PyMongoError
+from database import StorageError
 
 from auth.deps import get_current_user
 from food_log.schema import FoodLogValidationError, validate_food_log_entry
@@ -109,7 +109,7 @@ def create_food_log_entry(
     try:
         saved = save_food_log_entry(user_id, document, plan_id=plan_id)
 
-    except PyMongoError:
+    except StorageError:
         raise _database_error() from None
 
     return {
@@ -148,7 +148,7 @@ def read_food_log_history(
         )
         total = count_food_log_entries(user_id, plan_id=plan_id)
 
-    except PyMongoError:
+    except StorageError:
         raise _database_error() from None
 
     return {
@@ -177,7 +177,7 @@ def read_food_log_entry(
             detail=str(error)
         ) from None
 
-    except PyMongoError:
+    except StorageError:
         raise _database_error() from None
 
     return {"entry": serialise_food_log_entry(document)}

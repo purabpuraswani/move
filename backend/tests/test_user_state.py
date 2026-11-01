@@ -121,7 +121,6 @@ class PhysicalAssessmentRepresentationTests(unittest.TestCase):
                     "status": "completed",
                     "measurements": {"observableDifferenceDeg": 4},
                 },
-                "ftsst": {"status": "skipped"},
                 "balance": {"status": "not_started"},
             },
         }
@@ -134,7 +133,7 @@ class PhysicalAssessmentRepresentationTests(unittest.TestCase):
 
         self.assertTrue(section["available"])
         self.assertEqual(section["data"]["tests"]["shoulder"]["status"], "completed")
-        self.assertEqual(section["data"]["tests"]["ftsst"]["status"], "skipped")
+        self.assertEqual(set(section["data"]["tests"]), {"shoulder", "balance"})
         self.assertEqual(
             section["data"]["tests"]["balance"]["status"], "not_started"
         )
@@ -149,7 +148,6 @@ class PhysicalAssessmentRepresentationTests(unittest.TestCase):
                     "invalid_reasons": [],
                     "attempts": 2,
                 },
-                "ftsst": {"status": "not_started"},
                 "balance": {"status": "not_started"},
             }
         }
@@ -162,7 +160,7 @@ class PhysicalAssessmentRepresentationTests(unittest.TestCase):
         self.assertEqual(shoulder["invalidReasons"], [])
         self.assertEqual(shoulder["attempts"], 2)
 
-    def test_completed_sit_to_stand_preserves_setup_context(self):
+    def test_historical_ftsst_is_ignored_in_the_active_snapshot(self):
         state = build_user_state(
             assessment_doc={
                 "tests": {
@@ -177,15 +175,13 @@ class PhysicalAssessmentRepresentationTests(unittest.TestCase):
             }
         )
 
-        setup = state["physical_assessment"]["data"]["tests"]["ftsst"]["setup"]
-        self.assertEqual(setup["chairSeatHeightCm"], 60)
-        self.assertEqual(setup["measuredSide"], "left")
+        self.assertFalse(state["physical_assessment"]["available"])
+        self.assertEqual(set(state["physical_assessment"]["data"]["tests"]), {"shoulder", "balance"})
 
     def test_a_session_with_no_completed_test_is_marked_unavailable(self):
         assessment_doc = {
             "tests": {
                 "shoulder": {"status": "invalid"},
-                "ftsst": {"status": "skipped"},
                 "balance": {"status": "not_started"},
             }
         }

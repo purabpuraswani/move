@@ -1,3 +1,5 @@
+import { assessmentCompletion } from "../assessment/utils/results.js";
+
 /**
  * The three states the plan screen can be in — and nothing else.
  *
@@ -34,6 +36,7 @@
 export const PLAN_STATES = Object.freeze({
   NEVER_RUN: "NEVER_RUN",
   PLAN_AVAILABLE: "PLAN_AVAILABLE",
+  STARTER_GUIDANCE_AVAILABLE: "STARTER_GUIDANCE_AVAILABLE",
   NO_PLAN_SAFE_OR_SUPPORTED: "NO_PLAN_SAFE_OR_SUPPORTED",
 });
 
@@ -87,4 +90,24 @@ export function planState(workflow) {
     missing: [],
     nextAction: null,
   };
+}
+/** A plan is current only when it was processed from the latest saved session. */
+export function workflowMatchesAssessment(workflow, assessment) {
+  return Boolean(
+    assessment?.sessionId
+      && workflow?.assessment_summary?.session_key === assessment.sessionId,
+  );
+}
+
+/** Pause saved recommendations when the profile was edited after execution. */
+export function profileChangedSinceWorkflow(profileUpdatedAt, workflowCreatedAt) {
+  const profileTime = Date.parse(profileUpdatedAt || "");
+  const workflowTime = Date.parse(workflowCreatedAt || "");
+  return Boolean(profileTime && (!workflowTime || profileTime > workflowTime));
+}
+
+/** Never run against a draft, partial, or superseded assessment session. */
+export function shouldGenerateWorkflowForAssessment(workflow, assessment) {
+  if (!assessment?.sessionId || !assessmentCompletion(assessment).complete) return false;
+  return workflow?.available === false || !workflowMatchesAssessment(workflow, assessment);
 }

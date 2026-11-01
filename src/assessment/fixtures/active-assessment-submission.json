@@ -1,0 +1,37 @@
+{
+  "sessionId": "actual-submission-shape",
+  "protocolVersion": "1.0.0",
+  "startedAt": "2026-11-01T06:09:00Z",
+  "completedAt": "2026-11-01T06:14:00Z",
+  "summary": {
+    "testsCompleted": 2,
+    "testsInvalid": 0,
+    "testsSkipped": 0,
+    "testsNotStarted": 0,
+    "hasAnyUsableResult": true,
+    "status": "COMPLETE"
+  },
+  "tests": {
+    "shoulder": {
+      "status": "completed",
+      "measurements": {
+        "left": { "finalElevationDeg": 151.5 },
+        "right": { "finalElevationDeg": 149.2 }
+      },
+      "quality": { "framesSeen": 200 },
+      "invalidReasons": [],
+      "attempts": 1
+    },
+    "balance": {
+      "status": "completed",
+      "measurements": {
+        "left": { "holdDurationSeconds": 30 },
+        "right": { "holdDurationSeconds": 29.7 },
+        "differenceSeconds": 0.3
+      },
+      "quality": { "framesSeen": 900 },
+      "invalidReasons": [],
+      "attempts": 1
+    }
+  }
+}

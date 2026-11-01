@@ -6,7 +6,7 @@
  * description lives here rather than being written twice.
  *
  * There is no overall score, no rating, and no comparison to any population,
- * because none of those things could be produced honestly from three webcam
+ * because none of those things could be produced honestly from two webcam
  * observations. What is shown is what was measured, what was skipped, what was
  * not usable, and why.
  *
@@ -144,44 +144,6 @@ function ShoulderResult({ result }) {
   );
 }
 
-function FtsstResult({ result }) {
-  if (!result.measurements) return null;
-
-  const { completionTimeMs, repetitionsDetected, requiredRepetitions } = result.measurements;
-  const setup = result.setup ?? null;
-
-  return (
-    <>
-      <div className="assess-panel__measures">
-        <Measurement label="Time for five stands" value={formatSeconds(completionTimeMs)} />
-        <Measurement
-          label="Stands detected"
-          value={`${repetitionsDetected} of ${requiredRepetitions}`}
-        />
-        <Measurement
-          label="Chair seat height"
-          value={
-            setup && typeof setup.chairSeatHeightCm === "number"
-              ? `${setup.chairSeatHeightCm} cm`
-              : "Not provided"
-          }
-        />
-      </div>
-      <p className="assess-result__definition">
-        Time from leaving the seated position to reaching the fifth stand, detected
-        automatically from the knee angle. Not equivalent to a clinician timing the
-        movement.
-      </p>
-      {setup && <ReasonList codes={setup.warnings} title="Setup notes" />}
-      <QualityNote
-        quality={result.quality}
-        invalid={!result.valid}
-        testType={result.testType || result.test || "shoulder"}
-      />
-    </>
-  );
-}
-
 function BalanceResult({ result }) {
   if (!result.measurements) return null;
 
@@ -228,7 +190,6 @@ function BalanceResult({ result }) {
 
 const RESULT_BODIES = {
   shoulder: ShoulderResult,
-  ftsst: FtsstResult,
   balance: BalanceResult,
 };
 
@@ -269,7 +230,7 @@ export function SessionSummaryLine({ summary }) {
   if (!summary) return null;
   return (
     <p className="assess-card__lead">
-      {summary.testsCompleted} of 3 checks recorded a usable measurement
+      {summary.testsCompleted} of 2 checks recorded a usable measurement
       {summary.testsSkipped > 0 && `, ${summary.testsSkipped} skipped`}
       {summary.testsInvalid > 0 && `, ${summary.testsInvalid} not usable`}.
     </p>

@@ -31,9 +31,9 @@ class ValidExerciseResultTests(unittest.TestCase):
     def test_timestamps_round_trip(self):
         result = validate_exercise_result(
             {
-                "exerciseId": "chair-sit-to-stand",
+                "exerciseId": "wall-sit",
                 "status": "completed",
-                "measurements": {"repetitions": 5, "durationSeconds": 12.3, "completion": 1},
+                "measurements": {"durationSeconds": 12.3, "completion": 1},
                 "startedAt": "2026-01-01T10:00:00Z",
                 "completedAt": "2026-01-01T10:00:12Z",
             }
@@ -104,7 +104,7 @@ class RejectedExerciseResultTests(unittest.TestCase):
         with self.assertRaises(ExerciseResultValidationError):
             validate_exercise_result(
                 {
-                    "exerciseId": "chair-sit-to-stand",
+                    "exerciseId": "wall-sit",
                     "status": "completed",
                     "measurements": {"repetitions": -1},
                 }

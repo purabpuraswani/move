@@ -5,6 +5,8 @@ import { getExerciseImage } from "../movementDemos/exerciseImages.js";
 import FoodLogPanel from "../components/FoodLogPanel.jsx";
 import BehaviourActionPanel from "../components/BehaviourActionPanel.jsx";
 import { fetchLatestWorkflow } from "../services/workflow";
+import { fetchProfileSummary } from "../services/profile.js";
+import { profileChangedSinceWorkflow } from "../services/planState.js";
 import {
   toArray,
   safeDisplayValue,
@@ -88,18 +90,6 @@ const SPECIALIST_CONFIGS = {
     subtitle: "Daily Walking, Step Volume & Sedentary Habit Pacing",
     icon: "🏃",
     focus: "Optimizing overall daily physical activity, stepping volume, and interrupting prolonged sedentary periods.",
-    defaultReason: "Evaluates your daily walking steps, sitting duration, and weekly activity frequency.",
-    inactiveMessage: "No specific physical activity intervention is currently required based on your current evidence.",
-    defaultEvidence: [
-      "Daily stepping volume compared to active baseline (5,000 steps)",
-      "Daily sedentary desk / sitting duration",
-      "Weekly structured exercise frequency",
-    ],
-    defaultRecommendations: [
-      "Target 6,000 to 8,000 steps per day with brisk walking intervals",
-      "Take a 2-minute movement or standing break every 60 minutes of sitting",
-      "Accumulate at least 150 minutes of moderate physical activity weekly",
-    ],
   },
   physio: {
     id: "physio",
@@ -109,18 +99,6 @@ const SPECIALIST_CONFIGS = {
     subtitle: "Mobility, Balance & Corrective Exercise Prescription",
     icon: "🧑‍⚕️",
     focus: "Musculoskeletal assessment, mobility restoration, joint safety, and progressive corrective exercise programming.",
-    defaultReason: "Calibrated directly from your camera-tracked movement assessments (shoulder elevation, sit-to-stand, and single-leg balance).",
-    inactiveMessage: "No specific movement intervention is currently required.",
-    defaultEvidence: [
-      "Upper-body shoulder abduction and flexion angles",
-      "Chair sit-to-stand power and completion cadence",
-      "Single-leg standing balance hold duration",
-    ],
-    defaultRecommendations: [
-      "Targeted mobility drills for restricted joints",
-      "Progressive functional lower-body strength movements",
-      "Single-leg static and dynamic stability training",
-    ],
   },
   nutrition: {
     id: "nutrition",
@@ -130,18 +108,6 @@ const SPECIALIST_CONFIGS = {
     subtitle: "Dietary Quality, Hydration & Authentic Meal Evidence",
     icon: "🍎",
     focus: "Balanced dietary patterns, adequate protein distribution, optimal hydration, and whole-food nutrition.",
-    defaultReason: "Evaluates dietary needs, meal consistency, and authentic food logging evidence.",
-    inactiveMessage: "No specific dietary intervention is currently required based on your nutrition profile.",
-    defaultEvidence: [
-      "Reported dietary variety and nutritional focus areas",
-      "Authentic meal logs recorded in your food journal",
-      "Hydration and regular meal timing",
-    ],
-    defaultRecommendations: [
-      "Include a lean protein source in every main meal",
-      "Consume at least 2 litres of water throughout the active day",
-      "Prioritize diverse colourful vegetables and dietary fiber",
-    ],
   },
   recovery: {
     id: "recovery",
@@ -151,18 +117,6 @@ const SPECIALIST_CONFIGS = {
     subtitle: "Sleep Hygiene, Rest Days & Fatigue Management",
     icon: "🌙",
     focus: "Sleep quality, restorative rest intervals, tissue recovery, and daily fatigue management.",
-    defaultReason: "Monitors sleep duration, perceived sleep quality, physical workload, and post-movement fatigue.",
-    inactiveMessage: "Sleep duration and rest recovery patterns meet current activity demands.",
-    defaultEvidence: [
-      "Nightly sleep duration (threshold: 7+ hours restorative sleep)",
-      "Sleep quality rating and sleep consistency",
-      "Post-exercise fatigue markers and rest intervals",
-    ],
-    defaultRecommendations: [
-      "Maintain consistent sleep and wake times within a 30-minute window",
-      "Schedule at least 1 full active recovery or rest day between intense sessions",
-      "Implement a 30-minute screen-free wind-down routine before bedtime",
-    ],
   },
   behaviour: {
     id: "behaviour",
@@ -172,18 +126,6 @@ const SPECIALIST_CONFIGS = {
     subtitle: "Habit Formation, Pacing & Routine Consistency",
     icon: "🧠",
     focus: "Building resilient micro-habits, cognitive pacing, overcoming adherence friction, and long-term compliance.",
-    defaultReason: "Assesses adherence barriers, routine consistency, and readiness for behavioral habit stacking.",
-    inactiveMessage: "No habit intervention is currently required based on your routine evidence.",
-    defaultEvidence: [
-      "Daily habit completion logs and friction reports",
-      "Consistency rate across weekly scheduled sessions",
-      "Reported barriers and personal motivators",
-    ],
-    defaultRecommendations: [
-      "Pair your movement routine with an existing anchor habit (e.g. after morning coffee)",
-      "Start with a micro-commitment of just 5 minutes when motivation is low",
-      "Track your habit check-ins daily to maintain your momentum streak",
-    ],
   },
   safety: {
     id: "safety",
@@ -193,18 +135,6 @@ const SPECIALIST_CONFIGS = {
     subtitle: "Clinical Gatekeeping, Contraindications & Red Flags",
     icon: "🛡️",
     focus: "Authoritative clinical gatekeeper evaluating medical context, movement contraindications, and red flags before any plan reaches you.",
-    defaultReason: "Evaluates clinical safety guidelines, confirmed medical reports, pain thresholds, and exercise contraindications.",
-    inactiveMessage: "Safety Gate screening passed — no clinical contraindications or escalations detected.",
-    defaultEvidence: [
-      "Confirmed clinical findings and medical report lab values",
-      "Symptom red flags and acute contraindications",
-      "Physiological load thresholds and exercise difficulty ceilings",
-    ],
-    defaultRecommendations: [
-      "All prescribed movements strictly operate within verified safe biomechanical ranges",
-      "Immediate referral flags are continuously monitored for clinical symptoms",
-      "No exercise exceeds your confirmed physiological readiness ceiling",
-    ],
   },
 };
 
@@ -334,14 +264,16 @@ function SpecialistDetailPageInner() {
   const config = SPECIALIST_CONFIGS[normalizedKey] || SPECIALIST_CONFIGS.physio;
 
   const [workflow, setWorkflow] = useState(null);
+  const [profileUpdatedAt, setProfileUpdatedAt] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
-    fetchLatestWorkflow()
-      .then((data) => {
+    Promise.allSettled([fetchLatestWorkflow(), fetchProfileSummary()])
+      .then(([workflowResult, profileResult]) => {
         if (mounted) {
-          setWorkflow(data);
+          if (workflowResult.status === "fulfilled") setWorkflow(workflowResult.value);
+          if (profileResult.status === "fulfilled") setProfileUpdatedAt(profileResult.value.updatedAt);
           setLoading(false);
         }
       })
@@ -375,31 +307,35 @@ function SpecialistDetailPageInner() {
   const statusFor = (live) =>
     live?.status || (workflow?.available ? "EVALUATED_NOT_REQUIRED" : "NOT_ASSESSED");
 
-  const liveSpecialist = findLiveSpecialist(normalizedKey, config);
+  const workflowIsStale = Boolean(workflow?.available && profileChangedSinceWorkflow(profileUpdatedAt, workflow?.workflow_created_at));
 
+  const liveSpecialist = workflowIsStale ? null : findLiveSpecialist(normalizedKey, config);
   const status = statusFor(liveSpecialist);
-
-  const statusLabel =
-    safeDisplayValue(liveSpecialist?.status_label) ||
-    (status === "ACTIVE"
-      ? "Active in Your Plan"
-      : "Not activated");
-
-  const isActive = status === "ACTIVE";
-  const isEvaluatedNotRequired = status === "EVALUATED_NOT_REQUIRED";
+  const agentId = normalizedKey === "exercise" ? "exercise_activity" : normalizedKey;
+  const journeyEntry = workflowIsStale ? null : toArray(workflow?.agent_journey).find((item) => item?.id === agentId);
+  const selectionIsCurrent = journeyEntry
+    ? journeyEntry.selection_status === "SELECTED" && toArray(journeyEntry.recommendations).length > 0
+    : status === "ACTIVE";
   const isNotAssessed = status === "NOT_ASSESSED";
+  const isActive = status === "ACTIVE" && selectionIsCurrent;
   const isInactive = !isActive;
+  const statusLabel = workflowIsStale
+    ? "Plan needs updating"
+    : isActive
+    ? safeDisplayValue(liveSpecialist?.status_label) || "Included in your plan"
+    : status === "CONTEXT_REQUIRED" || journeyEntry?.selection_status === "SELECTED – CONTEXT REQUIRED"
+    ? "More information needed"
+    : isNotAssessed ? "No assessment data yet" : "Not included in the current plan";
 
-  // Safeguard reason: always a safe string
-  const rawReason = liveSpecialist?.reason || config.defaultReason;
-  const reason = safeDisplayValue(rawReason) || config.defaultReason;
-  const inactiveReason =
-    isInactive
-      ? `Current assessment did not identify a ${config.title.toLowerCase()} need requiring a specialist-specific intervention.`
-      : reason;
+  // Only saved specialist decisions are shown as findings. Catalog defaults
+  // describe a domain; they are not evidence about this user.
+  const reason = workflowIsStale
+    ? "Your profile changed after this specialist result. Prepare an updated plan before following saved recommendations."
+    : safeDisplayValue(liveSpecialist?.reason || journeyEntry?.reason)
+    || "No saved specialist decision is available for this workflow.";
 
   // Normalize evidence safely
-  let rawEvidence = liveSpecialist?.evidence ?? config.defaultEvidence;
+  let rawEvidence = liveSpecialist?.evidence ?? journeyEntry?.evidence ?? [];
   if (rawEvidence && typeof rawEvidence === "object" && !Array.isArray(rawEvidence)) {
     if (Array.isArray(rawEvidence.evidence)) {
       rawEvidence = rawEvidence.evidence;
@@ -407,20 +343,23 @@ function SpecialistDetailPageInner() {
       rawEvidence = rawEvidence.items;
     }
   }
-  const evidenceList = normalizeEvidence(rawEvidence);
+  const evidenceList = normalizeEvidence(rawEvidence)
+    .filter((item) => !/added in Phase \d+ for the .* Agent/i.test(item));
 
   // Evidence states the specialists report alongside their findings.
   // Both are optional: a card from an older persisted run simply has
   // neither, and renders exactly as it did before.
   const missingInformation = toArray(liveSpecialist?.missing_information)
     .concat(toArray(liveSpecialist?.missing_safety_information))
+    .concat(toArray(liveSpecialist?.health_screen_missing_information))
+    .concat(toArray(journeyEntry?.missing_required_information))
     .filter(Boolean);
   const notAssessedMovements = toArray(liveSpecialist?.not_assessed_movements).filter(
     (entry) => entry && entry.label
   );
 
   // Normalize recommendations safely
-  let rawRecommendations = liveSpecialist?.recommendations;
+  let rawRecommendations = liveSpecialist?.recommendations ?? journeyEntry?.recommendations;
   if (rawRecommendations && typeof rawRecommendations === "object" && !Array.isArray(rawRecommendations)) {
     if (Array.isArray(rawRecommendations.recommendations)) {
       rawRecommendations = rawRecommendations.recommendations;
@@ -431,11 +370,7 @@ function SpecialistDetailPageInner() {
     }
   }
   const rawRecArray = toArray(rawRecommendations);
-  const recommendationsList = rawRecArray.length > 0
-    ? normalizeRecommendations(rawRecArray)
-    : isActive
-    ? normalizeRecommendations(config.defaultRecommendations)
-    : [];
+  const recommendationsList = normalizeRecommendations(rawRecArray);
 
   // Focus description
   const rawFocus = liveSpecialist?.focus || config.focus;
@@ -446,6 +381,7 @@ function SpecialistDetailPageInner() {
   const isNutrition = normalizedKey === "nutrition";
   const isBehaviour = normalizedKey === "behaviour";
   const isExercise = normalizedKey === "exercise";
+  const activityScore = journeyEntry?.findings?.activity_score;
 
   // Physio: extract rich programme exercises if available
   const movementSpecialist = toArray(workflow?.specialists).find(
@@ -516,20 +452,51 @@ function SpecialistDetailPageInner() {
           </div>
         </header>
 
+        {workflowIsStale ? (
+          <section className="specialist-card-panel" aria-label="Plan needs updating">
+            <h2 className="specialist-panel-title">Review your updated information</h2>
+            <p className="specialist-reason-text">Saved findings and recommendations are paused because your profile changed after this result was prepared.</p>
+            <Link to="/plan">Prepare an updated plan →</Link>
+          </section>
+        ) : null}
+
+        {isExercise && activityScore ? (
+          <section className="specialist-card-panel specialist-activity-score" aria-labelledby="activity-score-heading">
+            <h2 id="activity-score-heading" className="specialist-panel-title">MoveWell Activity Indicator</h2>
+            <p className="specialist-reason-text">
+              {activityScore.value == null
+                ? "There is not enough recorded activity information to calculate an indicator yet."
+                : <><strong>{safeDisplayValue(activityScore.value)} / 100</strong> · {safeDisplayValue(activityScore.interpretation)}</>}
+            </p>
+            <p className="specialist-reason-text">{safeDisplayValue(activityScore.method)}</p>
+            <ul className="specialist-evidence-list">
+              {toArray(activityScore.components).map((component) => (
+                <li className="specialist-evidence-item" key={component.metric}>
+                  <span className="specialist-evidence-text">
+                    {safeDisplayValue(component.label)}: {component.score == null ? "Not recorded" : `${safeDisplayValue(component.score)} / 100`}
+                    {component.input_value != null ? ` · ${safeDisplayValue(component.input_value)} ${safeDisplayValue(component.unit) || ""}` : ""}
+                    {component.project_marker != null ? ` · project marker ${safeDisplayValue(component.project_marker)} ${safeDisplayValue(component.unit) || ""}` : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
         {/* Detail Grid */}
         <div className="specialist-grid">
           {/* Clinical Rationale Panel */}
           <section className="specialist-card-panel" aria-labelledby="decision-heading">
             <h2 id="decision-heading" className="specialist-panel-title">
-              📋 Agent Decision & Rationale
+              Why this is (or is not) in your plan
             </h2>
-            <p className="specialist-reason-text">{isInactive ? inactiveReason : reason}</p>
+            <p className="specialist-reason-text">{reason}</p>
           </section>
 
           {/* Evidence Panel */}
           <section className="specialist-card-panel" aria-labelledby="evidence-heading">
             <h2 id="evidence-heading" className="specialist-panel-title">
-              🔍 Evidence & Assessment Data Used
+              Information considered
             </h2>
             {evidenceList.length > 0 ? (
               <ul className="specialist-evidence-list">
@@ -544,7 +511,7 @@ function SpecialistDetailPageInner() {
               </ul>
             ) : (
               <p className="specialist-reason-text">
-                No additional evidence is currently available.
+                No supporting details were saved for this workflow yet.
               </p>
             )}
 
@@ -556,7 +523,7 @@ function SpecialistDetailPageInner() {
             */}
             {missingInformation.length > 0 ? (
               <div className="specialist-missing-block">
-                <h3 className="specialist-missing-title">Not yet known</h3>
+                <h3 className="specialist-missing-title">Information not yet provided</h3>
                 <ul className="specialist-evidence-list">
                   {missingInformation.map((itemStr, idx) => (
                     <li key={idx} className="specialist-evidence-item">
@@ -569,6 +536,7 @@ function SpecialistDetailPageInner() {
                     </li>
                   ))}
                 </ul>
+                <Link to="/profile">Update your profile →</Link>
               </div>
             ) : null}
 
@@ -595,7 +563,7 @@ function SpecialistDetailPageInner() {
           {/* Actionable Plan / Recommendations */}
           <section className="specialist-card-panel" aria-labelledby="recommendations-heading">
             <h2 id="recommendations-heading" className="specialist-panel-title">
-              🎯 Recommendations & Guidance
+              Your recommendations
             </h2>
 
             {/* Inactive state fallback */}
@@ -604,18 +572,21 @@ function SpecialistDetailPageInner() {
                 <div className="specialist-empty-icon" aria-hidden="true">
                   ℹ️
                 </div>
-                <p className="specialist-empty-text">
-                  <strong>Status:</strong> Not activated
-                </p>
+                <p className="specialist-empty-text">{statusLabel}</p>
                 <p className="specialist-reason-text" style={{ marginTop: "8px" }}>
-                  <strong>Why:</strong> No relevant constraint or need was identified from the current assessment and user state.
+                  {reason}
                 </p>
-                <p className="specialist-reason-text" style={{ marginTop: "8px" }}>
-                  <strong>Evidence:</strong> {evidenceList.length > 0 ? evidenceList.slice(0, 2).join(" • ") : "No specialist-specific evidence was required."}
-                </p>
-                <p className="specialist-reason-text" style={{ marginTop: "8px" }}>
-                  <strong>Contribution:</strong> No specialist-specific modification was added to the current MoveWell plan.
-                </p>
+                {toArray(journeyEntry?.missing_required_information).length > 0 ? (
+                  <div className="specialist-missing-block">
+                    <h3 className="specialist-missing-title">Information needed</h3>
+                    <ul className="specialist-evidence-list">
+                      {toArray(journeyEntry.missing_required_information).map((item, idx) => (
+                        <li className="specialist-evidence-item" key={idx}>{safeDisplayValue(item)}</li>
+                      ))}
+                    </ul>
+                    <Link to="/profile">Update your profile →</Link>
+                  </div>
+                ) : null}
               </div>
             ) : (
               <>
@@ -623,7 +594,7 @@ function SpecialistDetailPageInner() {
                 {isPhysio && physioProgramme.length > 0 ? (
                   <div>
                     <p className="specialist-reason-text" style={{ marginBottom: "16px" }}>
-                      The Physiotherapy specialist has selected the following exercises based on your camera-tracked movement metrics:
+                      These exercises were selected using your saved movement assessment and the exercise safety review:
                     </p>
                     <ul className="specialist-rec-list" style={{ marginBottom: "20px" }}>
                       {physioProgramme.map((ex, idx) => (
@@ -667,7 +638,7 @@ function SpecialistDetailPageInner() {
             </section>
           )}
 
-          {isBehaviour && (
+          {isBehaviour && isActive && (
             <section className="specialist-card-panel" aria-labelledby="behaviour-panel-heading">
               <h2 id="behaviour-panel-heading" className="specialist-panel-title">
                 🧠 Today&rsquo;s Habit Check-in

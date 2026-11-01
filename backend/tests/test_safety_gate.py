@@ -14,7 +14,7 @@ def _confirmed_medical_context():
 
 class AllowTests(unittest.TestCase):
     def test_no_medical_context_no_high_safety_status_allows(self):
-        result = evaluate_safety(candidate_recommendations=[_exercise_candidate("chair-sit-to-stand")])
+        result = evaluate_safety(candidate_recommendations=[_exercise_candidate("wall-sit")])
         validate_safety_result(result)
         self.assertEqual(result["status"], "ALLOW")
         self.assertEqual(result["blocked_recommendation_ids"], [])
@@ -26,11 +26,11 @@ class ModifyTests(unittest.TestCase):
     def test_confirmed_medical_context_with_beginner_only_modifies(self):
         result = evaluate_safety(
             confirmed_medical_context=_confirmed_medical_context(),
-            candidate_recommendations=[_exercise_candidate("chair-sit-to-stand", "beginner")],
+            candidate_recommendations=[_exercise_candidate("wall-sit", "beginner")],
         )
         validate_safety_result(result)
         self.assertEqual(result["status"], "MODIFY")
-        self.assertEqual(result["modified_recommendation_ids"], ["chair-sit-to-stand"])
+        self.assertEqual(result["modified_recommendation_ids"], ["wall-sit"])
         self.assertIn("add_medical_disclaimer", result["actions"])
         self.assertEqual(result["blocked_recommendation_ids"], [])
 
@@ -41,7 +41,7 @@ class PauseTests(unittest.TestCase):
             confirmed_medical_context=_confirmed_medical_context(),
             candidate_recommendations=[
                 _exercise_candidate("wall-sit", "intermediate"),
-                _exercise_candidate("chair-sit-to-stand", "beginner"),
+                _exercise_candidate("supported-single-leg-stand", "beginner"),
             ],
         )
         validate_safety_result(result)
@@ -60,12 +60,12 @@ class ReferTests(unittest.TestCase):
         # of how it was populated.
         result = evaluate_safety(
             need_profile={"safety_status": {"level": "HIGH", "evidence": ["fixture evidence"]}},
-            candidate_recommendations=[_exercise_candidate("chair-sit-to-stand")],
+            candidate_recommendations=[_exercise_candidate("wall-sit")],
         )
         validate_safety_result(result)
         self.assertEqual(result["status"], "REFER")
         self.assertTrue(result["requires_referral"])
-        self.assertEqual(result["blocked_recommendation_ids"], ["chair-sit-to-stand"])
+        self.assertEqual(result["blocked_recommendation_ids"], ["wall-sit"])
 
 
 class NotAssessedTests(unittest.TestCase):

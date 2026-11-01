@@ -45,6 +45,20 @@ EXERCISE_ENTRY_OPTIONAL_FIELDS = (
     "target_need",
     "decision_type",
     "measurement_method",
+    "safety_evaluation",
+    "instructions",
+    "equipment",
+    "common_mistakes",
+    "reference",
+    "demonstration_id",
+    "name",
+)
+
+SAFETY_EVALUATION_STATUSES = (
+    "NO_REPORTED_CONFLICT",
+    "DEFERRED_CONTEXT_REQUIRED",
+    "DEFERRED_HEALTHCARE_REVIEW",
+    "DEFERRED_METADATA_UNAVAILABLE",
 )
 
 # ADD/REMOVE/REPLACE/MAINTAIN/PROGRESS/REGRESS. An initial plan uses ADD;
@@ -115,6 +129,13 @@ def build_exercise_plan_entry(
     target_need: str = None,
     decision_type: str = None,
     measurement_method: str = None,
+    safety_evaluation: dict = None,
+    instructions: list = None,
+    equipment: list = None,
+    common_mistakes: list = None,
+    reference: str = None,
+    demonstration_id: str = None,
+    name: str = None,
 ) -> dict:
     entry = {
         "exercise_id": exercise_id,
@@ -134,6 +155,13 @@ def build_exercise_plan_entry(
         ("target_need", target_need),
         ("decision_type", decision_type),
         ("measurement_method", measurement_method),
+        ("safety_evaluation", safety_evaluation),
+        ("instructions", instructions),
+        ("equipment", equipment),
+        ("common_mistakes", common_mistakes),
+        ("reference", reference),
+        ("demonstration_id", demonstration_id),
+        ("name", name),
     ):
         if value is not None:
             entry[key] = value
@@ -179,6 +207,35 @@ def validate_exercise_plan_entry(entry) -> None:
         MEASUREMENT_METHODS
     ):
         _fail(f"measurement_method must be one of {', '.join(MEASUREMENT_METHODS)}")
+
+    if "safety_evaluation" in entry:
+        evaluation = entry["safety_evaluation"]
+        required_evaluation_fields = {
+            "exercise_id", "exercise_body_areas", "target_need", "decision", "status", "clinical_approval",
+            "metadata_constraints_status", "metadata_constraints", "reported_context_status",
+            "confirmed_medical_context_status", "evidence_used", "assessment_evidence",
+            "potential_conflicts", "additional_information_required", "exclusion_reason",
+        }
+        if not isinstance(evaluation, dict) or set(evaluation) != required_evaluation_fields:
+            _fail("safety_evaluation has an invalid structure")
+        if evaluation["status"] not in SAFETY_EVALUATION_STATUSES:
+            _fail("safety_evaluation.status is not supported")
+        if evaluation["decision"] != "INCLUDE" or evaluation["clinical_approval"] is not False:
+            _fail("an included exercise must not claim clinical approval")
+        if evaluation["exercise_id"] != entry["exercise_id"]:
+            _fail("safety_evaluation.exercise_id must match the plan entry")
+        for field in ("metadata_constraints", "exercise_body_areas"):
+            if not isinstance(evaluation[field], list) or any(
+                not isinstance(value, str) for value in evaluation[field]
+            ):
+                _fail(f"safety_evaluation.{field} must be a list of strings")
+        for field in (
+            "evidence_used", "potential_conflicts", "additional_information_required",
+        ):
+            if not isinstance(evaluation[field], list) or any(
+                not isinstance(value, str) for value in evaluation[field]
+            ):
+                _fail(f"safety_evaluation.{field} must be a list of strings")
 
     if "target_need" in entry and (
         not isinstance(entry["target_need"], str) or not entry["target_need"]

@@ -11,7 +11,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from unittest import mock
 
-from bson import ObjectId
+from database import ObjectId
 from fastapi import BackgroundTasks, HTTPException
 
 import config

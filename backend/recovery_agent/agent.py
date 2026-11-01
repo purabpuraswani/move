@@ -39,8 +39,28 @@ def run_recovery_agent(
     view = build_recovery_view(user_state, exercise_results=exercise_results)
     domain = assess_recovery(view)
 
+    if not domain["recovery_recommendations"]:
+        sleep_signal = (view.get("signals") or {}).get("sleep_hours") or {}
+        sleep_hours = sleep_signal.get("value")
+        if isinstance(sleep_hours, (int, float)) and not isinstance(sleep_hours, bool):
+            # A neutral maintenance activity only: no sleep target, treatment,
+            # or inferred recovery problem is added to the user's report.
+            domain["mode"] = "general_maintenance"
+            domain["recovery_recommendations"].append({
+                "id": "maintain_sleep_timing",
+                "title": "Keep a steady sleep routine",
+                "action": "Keep your usual bedtime and wake time consistent where practical; no change to sleep duration is suggested from this report.",
+                "frequency": "Daily, as practical",
+                "why": (
+                    f"You reported about {sleep_hours:g} hours of sleep. No recovery trigger was identified from the available answers, so this is a general maintenance activity rather than a response to a reported problem."
+                ),
+                "evidence_used": [f"Self-reported sleep duration: {sleep_hours:g} hours/night"],
+                "safety_notes": ["General routine guidance only; it is not treatment or a prescribed sleep target."],
+                "personalization_status": "GENERAL_MAINTENANCE_FROM_REPORTED_CONTEXT",
+            })
+
     recommendations = [
-        {"id": item["id"], "title": item["title"], "action": item["action"], "why": item["why"]}
+        {"id": item["id"], "title": item["title"], "action": item["action"], "frequency": item.get("frequency"), "why": item["why"], "evidence_used": item.get("evidence_used") or domain.get("evidence_used", []), "safety_notes": item.get("safety_notes") or []}
         for item in domain["recovery_recommendations"]
     ]
 

@@ -89,59 +89,6 @@ export const SHOULDER = {
   minFrontFacingRatioMeasuring: 0.32,
 };
 
-/** Test 2 - five times sit-to-stand, side-facing camera. */
-export const FTSST = {
-  requiredRepetitions: 5,
-
-  /**
-   * Knee angle (hip-knee-ankle) in degrees. Chosen over pixel heights because
-   * an angle does not need to be rescaled for camera distance.
-   */
-  standAngleDeg: 155,
-  seatedAngleDeg: 120,
-
-  minRepDurationMs: 500,
-  maxRepDurationMs: 15000,
-
-  /** Whole-test ceiling; beyond this the attempt is abandoned. */
-  maxTestDurationMs: 120000,
-
-  smoothingWindow: 5,
-
-  /**
-   * Side view check: shoulder width over torso length. A person side-on to the
-   * camera shows a narrow shoulder line, so the ratio must be BELOW this.
-   */
-  maxSideFacingRatio: 0.40,
-
-  /** Plausible chair seat heights, used only to sanity-check the entered value. */
-  chairHeightMinCm: 30,
-  chairHeightMaxCm: 60,
-
-  /**
-   * The clock stops when the fifth stand is reached, which is one of several
-   * conventions in use. Recorded here so a stored result is interpretable.
-   */
-  timingEndsOn: "fifth_stand",
-
-  /**
-   * Ceiling on SELECTING_SIDE + WAITING_FOR_SEATED combined: how long the
-   * person can take to sit down and be confirmed seated before the attempt
-   * is ended, rather than waiting on an unbounded stream of setup frames
-   * forever. A software ceiling, not a clinical cut-off.
-   */
-  maxSetupDurationMs: 20000,
-
-  /**
-   * Minimum time a knee angle must stay above standAngleDeg before the
-   * detector's rising edge is treated as a genuine stand, so a single noisy
-   * frame that spikes past the threshold and immediately falls back cannot
-   * register as a full repetition. Distinct from minRepDurationMs above,
-   * which instead debounces the time between two separate stands.
-   */
-  minStandHoldMs: 200,
-};
-
 /** Test 3 - eyes-open single-leg stance, front-facing camera. */
 export const BALANCE = {
   /** Upper bound on a single hold. Reaching it is a valid, complete result. */
@@ -197,10 +144,8 @@ export const REASON = {
   LOW_CONFIDENCE: "low_confidence",
   BOTH_SIDES_NOT_VISIBLE: "both_sides_not_visible",
   NOT_FRONT_FACING: "not_front_facing",
-  NOT_SIDE_FACING: "not_side_facing",
   EXCESSIVE_TRUNK_LEAN: "excessive_trunk_lean",
   HIP_SHIFT: "hip_shift",
-  INSUFFICIENT_REPETITIONS: "insufficient_repetitions",
   TOO_FEW_USABLE_FRAMES: "too_few_usable_frames",
   POSE_LOST: "pose_lost",
   LOW_FPS: "low_fps",
@@ -210,7 +155,6 @@ export const REASON = {
   NO_VALID_POSITION: "no_valid_position",
   MAX_DURATION_REACHED: "max_duration_reached",
   ABORTED_BY_USER: "aborted_by_user",
-  CHAIR_HEIGHT_IMPLAUSIBLE: "chair_height_implausible",
 };
 
 /** Lifecycle status of a single test within a session. */
@@ -225,14 +169,12 @@ export const PROTOCOL = {
   version: PROTOCOL_VERSION,
   pose: POSE,
   shoulder: SHOULDER,
-  ftsst: FTSST,
   balance: BALANCE,
 };
 
 export const TEST_TITLES = {
   shoulder: "Shoulder movement",
-  ftsst: "Sit to stand",
   balance: "Standing on one leg",
 };
 
-export const TEST_ORDER = ["shoulder", "ftsst", "balance"];
+export const TEST_ORDER = ["shoulder", "balance"];

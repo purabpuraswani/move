@@ -16,10 +16,8 @@ const REASON_TEXT = {
   [REASON.LOW_CONFIDENCE]: "The camera could not see your body clearly",
   [REASON.BOTH_SIDES_NOT_VISIBLE]: "Both sides of your body need to be visible",
   [REASON.NOT_FRONT_FACING]: "You turned away from facing the camera",
-  [REASON.NOT_SIDE_FACING]: "The camera could not see your side view clearly",
   [REASON.EXCESSIVE_TRUNK_LEAN]: "Your upper body leaned more than this check allows",
   [REASON.HIP_SHIFT]: "Your hips moved sideways from where they started",
-  [REASON.INSUFFICIENT_REPETITIONS]: "Not all repetitions were completed",
   [REASON.TOO_FEW_USABLE_FRAMES]: "We had trouble seeing your movement clearly",
   [REASON.POSE_LOST]: "Tracking was interrupted for too long",
   [REASON.LOW_FPS]: "The camera ran slowly on this device",
@@ -29,7 +27,6 @@ const REASON_TEXT = {
   [REASON.NO_VALID_POSITION]: "The starting position was not detected",
   [REASON.MAX_DURATION_REACHED]: "You reached the maximum time for this check",
   [REASON.ABORTED_BY_USER]: "You stopped this check",
-  [REASON.CHAIR_HEIGHT_IMPLAUSIBLE]: "The chair height entered is outside the expected range",
 };
 
 /**
@@ -43,25 +40,19 @@ export function getActionableSuggestion(reasonCode, testType = "shoulder") {
   switch (code) {
     case REASON.KEYPOINTS_MISSING:
     case REASON.TOO_FEW_USABLE_FRAMES:
-      return testType === "ftsst"
-        ? "Move the camera farther back so your hips, knees, and feet stay in view."
-        : "Step back so your full body stays inside the frame.";
+      return "Step back so your full body stays inside the frame.";
     case REASON.POSE_LOST:
       return "Stay centered in the camera frame throughout the movement.";
     case REASON.LOW_CONFIDENCE:
       return "Turn on brighter lights or move away from windows behind you.";
     case REASON.NOT_FRONT_FACING:
       return "Face the camera directly with both shoulders visible.";
-    case REASON.NOT_SIDE_FACING:
-      return "Place your chair sideways so the camera sees your side profile.";
     case REASON.EXCESSIVE_TRUNK_LEAN:
       return "Keep your upper body upright as you move.";
     case REASON.HIP_SHIFT:
       return "Keep your hips centered and avoid swaying sideways.";
     case REASON.NO_VALID_POSITION:
-      return testType === "ftsst"
-        ? "Sit down on the chair first so your starting position can be seen."
-        : "Get into position and hold still before starting.";
+      return "Get into position and hold still before starting.";
     default:
       return "Keep your body inside the outline and try again.";
   }

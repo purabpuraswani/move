@@ -35,8 +35,45 @@ REQUIRED_FIELDS = (
     "relevant_user_profile",
     "relevant_lifestyle_constraints",
     "confirmed_medical_context",
+    "confirmed_medical_context_status",
+    "reported_health_context",
     "exercise_preferences",
 )
+
+HEALTH_CONTEXT_FIELDS = (
+    "diabetes", "hypertension", "heart_condition", "previous_injury",
+    "joint_pain", "back_neck_pain", "other_conditions",
+)
+UNKNOWN_HEALTH_ANSWERS = frozenset({"prefer_not_to_say", "unknown", "unsure", "not_sure"})
+
+
+def reported_health_context_from_state(user_state: dict) -> dict:
+    """Return self-reported health answers with unanswered/declined answers kept unknown."""
+    section = (user_state or {}).get("medical_context") or {}
+    if not section.get("available"):
+        return {
+            "status": "UNKNOWN", "source": "self_reported_onboarding",
+            "values": {}, "missing_fields": list(HEALTH_CONTEXT_FIELDS),
+        }
+
+    data = section.get("data") or {}
+    self_reported = data.get("self_reported") or {}
+    values = self_reported.get("values") or {}
+    missing = []
+    for field in HEALTH_CONTEXT_FIELDS:
+        value = values.get(field)
+        if field == "other_conditions" and (value is None or not str(value).strip()):
+            continue
+        normalized = value.strip().lower().replace(" ", "_") if isinstance(value, str) else ""
+        if not normalized or normalized in UNKNOWN_HEALTH_ANSWERS:
+            missing.append(field)
+
+    return {
+        "status": "COMPLETE" if not missing else "INCOMPLETE",
+        "source": self_reported.get("source", "self_reported_onboarding"),
+        "values": {field: values.get(field) for field in HEALTH_CONTEXT_FIELDS if field in values},
+        "missing_fields": missing,
+    }
 
 # Only the three physical Need dimensions are the Physio Agent's business —
 # nutrition_need, behaviour_need, and safety_status are read by the
@@ -77,12 +114,14 @@ def build_physio_agent_input(
     medical_context_section = user_state.get("medical_context") or {}
 
     confirmed_medical_context = None
+    reported_health_context = reported_health_context_from_state(user_state)
+    confirmed_report_status = "UNKNOWN"
 
     if medical_context_section.get("available"):
-        confirmed = (medical_context_section.get("data") or {}).get(
-            "confirmed_reports"
-        ) or {}
+        medical_data = medical_context_section.get("data") or {}
+        confirmed = medical_data.get("confirmed_reports") or {}
         reports = confirmed.get("reports") or []
+        confirmed_report_status = "AVAILABLE" if reports else "NONE_CONFIRMED"
 
         if reports:
             confirmed_medical_context = {
@@ -90,20 +129,30 @@ def build_physio_agent_input(
                 "reports": reports,
             }
 
+    source_assessment = (
+        physical_assessment_section.get("data")
+        if physical_assessment_section.get("available")
+        else None
+    )
+    active_assessment = None
+    if source_assessment is not None:
+        active_assessment = {
+            key: value
+            for key, value in source_assessment.items()
+            if key != "tests"
+        }
+        source_tests = source_assessment.get("tests") or {}
+        active_assessment["tests"] = {
+            test_id: source_tests.get(test_id) or {"status": "not_started"}
+            for test_id in ("shoulder", "balance")
+        }
+
     payload = {
         "workflow_id": workflow_id,
         "request_id": request_id,
         "agent_run_id": agent_run_id,
-        "physical_assessment": (
-            physical_assessment_section.get("data")
-            if physical_assessment_section.get("available")
-            else None
-        ),
-        "movement_evidence": build_movement_evidence(
-            physical_assessment_section.get("data")
-            if physical_assessment_section.get("available")
-            else None
-        ),
+        "physical_assessment": active_assessment,
+        "movement_evidence": build_movement_evidence(active_assessment),
         "current_needs": (
             current_needs_section.get("data")
             if current_needs_section.get("available")
@@ -135,6 +184,8 @@ def build_physio_agent_input(
             else None
         ),
         "confirmed_medical_context": confirmed_medical_context,
+        "reported_health_context": reported_health_context,
+        "confirmed_medical_context_status": confirmed_report_status,
         # No preference-collection UI exists yet. See module docstring.
         "exercise_preferences": None,
     }
@@ -158,10 +209,6 @@ def build_movement_evidence(physical_assessment) -> dict:
     left_shoulder = (shoulder_measurements.get("left") or {}).get("finalElevationDeg")
     right_shoulder = (shoulder_measurements.get("right") or {}).get("finalElevationDeg")
 
-    ftsst = tests.get("ftsst") or {}
-    ftsst_measurements = ftsst.get("measurements") or {}
-    ftsst_setup = ftsst.get("setup") or {}
-
     balance = tests.get("balance") or {}
     balance_measurements = balance.get("measurements") or {}
 
@@ -175,14 +222,6 @@ def build_movement_evidence(physical_assessment) -> dict:
                 "left": (shoulder_measurements.get("left") or {}).get("repetitionCount"),
                 "right": (shoulder_measurements.get("right") or {}).get("repetitionCount"),
             },
-        },
-        "sit_to_stand": {
-            "status": ftsst.get("status", "not_started"),
-            "time_seconds": ftsst_measurements.get("completionTimeSeconds"),
-            "stands_detected": ftsst_measurements.get("repetitionsDetected"),
-            "required_stands": ftsst_measurements.get("requiredRepetitions"),
-            "chair_height_cm": ftsst_setup.get("chairSeatHeightCm"),
-            "measured_side": ftsst_setup.get("measuredSide"),
         },
         "balance": {
             "status": balance.get("status", "not_started"),
@@ -226,6 +265,25 @@ def validate_physio_agent_input(payload) -> None:
         payload["current_needs"], dict
     ):
         _fail("current_needs must be null or an object")
+
+    reported = payload["reported_health_context"]
+    if not isinstance(reported, dict) or set(reported) != {
+        "status", "source", "values", "missing_fields"
+    }:
+        _fail("reported_health_context must include status, source, values and missing_fields")
+    if reported["status"] not in ("UNKNOWN", "INCOMPLETE", "COMPLETE"):
+        _fail("reported_health_context.status is invalid")
+    if not isinstance(reported["values"], dict) or not isinstance(reported["missing_fields"], list):
+        _fail("reported_health_context values/missing_fields are malformed")
+    if payload["confirmed_medical_context_status"] not in (
+        "UNKNOWN", "NONE_CONFIRMED", "AVAILABLE"
+    ):
+        _fail("confirmed_medical_context_status is invalid")
+    reports = (payload["confirmed_medical_context"] or {}).get("reports") or []
+    if payload["confirmed_medical_context_status"] == "AVAILABLE" and not reports:
+        _fail("confirmed medical context is AVAILABLE but contains no confirmed reports")
+    if payload["confirmed_medical_context_status"] == "NONE_CONFIRMED" and reports:
+        _fail("confirmed medical context is NONE_CONFIRMED but contains reports")
 
     # A second line of defence, mirroring assessments/schema.py's and
     # exercise_assessment/schema.py's own discipline: nothing shaped like

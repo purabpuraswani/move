@@ -1,5 +1,13 @@
 # MoveWell-AI — agentic architecture (living document)
 
+> **Current protocol status (2026-11-01):** The active movement assessment
+> contains Shoulder and One-Leg Stand only. Chair Sit-to-Stand / FTSST has
+> been retired from assessment, the exercise catalog, specialist selection,
+> recommendation generation, and Progress Agent metrics. Historical sections
+> below describe earlier phases and are retained as implementation history;
+> their FTSST examples are not active behavior. The active exercise catalog
+> contains 19 movements.
+
 This document tracks the agentic architecture as it is actually built, phase
 by phase. It is updated in place as each phase lands; it does not accumulate
 one file per phase. Phase 0 built the shared foundation

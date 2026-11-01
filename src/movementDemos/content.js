@@ -1,7 +1,6 @@
 /**
- * Movement Demonstration content — the three baseline assessment
- * demonstrations, plus one for each of the twenty Exercise Library entries
- * (backend/exercise_library/data.py): twenty-three demonstrations in total.
+ * Movement Demonstration content — the two baseline assessment
+ * demonstrations, plus one for each active Exercise Library entry.
  * The first ten exercise demos were authored in Phase 2 on top of the
  * Phase 0 framework (schema.js, MovementDemo.jsx, registry.js); a second
  * batch of ten was added later alongside the second ten library entries,
@@ -9,14 +8,13 @@
  * convention (movementId === `exercise-${exercise_id}`).
  *
  * Each demo's phases are written directly from that exercise's own written
- * instructions (or, for the three assessment demos, the panel copy already
- * shown in ShoulderPanel.jsx / FtsstPanel.jsx / BalancePanel.jsx) — nothing
+ * instructions (or, for assessment demos, the panel copy already shown) — nothing
  * here invents a technique. The pose numbers are illustrative angles chosen
  * to make each phase visually distinct, not measured or clinical values;
  * see schema.js for the pose vocabulary they use.
  *
  * Importing this module (which registry.js does, once, at the bottom)
- * registers all twenty-three demos. Nothing else needs to import this file
+ * registers all demos. Nothing else needs to import this file
  * directly — consumers ask the registry for a demo by id.
  */
 
@@ -67,46 +65,7 @@ registerMovementDemo({
   reference: null,
 });
 
-registerMovementDemo({
-  movementId: "assessment-chair-sit-to-stand",
-  title: "Sit to Stand Check",
-  category: "assessment",
-  durationSeconds: 6,
-  phases: [
-    {
-      id: "seated",
-      label: "Seated, arms folded across your chest",
-      holdSeconds: 2,
-      pose: { stance: "sitting", armAngleDeg: { left: 60, right: 60 } },
-    },
-    {
-      id: "rising",
-      label: "Stand up without pushing off",
-      holdSeconds: 2,
-      pose: { stance: "standing", leanDeg: 15, armAngleDeg: { left: 60, right: 60 } },
-    },
-    {
-      id: "standing",
-      label: "Fully standing",
-      holdSeconds: 2,
-      pose: { stance: "standing", armAngleDeg: { left: 60, right: 60 } },
-    },
-  ],
-  instructions: [
-    "Use a stable chair without wheels, seen from the side by the camera.",
-    "Sit down, then stand up and sit back down five times at your own pace.",
-  ],
-  keyPoints: [
-    "Fold your arms across your chest so you do not push off the seat.",
-    "Stop straight away if you feel unsteady, dizzy, or any pain.",
-  ],
-  commonMistakes: [
-    "Pushing off the armrests or knees with the hands.",
-    "Rushing the movement instead of a steady pace.",
-  ],
-  repetitions: 5,
-  reference: null,
-});
+
 
 registerMovementDemo({
   movementId: "assessment-one-leg-stand",
@@ -147,25 +106,7 @@ registerMovementDemo({
 // Exercise Library demonstrations
 // ---------------------------------------------------------------------------
 
-registerMovementDemo({
-  movementId: "exercise-chair-sit-to-stand",
-  title: "Chair Sit-to-Stand",
-  category: "exercise",
-  durationSeconds: 6,
-  phases: [
-    { id: "seated", label: "Seated, feet flat on the floor", holdSeconds: 2, pose: { stance: "sitting" } },
-    { id: "rising", label: "Push up to standing using your legs", holdSeconds: 2, pose: { stance: "standing", leanDeg: 15 } },
-    { id: "standing", label: "Stand fully upright", holdSeconds: 2, pose: { stance: "standing" } },
-  ],
-  instructions: [
-    "Sit toward the front of a stable chair, feet flat on the floor.",
-    "Stand up fully, then lower yourself back down with control.",
-  ],
-  keyPoints: ["Keep the movement slow and controlled on the way down."],
-  commonMistakes: ["Using momentum to rock forward instead of leg strength.", "Not standing fully upright at the top."],
-  repetitions: 10,
-  reference: "NIA Go4Life (go4life.nia.nih.gov/exercise)",
-});
+
 
 registerMovementDemo({
   movementId: "exercise-wall-sit",

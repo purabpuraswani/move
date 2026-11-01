@@ -34,7 +34,7 @@ def valid_payload(**overrides) -> dict:
         "startedAt": "2026-08-26T09:15:00.000Z",
         "completedAt": "2026-08-26T09:19:42.000Z",
         "summary": {
-            "testsCompleted": 3,
+            "testsCompleted": 1,
             "testsInvalid": 0,
             "testsSkipped": 0,
             "testsNotStarted": 0,
@@ -67,27 +67,6 @@ def valid_payload(**overrides) -> dict:
                 },
                 "invalidReasons": [],
                 "attempts": 1,
-            },
-            "ftsst": {
-                "status": "completed",
-                "measurements": {
-                    "completionTimeMs": 9420,
-                    "completionTimeSeconds": 9.42,
-                    "repetitionsDetected": 5,
-                    "requiredRepetitions": 5,
-                    "standTimestampsMs": [1200, 3010, 4820, 6640, 8460],
-                },
-                "quality": {"framesSeen": 300, "usableFrameRatio": 0.98},
-                "invalidReasons": [],
-                "attempts": 1,
-                "setup": {
-                    "chairSeatHeightCm": 45,
-                    "chairSeatHeightPlausible": True,
-                    "measuredSide": "right",
-                    "cameraView": "side",
-                    "armsPosition": "crossed",
-                    "warnings": [],
-                },
             },
             "balance": {
                 "status": "skipped",
@@ -133,15 +112,30 @@ class ValidPayloadTests(unittest.TestCase):
         self.assertEqual(quality["framesSeen"], 188)
         self.assertEqual(quality["framesUsable"], 181)
 
-    def test_setup_metadata_survives_validation(self):
+    def test_only_the_two_active_assessments_are_returned(self):
         document = validate_assessment_payload(valid_payload())
 
-        self.assertEqual(document["tests"]["ftsst"]["setup"]["chairSeatHeightCm"], 45)
+        self.assertEqual(set(document["tests"]), {"shoulder", "balance"})
 
-    def test_a_test_without_setup_does_not_gain_an_empty_one(self):
-        document = validate_assessment_payload(valid_payload())
+    def test_complete_shoulder_and_one_leg_payload_is_valid_without_ftsst(self):
+        payload = valid_payload()
+        payload["tests"]["balance"] = {
+            "status": "completed",
+            "measurements": {
+                "left": {"holdDurationSeconds": 30.0},
+                "right": {"holdDurationSeconds": 29.7},
+                "differenceSeconds": 0.3,
+            },
+            "quality": {"framesSeen": 900, "framesUsable": 890},
+            "invalidReasons": [],
+            "attempts": 1,
+        }
 
-        self.assertNotIn("setup", document["tests"]["shoulder"])
+        document = validate_assessment_payload(payload)
+
+        self.assertEqual(set(document["tests"]), {"shoulder", "balance"})
+        self.assertEqual(document["tests"]["balance"]["status"], "completed")
+        self.assertEqual(document["tests"]["balance"]["measurements"]["left"]["holdDurationSeconds"], 30.0)
 
     def test_timestamps_become_datetimes(self):
         document = validate_assessment_payload(valid_payload())
@@ -336,12 +330,21 @@ class StructureTests(unittest.TestCase):
 
     def test_a_missing_test_is_rejected(self):
         payload = valid_payload()
-        del payload["tests"]["ftsst"]
+        del payload["tests"]["balance"]
 
         with self.assertRaises(AssessmentValidationError) as caught:
             validate_assessment_payload(payload)
 
         self.assertIn("missing", str(caught.exception))
+
+    def test_removed_ftsst_is_rejected_as_an_unknown_assessment(self):
+        payload = valid_payload()
+        payload["tests"]["ftsst"] = {"status": "skipped", "measurements": None}
+
+        with self.assertRaises(AssessmentValidationError) as caught:
+            validate_assessment_payload(payload)
+
+        self.assertIn("unknown test ids", str(caught.exception))
 
     def test_an_unknown_status_is_rejected(self):
         payload = valid_payload()
@@ -418,9 +421,9 @@ class SummaryTests(unittest.TestCase):
     def test_the_summary_is_recounted_and_not_trusted(self):
         payload = valid_payload()
 
-        # A client claiming three usable results when one was skipped.
+        # A client claiming two usable results when one was skipped.
         payload["summary"] = {
-            "testsCompleted": 3,
+            "testsCompleted": 2,
             "testsInvalid": 0,
             "testsSkipped": 0,
             "testsNotStarted": 0,
@@ -429,13 +432,13 @@ class SummaryTests(unittest.TestCase):
 
         document = validate_assessment_payload(payload)
 
-        self.assertEqual(document["summary"]["tests_completed"], 2)
+        self.assertEqual(document["summary"]["tests_completed"], 1)
         self.assertEqual(document["summary"]["tests_skipped"], 1)
 
     def test_a_session_with_nothing_usable_says_so(self):
         payload = valid_payload()
 
-        for test_id in ("shoulder", "ftsst", "balance"):
+        for test_id in ("shoulder", "balance"):
             payload["tests"][test_id] = {
                 "status": "skipped",
                 "measurements": None,
@@ -447,7 +450,7 @@ class SummaryTests(unittest.TestCase):
         document = validate_assessment_payload(payload)
 
         self.assertFalse(document["summary"]["has_any_usable_result"])
-        self.assertEqual(document["summary"]["tests_skipped"], 3)
+        self.assertEqual(document["summary"]["tests_skipped"], 2)
 
     def test_the_summary_contains_no_score_or_rating(self):
         document = validate_assessment_payload(valid_payload())
@@ -459,7 +462,7 @@ class SummaryTests(unittest.TestCase):
     def test_a_missing_summary_is_computed_rather_than_refused(self):
         document = validate_assessment_payload(valid_payload(summary=None))
 
-        self.assertEqual(document["summary"]["tests_completed"], 2)
+        self.assertEqual(document["summary"]["tests_completed"], 1)
 
     def test_summary_status_distinguishes_partial_complete_insufficient_none(self):
         # Case 1: Partial (2 completed)
@@ -480,7 +483,7 @@ class SummaryTests(unittest.TestCase):
 
         # Case 3: Insufficient data (0 completed, at least 1 invalid)
         payload_insufficient = valid_payload()
-        for t in ("shoulder", "ftsst", "balance"):
+        for t in ("shoulder", "balance"):
             payload_insufficient["tests"][t] = {
                 "status": "invalid",
                 "measurements": None,
@@ -493,7 +496,7 @@ class SummaryTests(unittest.TestCase):
 
         # Case 4: None completed (all skipped/not started, none invalid)
         payload_none = valid_payload()
-        for t in ("shoulder", "ftsst", "balance"):
+        for t in ("shoulder", "balance"):
             payload_none["tests"][t] = {
                 "status": "skipped",
                 "measurements": None,

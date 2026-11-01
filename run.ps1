@@ -13,6 +13,7 @@ param()
 $Root = $PSScriptRoot
 $BackendDir = Join-Path $Root 'backend'
 $VenvPython = Join-Path $BackendDir '.venv\Scripts\python.exe'
+$ViteCmd = Join-Path $Root 'node_modules\.bin\vite.cmd'
 
 Write-Host "==================================================" -ForegroundColor Cyan
 Write-Host "        Launching MoveWell AI Application         " -ForegroundColor Cyan
@@ -23,7 +24,7 @@ $p8000 = Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue
 if (-not $p8000) {
     Write-Host "Starting Backend API on http://127.0.0.1:8000..." -ForegroundColor Green
     Start-Process -FilePath $VenvPython `
-        -ArgumentList '-m', 'uvicorn', 'main:app', '--reload', '--port', '8000' `
+        -ArgumentList '-m', 'uvicorn', 'main:app', '--port', '8000' `
         -WorkingDirectory $BackendDir
 } else {
     Write-Host "Backend API is already running on port 8000." -ForegroundColor Yellow
@@ -34,7 +35,7 @@ $p8100 = Get-NetTCPConnection -LocalPort 8100 -ErrorAction SilentlyContinue
 if (-not $p8100) {
     Write-Host "Starting Backend API compatibility bridge on http://127.0.0.1:8100..." -ForegroundColor Green
     Start-Process -FilePath $VenvPython `
-        -ArgumentList '-m', 'uvicorn', 'main:app', '--reload', '--port', '8100' `
+        -ArgumentList '-m', 'uvicorn', 'main:app', '--port', '8100' `
         -WorkingDirectory $BackendDir
 } else {
     Write-Host "Backend API compatibility bridge is already active on port 8100." -ForegroundColor Yellow
@@ -44,9 +45,13 @@ if (-not $p8100) {
 $p5173 = Get-NetTCPConnection -LocalPort 5173 -ErrorAction SilentlyContinue
 if (-not $p5173) {
     Write-Host "Starting Vite frontend on http://localhost:5173..." -ForegroundColor Green
-    Start-Process -FilePath 'cmd.exe' `
-        -ArgumentList '/c', 'npm.cmd run dev' `
-        -WorkingDirectory $Root
+    if (Test-Path $ViteCmd) {
+        Start-Process -FilePath 'cmd.exe' `
+            -ArgumentList '/c', $ViteCmd, '--host', '127.0.0.1', '--port', '5173' `
+            -WorkingDirectory $Root
+    } else {
+        Write-Host "Vite was not found at $ViteCmd. Install frontend packages first." -ForegroundColor Red
+    }
 } else {
     Write-Host "Frontend is already running on http://localhost:5173." -ForegroundColor Yellow
 }

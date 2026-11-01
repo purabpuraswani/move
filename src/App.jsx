@@ -27,6 +27,9 @@ import ProgressPage from "./pages/ProgressPage";
 import ExercisePage from "./pages/ExercisePage";
 import DashboardInternalPage from "./pages/DashboardInternalPage";
 import SpecialistDetailPage from "./pages/SpecialistDetailPage";
+import ExerciseLibraryPage from "./pages/ExerciseLibraryPage.jsx";
+import DailyTrackingPage from "./pages/DailyTrackingPage.jsx";
+import ProfileUpdatePage from "./pages/ProfileUpdatePage.jsx";
 
 // DEPRECATED. The legacy guidance path (Wellness Guide / Care Navigator,
 // backend/agents/ + /api/guidance). It is kept reachable so an existing
@@ -164,6 +167,9 @@ function App() {
             </RequireAuth>
           }
         />
+        <Route path="/exercise-library" element={<RequireAuth><ExerciseLibraryPage /></RequireAuth>} />
+        <Route path="/daily-tracking" element={<RequireAuth><DailyTrackingPage /></RequireAuth>} />
+        <Route path="/profile" element={<RequireAuth><ProfileUpdatePage /></RequireAuth>} />
 
         {/* Performing one exercise from the plan. This is what makes
             src/exerciseAssessment/ reachable: without a route there was no
