@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500" width="400" height="500">
+  <rect width="400" height="500" fill="#0a0f0a"/>
+  <defs>
+    <radialGradient id="glow5" cx="50%" cy="40%" r="50%">
+      <stop offset="0%" stop-color="#10b981" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#10b981" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="400" height="500" fill="url(#glow5)"/>
+
+  <!-- Category badge -->
+  <rect x="100" y="20" width="200" height="24" fill="#10b981" rx="12"/>
+  <text x="200" y="36" text-anchor="middle" fill="white" font-size="11" font-family="sans-serif" font-weight="bold">STRENGTH &amp; BALANCE</text>
+
+  <!-- Floor -->
+  <rect x="40" y="390" width="320" height="8" fill="#1a2e1a" rx="2"/>
+
+  <!-- Chair/support on left -->
+  <rect x="50" y="250" width="10" height="145" fill="#1a3a1a" rx="3"/>
+  <rect x="42" y="245" width="26" height="8" fill="#10b981" rx="3"/>
+
+  <!-- Person standing, one leg raised to side -->
+  <!-- Head -->
+  <circle cx="200" cy="110" r="27" fill="none" stroke="#34d399" stroke-width="2.5"/>
+
+  <!-- Torso (upright) -->
+  <line x1="200" y1="137" x2="200" y2="268" stroke="#34d399" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- Left arm to support -->
+  <path d="M200 168 Q130 200 68 260" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="65" cy="262" r="6" fill="#10b981" opacity="0.8"/>
+  <text x="35" y="248" fill="#6ee7b7" font-size="9" font-family="sans-serif">support</text>
+
+  <!-- Right arm out for balance -->
+  <path d="M200 168 Q260 178 300 170" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="302" cy="169" r="5" fill="#34d399" opacity="0.6"/>
+
+  <!-- Standing leg (left) -->
+  <line x1="200" y1="268" x2="188" y2="390" stroke="#34d399" stroke-width="4" stroke-linecap="round"/>
+  <path d="M188 390 L160 398" stroke="#34d399" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- Raised leg (right) going sideways -->
+  <path d="M200 268 Q260 260 310 252" fill="none" stroke="#34d399" stroke-width="3.5" stroke-linecap="round"/>
+  <circle cx="312" cy="251" r="8" fill="none" stroke="#10b981" stroke-width="2"/>
+
+  <!-- Movement arrow -->
+  <path d="M255 240 L295 230" stroke="#10b981" stroke-width="2" stroke-dasharray="4,3"/>
+  <polygon points="303,228 290,222 290,234" fill="#10b981"/>
+  <text x="270" y="220" fill="#6ee7b7" font-size="9" font-family="sans-serif">sideways</text>
+
+  <!-- Torso upright indicator -->
+  <path d="M200 137 L200 60" stroke="#10b981" stroke-width="1.5" stroke-dasharray="3,3" opacity="0.5"/>
+  <text x="215" y="90" fill="#6ee7b7" font-size="9" font-family="sans-serif">upright</text>
+
+  <!-- Ground shadow -->
+  <ellipse cx="188" cy="395" rx="22" ry="6" fill="#10b981" opacity="0.12"/>
+
+  <!-- Control cue box -->
+  <rect x="120" y="360" width="160" height="18" fill="none"/>
+  <text x="200" y="358" text-anchor="middle" fill="#6ee7b7" font-size="10" font-family="sans-serif">Keep torso upright throughout</text>
+
+  <!-- Exercise name -->
+  <text x="200" y="445" text-anchor="middle" fill="#f0fdf4" font-size="16" font-family="sans-serif" font-weight="bold">Standing Side Leg Raise</text>
+  <text x="200" y="467" text-anchor="middle" fill="#6ee7b7" font-size="12" font-family="sans-serif">Hip Abductors &amp; Core</text>
+</svg>
+
