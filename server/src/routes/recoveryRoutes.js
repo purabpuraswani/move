@@ -2,6 +2,7 @@ import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { getDb } from '../database/connection.js';
 import { authenticateToken } from '../middleware/auth.js';
+import { handleRecoveryVoiceConversation } from '../services/recoveryVoiceAgent.js';
 
 const router = express.Router();
 
@@ -17,6 +18,22 @@ router.get('/', authenticateToken, (req, res) => {
     res.json({ records, profile });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch recovery records' });
+  }
+});
+
+// POST /api/recovery/chat - Conversational voice & text agent powered by Gemini
+router.post('/chat', authenticateToken, async (req, res) => {
+  const { message, conversationHistory } = req.body;
+  if (!message) {
+    return res.status(400).json({ error: 'Message is required' });
+  }
+
+  try {
+    const result = await handleRecoveryVoiceConversation(req.userId, message, conversationHistory || []);
+    res.json(result);
+  } catch (err) {
+    console.error('Recovery voice chat error:', err);
+    res.status(500).json({ error: err.message || 'Failed to process conversation' });
   }
 });
 
@@ -54,4 +71,3 @@ router.post('/', authenticateToken, (req, res) => {
 });
 
 export default router;
-

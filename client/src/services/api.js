@@ -1,62 +1,57 @@
 import axios from 'axios';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+
 const api = axios.create({
-  baseURL: '/api',
-  headers: { 'Content-Type': 'application/json' }
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json'
+  }
 });
 
+// Attach JWT token to requests if available
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('movewell_token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
   return config;
 });
 
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('movewell_token');
-      localStorage.removeItem('movewell_user');
-      window.location.href = '/';
-    }
-    return Promise.reject(error);
-  }
-);
-
-export default api;
-
-// Auth
+// Authentication
 export const authService = {
   login: (email, password) => api.post('/auth/login', { email, password }),
   register: (name, email, password) => api.post('/auth/register', { name, email, password }),
-  me: () => api.get('/auth/me')
+  getMe: () => api.get('/auth/me')
 };
 
-// Profile
+// Profile & Onboarding
 export const profileService = {
   get: () => api.get('/profile'),
-  update: (data) => api.put('/profile', data),
-  wellness: () => api.get('/profile/wellness')
+  update: (data) => api.post('/profile', data),
+  getScreening: () => api.get('/profile/screening'),
+  updateScreening: (data) => api.post('/profile/screening', data)
 };
 
-// Assessments
+// Movement Assessments
 export const assessmentService = {
   create: (data) => api.post('/assessments', data),
   getAll: () => api.get('/assessments'),
-  getById: (id) => api.get(`/assessments/${id}`)
+  getHistory: (type) => api.get(`/assessments/history/${type}`),
+  getSummary: () => api.get('/assessments/summary')
 };
 
-// Workflow
+// Orchestrated Workflow
 export const workflowService = {
   run: () => api.post('/workflow/run'),
-  get: (id) => api.get(`/workflow/${id}`)
+  getById: (id) => api.get(`/workflow/${id}`)
 };
 
-// Plans
+// Health Plans
 export const planService = {
-  current: () => api.get('/plans/current'),
-  history: () => api.get('/plans/history'),
-  getById: (id) => api.get(`/plans/${id}`),
+  getLatest: () => api.get('/plans/latest'),
+  getByDate: (date) => api.get(`/plans/date/${date}`),
+  getScore: () => api.get('/plans/score'),
   completeActivity: (activityId, notes) => api.post('/activity/complete', { plan_activity_id: activityId, notes })
 };
 
@@ -90,7 +85,8 @@ export const mealService = {
 // Recovery
 export const recoveryService = {
   log: (data) => api.post('/recovery', data),
-  getAll: () => api.get('/recovery')
+  getAll: () => api.get('/recovery'),
+  chat: (data) => api.post('/recovery/chat', data)
 };
 
 // Behaviour
@@ -104,3 +100,5 @@ export const progressService = {
   get: () => api.get('/progress'),
   trends: () => api.get('/progress/trends')
 };
+
+export default api;
