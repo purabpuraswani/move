@@ -2,10 +2,11 @@ import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { getDb } from '../database/connection.js';
 import { authenticateToken } from '../middleware/auth.js';
+import { handleNutritionVoiceConversation } from '../services/nutritionVoiceAgent.js';
 
 const router = express.Router();
 
-// GET /api/meals - Meal logs
+// GET /api/meals - Meal logs + scheduled meal plan activities
 router.get('/', authenticateToken, (req, res) => {
   const db = getDb();
   try {
@@ -18,9 +19,43 @@ router.get('/', authenticateToken, (req, res) => {
       FROM user_profiles WHERE user_id = ?
     `).get(req.userId);
 
-    res.json({ meals, profile });
+    // Fetch scheduled meal plan activities from latest health plan
+    const latestPlan = db.prepare('SELECT id FROM health_plans WHERE user_id = ? ORDER BY created_at DESC LIMIT 1').get(req.userId);
+    let scheduledPlanMeals = [];
+    if (latestPlan) {
+      scheduledPlanMeals = db.prepare(`
+        SELECT id, activity_title, description, instructions, time_block, dosage, caution, completion_status
+        FROM plan_activities
+        WHERE plan_id = ? AND specialist_name = 'NUTRITION'
+        ORDER BY 
+          CASE time_block
+            WHEN 'MORNING' THEN 1
+            WHEN 'AFTERNOON' THEN 2
+            WHEN 'EVENING' THEN 3
+            ELSE 4
+          END
+      `).all(latestPlan.id);
+    }
+
+    res.json({ meals, profile, scheduledPlanMeals });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch meal logs' });
+  }
+});
+
+// POST /api/meals/chat - Conversational nutrition & meal scheduling agent powered by OpenRouter
+router.post('/chat', authenticateToken, async (req, res) => {
+  const { message, conversationHistory } = req.body;
+  if (!message) {
+    return res.status(400).json({ error: 'Message is required' });
+  }
+
+  try {
+    const result = await handleNutritionVoiceConversation(req.userId, message, conversationHistory || []);
+    res.json(result);
+  } catch (err) {
+    console.error('Nutrition voice chat error:', err);
+    res.status(500).json({ error: err.message || 'Failed to process nutrition conversation' });
   }
 });
 
@@ -61,4 +96,3 @@ router.delete('/:id', authenticateToken, (req, res) => {
 });
 
 export default router;
-

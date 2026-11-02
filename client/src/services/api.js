@@ -79,7 +79,8 @@ export const activityService = {
 export const mealService = {
   log: (data) => api.post('/meals', data),
   getAll: () => api.get('/meals'),
-  delete: (id) => api.delete(`/meals/${id}`)
+  delete: (id) => api.delete(`/meals/${id}`),
+  chat: (data) => api.post('/meals/chat', data)
 };
 
 // Recovery
